@@ -1,0 +1,11 @@
+{
+  "AppName": "FabPlugin_5.7",
+  "DisplayName": "Fab UE Plugin",
+  "MainGameAppName": "UE_5.7",
+  "InstallLocation": "G:\\UE_5.7",
+  "LaunchExecutable": "",
+  "InstallSize": 110189265,
+  "CatalogNamespace": "ue",
+  "bIsIncompleteInstall": false,
+  "AppCategories": ["plugins/engine", "plugins"]
+}

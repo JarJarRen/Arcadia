@@ -1,0 +1,58 @@
+{
+  "name": "arcadia",
+  "version": "0.1.0",
+  "description": "One library for Steam, Epic, EA and Ubisoft games",
+  "main": "./out/main/index.js",
+  "license": "MIT",
+  "author": "Arcadia contributors",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "smoke": "npm run build && electron test/smoke/main.cjs",
+    "icon": "node scripts/make-icon.mjs",
+    "dist": "npm run build && electron-builder"
+  },
+  "comment:overrides": [
+    "brace-expansion: GHSA-mh99-v99m-4gvg, a denial of service through",
+    "unbounded expansion. The advisory covers <= 5.0.7, which is every",
+    "release of every major line, so the usual 'stay on 1.x but patched'",
+    "escape does not exist. Six copies were in the tree at 1.1.16, 2.1.2",
+    "and 5.0.8; this pins all of them to the fixed release.",
+    "",
+    "npm audit's own remedy is `--force`, which downgrades electron-builder",
+    "to 25.1.8 — losing a major version of the packaging tool to fix a",
+    "transitive dependency is the wrong trade.",
+    "",
+    "Everything here is a devDependency and the packaged app contains no",
+    "node_modules at all, so the exposure is to whoever builds Arcadia,",
+    "not to whoever runs it. Verified after pinning: unit tests, typecheck,",
+    "the Electron smoke test and a full `npm run dist`, since minimatch 3",
+    "and glob 7 now run against a brace-expansion four majors newer than",
+    "they were written for."
+  ],
+  "overrides": {
+    "brace-expansion": "5.0.8"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.2.0",
+    "dotenv": "^17.4.2",
+    "electron": "^43.2.0",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "typescript": "^7.0.2",
+    "vite": "^7.3.6",
+    "vitest": "^4.1.10"
+  }
+}

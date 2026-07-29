@@ -1,0 +1,95 @@
+import { describe, expect, it } from 'vitest'
+import { parseEpicArtwork } from '@main/metadata/epicArtwork'
+
+function catalogue(entries: unknown[]): string {
+  return Buffer.from(JSON.stringify(entries), 'utf8').toString('base64')
+}
+
+const game = (id: string, images: Array<{ type: string; url: string }>): unknown => ({
+  id,
+  title: `Game ${id}`,
+  entitlementName: `ent-${id}`,
+  categories: [{ path: 'games' }],
+  keyImages: images
+})
+
+describe('parseEpicArtwork', () => {
+  it('maps the three Epic image types', () => {
+    // Measured on the development machine: DieselGameBox and
+    // DieselGameBoxTall on all 37 games, DieselGameBoxLogo on one.
+    const result = parseEpicArtwork(
+      catalogue([
+        game('a', [
+          { type: 'DieselGameBoxTall', url: 'https://cdn1.epicgames.com/tall.jpg' },
+          { type: 'DieselGameBox', url: 'https://cdn1.epicgames.com/wide.jpg' },
+          { type: 'DieselGameBoxLogo', url: 'https://cdn1.epicgames.com/logo.png' }
+        ])
+      ])
+    )
+    expect(result.get('a')).toEqual([
+      { kind: 'grid', url: 'https://cdn1.epicgames.com/tall.jpg' },
+      { kind: 'hero', url: 'https://cdn1.epicgames.com/wide.jpg' },
+      { kind: 'logo', url: 'https://cdn1.epicgames.com/logo.png' }
+    ])
+  })
+
+  it('passes over unknown image types', () => {
+    const result = parseEpicArtwork(
+      catalogue([
+        game('a', [
+          { type: 'Thumbnail', url: 'https://cdn1.epicgames.com/t.jpg' },
+          { type: 'AndroidIcon', url: 'https://cdn1.epicgames.com/a.png' },
+          { type: 'DieselGameBox', url: 'https://cdn1.epicgames.com/wide.jpg' }
+        ])
+      ])
+    )
+    expect(result.get('a')).toEqual([{ kind: 'hero', url: 'https://cdn1.epicgames.com/wide.jpg' }])
+  })
+
+  it('discards URLs that do not start with https', () => {
+    // The URL travels into an img attribute. A file:// or a scheme-less
+    // value has no business there — and the CSP would block it anyway,
+    // silently.
+    for (const url of ['file:///C:/x.png', 'http://insecure/x.png', '//schemeless/x.png', 'x.png']) {
+      const result = parseEpicArtwork(catalogue([game('a', [{ type: 'DieselGameBox', url }])]))
+      expect(result.get('a'), `URL ${url}`).toBeUndefined()
+    }
+  })
+
+  it('takes only games, no engines or plugins', () => {
+    const rest = [
+      {
+        id: 'ue',
+        title: 'Unreal Engine',
+        entitlementName: 'e',
+        categories: [{ path: 'engines' }],
+        keyImages: [{ type: 'DieselGameBox', url: 'https://cdn1.epicgames.com/ue.jpg' }]
+      }
+    ]
+    expect(parseEpicArtwork(catalogue(rest)).size).toBe(0)
+  })
+
+  it('simply leaves out a game without images', () => {
+    const without = parseEpicArtwork(catalogue([game('a', [])]))
+    expect(without.size).toBe(0)
+  })
+
+  it('returns an empty mapping for a broken catalogue', () => {
+    // The format is undocumented. If it breaks, the artwork may be missing
+    // — but nothing else may be dragged down with it.
+    expect(parseEpicArtwork('not base64 !!!').size).toBe(0)
+    expect(parseEpicArtwork(Buffer.from('{not json', 'utf8').toString('base64')).size).toBe(0)
+    expect(parseEpicArtwork('').size).toBe(0)
+  })
+
+  it('skips individual broken entries', () => {
+    const mixed = [
+      null,
+      'not an object',
+      { id: 'ok', title: 'X', entitlementName: 'e', categories: [{ path: 'games' }], keyImages: 'not an array' },
+      game('good', [{ type: 'DieselGameBox', url: 'https://cdn1.epicgames.com/g.jpg' }])
+    ]
+    const result = parseEpicArtwork(catalogue(mixed))
+    expect([...result.keys()]).toEqual(['good'])
+  })
+})

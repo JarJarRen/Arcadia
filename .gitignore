@@ -1,0 +1,24 @@
+node_modules/
+dist/
+out/
+release/
+.vite/
+*.log
+*.tsbuildinfo
+.DS_Store
+.env
+.env.local
+
+# Working logs of the development sessions.
+#
+# Excluded explicitly, not merely never added by accident: the reports
+# contain full paths of the development machine including the user name.
+# A single `git add -A` would otherwise sweep them up.
+.superpowers/
+
+# Design spec and implementation plans.
+#
+# Kept locally, not published: they record measurements taken against the
+# real installation — account structure, drive layout, library contents.
+# The same reasoning as for .superpowers/ above.
+docs/

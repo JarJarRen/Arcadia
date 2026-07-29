@@ -1,0 +1,677 @@
+/**
+ * Every string the user reads inside the app window.
+ *
+ * Why a single file rather than literals at the point of use: the app is
+ * split across two processes. Store adapters and IPC handlers live in the
+ * main process and produce messages — "not installed", "no folder known" —
+ * that surface in the renderer's banner. Scattering translations across
+ * both sides would guarantee that one of them drifts.
+ *
+ * **Not covered here:** diagnostics that only ever reach the console — VDF
+ * parse errors, HTTP failures while fetching Steam's app list. Those are
+ * read by whoever is debugging, never by the person playing games, and
+ * routing them through a translation table would add ceremony without
+ * adding value.
+ *
+ * Parameterised strings are functions, not templates with placeholders.
+ * That way the compiler catches a missing argument, and a translator
+ * cannot silently drop one.
+ */
+
+export type Language = 'en' | 'de'
+
+export interface Strings {
+  /**
+   * Locale-dependent formatting.
+   *
+   * `locale` feeds `localeCompare` and `toLocaleDateString`. It belongs
+   * here and not next to the call sites: sorting German titles with an
+   * English collator puts “Ärger” after “Zorn”, and a date rendered in the
+   * wrong locale looks like a bug rather than a setting.
+   */
+  format: {
+    locale: string
+    minutes: (count: number) => string
+    hours: (count: number) => string
+  }
+
+  common: {
+    close: string
+    cancel: string
+    dismissMessage: string
+    dismissHint: string
+  }
+
+  toolbar: {
+    searchPlaceholder: string
+    allStores: string
+    storeFilterLabel: string
+    sortLabel: string
+    sort: { name: string; playtime: string; lastPlayed: string; size: string }
+    onlyInstalled: string
+    onlyFavorites: string
+    sharedLabel: string
+    shared: { all: string; only: string; exclude: string }
+    viewLabel: string
+    view: { grid: string; list: string }
+    settingsLabel: string
+    languageLabel: string
+    language: { en: string; de: string }
+    addGame: string
+    /** e.g. "42 of 263" */
+    shownOfTotal: (shown: number, total: number) => string
+    refresh: string
+    refreshing: string
+  }
+
+  addDialog: {
+    label: string
+    title: string
+    hint: string
+    nameLabel: string
+    storeLabel: string
+    idLabel: string
+    idHint: string
+    submit: string
+    cancel: string
+  }
+
+  library: {
+    loading: string
+    empty: string
+    noMatches: string
+    /** Right-hand pane in list view with nothing selected. */
+    nothingSelected: string
+  }
+
+  card: {
+    play: string
+    install: string
+    notInstalled: string
+    installVia: (store: string) => string
+    openDetails: (name: string) => string
+    addFavorite: string
+    removeFavorite: string
+    sharedOrFree: string
+    sharedOrFreeTitle: string
+  }
+
+  storeSwitch: {
+    launchVia: string
+    launchViaStore: (store: string) => string
+    notInstalledAtStore: (store: string) => string
+    split: string
+    splitTitle: string
+  }
+
+  detail: {
+    back: string
+    /** Only on hand-made entries; a scanned game cannot be deleted. */
+    removeManual: string
+    removeManualConfirm: string
+    origin: string
+    originShared: string
+    playtime: string
+    lastPlayed: string
+    size: string
+    store: string
+    availableAt: string
+    folder: string
+    openInFileManager: string
+    genres: string
+    developers: string
+    publishers: string
+    released: string
+    metacritic: string
+    installed: string
+    notInstalled: string
+    enlargeScreenshot: string
+    noMetadata: string
+    fixMatch: string
+    setMatch: string
+  }
+
+  matchDialog: {
+    title: string
+    label: string
+    hint: string
+    searchPlaceholder: string
+    searching: string
+    nothingFound: string
+  }
+
+  errors: {
+    invalidGameId: string
+    invalidKey: string
+    invalidInput: string
+    unknownGame: (gameId: string) => string
+    unknownGameShort: string
+    launchFailed: (detail: string) => string
+    installFailed: (detail: string) => string
+    noFolderKnown: string
+    folderGone: (path: string) => string
+    folderOpenFailed: (detail: string) => string
+    matchFailed: (detail: string) => string
+    matchSavedFetchFailed: string
+    libraryLoadFailed: (detail: string) => string
+    refreshFailed: (detail: string) => string
+    /** e.g. "Setting favourite failed: disk full" */
+    actionFailed: (action: string, detail: string) => string
+    setFavourite: string
+    saveStoreChoice: string
+    saveSplit: string
+    noAdapter: (storeId: string) => string
+    /** The URI is included because a failure is untraceable without it. */
+    launchUriFailed: (uri: string, detail: string) => string
+    installUriFailed: (uri: string, detail: string) => string
+    launchNameFailed: (name: string, detail: string) => string
+    installNameFailed: (name: string, detail: string) => string
+  }
+
+  stores: {
+    steam: {
+      notFound: string
+      noApiKey: string
+      apiKeyRejected: string
+      unreachable: string
+      unexpectedStatus: (status: number) => string
+      invalidJson: string
+      unexpectedShape: string
+      privateProfile: string
+      libraryFailed: string
+      invalidAppId: (id: string) => string
+    }
+    epic: {
+      notFound: string
+      onlyInstalled: string
+      catalogCacheMissing: string
+      notInstalledCannotLaunch: (name: string) => string
+      noCatalogId: (name: string) => string
+    }
+    ea: {
+      notFound: string
+      noPublicLibraryApi: string
+      installStateHeuristic: string
+      installNotice: string
+      invalidOfferId: (id: string) => string
+    }
+    ubisoft: {
+      notFound: string
+      onlyInstalled: string
+      namesFromFolders: string
+      invalidGameId: (id: string) => string
+    }
+  }
+}
+
+const en: Strings = {
+  format: {
+    locale: 'en-GB',
+    minutes: (count) => `${count} min`,
+    hours: (count) => `${count} h`
+  },
+
+  common: {
+    close: 'Close',
+    cancel: 'Cancel',
+    dismissMessage: 'Dismiss message',
+    dismissHint: 'Dismiss hint'
+  },
+
+  toolbar: {
+    searchPlaceholder: 'Search library…',
+    allStores: 'All stores',
+    storeFilterLabel: 'Store',
+    sortLabel: 'Sorting',
+    sort: {
+      name: 'Name',
+      playtime: 'Playtime',
+      lastPlayed: 'Last played',
+      size: 'Size'
+    },
+    onlyInstalled: 'Installed only',
+    onlyFavorites: 'Favourites only',
+    sharedLabel: 'Licence',
+    shared: {
+      all: 'All games',
+      only: 'Shared/free only',
+      exclude: 'Licensed only'
+    },
+    viewLabel: 'View',
+    view: { grid: 'Grid', list: 'List' },
+    settingsLabel: 'Settings',
+    languageLabel: 'Language',
+    language: { en: 'English', de: 'Deutsch' },
+    addGame: 'Add game',
+    shownOfTotal: (shown, total) => `${shown} of ${total}`,
+    refresh: 'Refresh',
+    refreshing: 'Scanning…'
+  },
+
+  addDialog: {
+    label: 'Add a game by hand',
+    title: 'Add a game',
+    hint:
+      'For games no store reports — EA only lists what has been installed on ' +
+      'this machine.',
+    nameLabel: 'Name',
+    storeLabel: 'Store',
+    idLabel: 'Store ID (optional)',
+    idHint:
+      'Leave empty if you do not know it. The entry then gets artwork and a ' +
+      'description, but cannot be launched.',
+    submit: 'Add',
+    cancel: 'Cancel'
+  },
+
+  library: {
+    loading: 'Loading library…',
+    empty: 'No games found yet. “Refresh” starts the scan.',
+    noMatches: 'No game matches the current filters.',
+    nothingSelected: 'Pick a game from the list.'
+  },
+
+  card: {
+    play: 'Play',
+    install: 'Install',
+    notInstalled: 'Not installed',
+    installVia: (store) => `Install via ${store}`,
+    openDetails: (name) => `Details for ${name}`,
+    addFavorite: 'Mark as favourite',
+    removeFavorite: 'Remove favourite',
+    sharedOrFree: 'Shared/Free',
+    sharedOrFreeTitle: 'Not licensed to your account'
+  },
+
+  storeSwitch: {
+    launchVia: 'Launch via:',
+    launchViaStore: (store) => `Launch via ${store}`,
+    notInstalledAtStore: (store) => `${store} — not installed there`,
+    split: 'split',
+    splitTitle: 'Show as two separate games'
+  },
+
+  detail: {
+    back: '← Back to library',
+    removeManual: 'Remove from library',
+    removeManualConfirm: 'Remove this hand-made entry from the library?',
+    origin: 'Origin',
+    originShared: 'Not licensed to your account — family sharing or free-to-play',
+    playtime: 'Playtime',
+    lastPlayed: 'Last played',
+    size: 'Size',
+    store: 'Store',
+    availableAt: 'Available at',
+    folder: 'Folder',
+    openInFileManager: 'Show in file manager',
+    genres: 'Genres',
+    developers: 'Developers',
+    publishers: 'Publishers',
+    released: 'Released',
+    metacritic: 'Metacritic',
+    installed: 'Installed',
+    notInstalled: 'Not installed',
+    enlargeScreenshot: 'Enlarge screenshot',
+    noMetadata:
+      'No details available for this game yet. They are fetched in the ' +
+      'background — or you can match it by hand below.',
+    fixMatch: 'Wrong game matched?',
+    setMatch: 'Match this game by hand'
+  },
+
+  matchDialog: {
+    title: 'Which game is this?',
+    label: 'Match game',
+    hint:
+      'Searches Steam’s app list. Your choice sticks and is never ' +
+      'overwritten by the automatic matching.',
+    searchPlaceholder: 'Type a title…',
+    searching: 'Searching…',
+    nothingFound:
+      'Nothing found. Has the app list finished loading? It arrives shortly after startup.'
+  },
+
+  errors: {
+    invalidGameId: 'Invalid game ID.',
+    invalidKey: 'Invalid key.',
+    invalidInput: 'Invalid input.',
+    unknownGame: (gameId) => `Game ${gameId} is not known.`,
+    unknownGameShort: 'Game is not known.',
+    launchFailed: (detail) => `Launch failed: ${detail}`,
+    installFailed: (detail) => `Install failed: ${detail}`,
+    noFolderKnown: 'No folder is known for this game.',
+    folderGone: (path) => `The folder no longer exists: ${path}`,
+    folderOpenFailed: (detail) => `Could not open the folder: ${detail}`,
+    matchFailed: (detail) => `Matching failed: ${detail}`,
+    matchSavedFetchFailed: 'The match was saved, but fetching the details failed.',
+    libraryLoadFailed: (detail) => `Could not load the library: ${detail}`,
+    refreshFailed: (detail) => `Refresh failed: ${detail}`,
+    actionFailed: (action, detail) => `${action} failed: ${detail}`,
+    setFavourite: 'Setting favourite',
+    saveStoreChoice: 'Saving store choice',
+    saveSplit: 'Saving split',
+    noAdapter: (storeId) => `No adapter for store "${storeId}".`,
+    launchUriFailed: (uri, detail) => `Launch via ${uri} failed: ${detail}`,
+    installUriFailed: (uri, detail) => `Install via ${uri} failed: ${detail}`,
+    launchNameFailed: (name, detail) => `Launching “${name}” failed: ${detail}`,
+    installNameFailed: (name, detail) => `Installing “${name}” failed: ${detail}`
+  },
+
+  stores: {
+    steam: {
+      notFound: 'Steam was not found on this system.',
+      noApiKey:
+        'Without a Steam Web API key only installed games are shown — ' +
+        'no owned games and no playtime.',
+      apiKeyRejected: 'The Steam Web API key was rejected. Please check it in the settings.',
+      unreachable: 'Steam is unreachable.',
+      unexpectedStatus: (status) => `Steam answered unexpectedly with HTTP ${status}.`,
+      invalidJson: 'Steam did not return valid JSON.',
+      unexpectedShape: 'Steam returned an unexpected response shape.',
+      privateProfile:
+        'Your Steam profile does not disclose game details. Set “Game details” ' +
+        'to “Public” in Steam’s privacy settings.',
+      libraryFailed: 'The Steam library could not be loaded.',
+      invalidAppId: (id) => `Invalid Steam AppID: ${id}`
+    },
+    epic: {
+      notFound:
+        'The Epic Games Launcher was not found on this system. ' +
+        'There is no native Linux build.',
+      onlyInstalled: 'Only installed games are shown.',
+      catalogCacheMissing:
+        'Epic’s catalogue cache was not found — only installed games are ' +
+        'shown. Starting the Epic Games Launcher once creates it.',
+      notInstalledCannotLaunch: (name) =>
+        `“${name}” is not installed via Epic and cannot be launched.`,
+      noCatalogId: (name) =>
+        `Epic’s catalogue holds no identifier for “${name}” — please install it ` +
+        'from the Epic Games Launcher.'
+    },
+    ea: {
+      notFound: 'The EA app was not found on this system. There is no native Linux client.',
+      noPublicLibraryApi:
+        'EA offers no public interface for the owned library; what the registry ' +
+        'knows is what is shown.',
+      installStateHeuristic:
+        'Install state is derived by matching names across two registry trees and ' +
+        'may be missing in individual cases.',
+      installNotice:
+        'EA Desktop cannot be driven to install from outside — Arcadia opened your ' +
+        'EA library, carry on from there.',
+      invalidOfferId: (id) => `Invalid EA offer ID: ${id}`
+    },
+    ubisoft: {
+      notFound: 'Ubisoft Connect was not found on this system. There is no native Linux client.',
+      onlyInstalled:
+        'Only installed games are shown; Ubisoft offers no public interface for ' +
+        'the owned library.',
+      namesFromFolders: 'Game names come from folder names and may differ.',
+      invalidGameId: (id) => `Invalid Ubisoft game ID: ${id}`
+    }
+  }
+}
+
+/**
+ * German — the language the project was originally written in.
+ *
+ * Kept complete rather than as a stub: every string below already existed
+ * before the translation to English, so filling this bundle cost nothing
+ * and makes the switch real instead of merely possible.
+ */
+const de: Strings = {
+  format: {
+    locale: 'de-DE',
+    minutes: (count) => `${count} Min.`,
+    hours: (count) => `${count} Std.`
+  },
+
+  common: {
+    close: 'Schließen',
+    cancel: 'Abbrechen',
+    dismissMessage: 'Meldung schließen',
+    dismissHint: 'Hinweis schließen'
+  },
+
+  toolbar: {
+    searchPlaceholder: 'Bibliothek durchsuchen…',
+    allStores: 'Alle Stores',
+    storeFilterLabel: 'Store',
+    sortLabel: 'Sortierung',
+    sort: {
+      name: 'Name',
+      playtime: 'Spielzeit',
+      lastPlayed: 'Zuletzt gespielt',
+      size: 'Größe'
+    },
+    onlyInstalled: 'Nur installierte',
+    onlyFavorites: 'Nur Favoriten',
+    sharedLabel: 'Lizenz',
+    shared: {
+      all: 'Alle Spiele',
+      only: 'Nur geteilte/gratis',
+      exclude: 'Nur lizenzierte'
+    },
+    viewLabel: 'Ansicht',
+    view: { grid: 'Kacheln', list: 'Liste' },
+    settingsLabel: 'Einstellungen',
+    languageLabel: 'Sprache',
+    language: { en: 'English', de: 'Deutsch' },
+    addGame: 'Spiel hinzufügen',
+    shownOfTotal: (shown, total) => `${shown} von ${total}`,
+    refresh: 'Aktualisieren',
+    refreshing: 'Suche…'
+  },
+
+  addDialog: {
+    label: 'Spiel von Hand hinzufügen',
+    title: 'Spiel hinzufügen',
+    hint:
+      'Für Spiele, die kein Store meldet — EA listet nur, was auf diesem ' +
+      'Rechner installiert war.',
+    nameLabel: 'Name',
+    storeLabel: 'Store',
+    idLabel: 'Store-ID (optional)',
+    idHint:
+      'Leer lassen, wenn du sie nicht kennst. Der Eintrag bekommt dann Bild ' +
+      'und Beschreibung, lässt sich aber nicht starten.',
+    submit: 'Hinzufügen',
+    cancel: 'Abbrechen'
+  },
+
+  library: {
+    loading: 'Bibliothek wird geladen…',
+    empty: 'Noch keine Spiele gefunden. „Aktualisieren“ startet die Suche.',
+    noMatches: 'Kein Spiel passt zu den aktuellen Filtern.',
+    nothingSelected: 'Wähle ein Spiel aus der Liste.'
+  },
+
+  card: {
+    play: 'Spielen',
+    install: 'Installieren',
+    notInstalled: 'Nicht installiert',
+    installVia: (store) => `Über ${store} installieren`,
+    openDetails: (name) => `Infoseite zu ${name}`,
+    addFavorite: 'Als Favorit markieren',
+    removeFavorite: 'Favorit entfernen',
+    sharedOrFree: 'Geteilt/Gratis',
+    sharedOrFreeTitle: 'Nicht deinem Konto lizenziert'
+  },
+
+  storeSwitch: {
+    launchVia: 'Starten über:',
+    launchViaStore: (store) => `Über ${store} starten`,
+    notInstalledAtStore: (store) => `${store} — dort nicht installiert`,
+    split: 'trennen',
+    splitTitle: 'Als zwei getrennte Spiele anzeigen'
+  },
+
+  detail: {
+    back: '← Zurück zur Bibliothek',
+    removeManual: 'Aus der Bibliothek entfernen',
+    removeManualConfirm: 'Diesen selbst angelegten Eintrag aus der Bibliothek entfernen?',
+    origin: 'Herkunft',
+    originShared: 'Nicht deinem Konto lizenziert — Familienfreigabe oder gratis',
+    playtime: 'Spielzeit',
+    lastPlayed: 'Zuletzt gespielt',
+    size: 'Größe',
+    store: 'Store',
+    availableAt: 'Verfügbar bei',
+    folder: 'Ordner',
+    openInFileManager: 'Im Dateimanager öffnen',
+    genres: 'Genres',
+    developers: 'Entwickler',
+    publishers: 'Publisher',
+    released: 'Erschienen',
+    metacritic: 'Metacritic',
+    installed: 'Installiert',
+    notInstalled: 'Nicht installiert',
+    enlargeScreenshot: 'Screenshot vergrößern',
+    noMetadata:
+      'Für dieses Spiel liegen noch keine Angaben vor. Sie werden im ' +
+      'Hintergrund geholt — oder du ordnest es unten von Hand zu.',
+    fixMatch: 'Falsches Spiel zugeordnet?',
+    setMatch: 'Spiel von Hand zuordnen'
+  },
+
+  matchDialog: {
+    title: 'Welches Spiel ist das?',
+    label: 'Spiel zuordnen',
+    hint:
+      'Gesucht wird in Steams App-Liste. Die Auswahl bleibt bestehen und wird ' +
+      'von der automatischen Zuordnung nicht überschrieben.',
+    searchPlaceholder: 'Titel eingeben…',
+    searching: 'Wird gesucht…',
+    nothingFound:
+      'Nichts gefunden. Ist die App-Liste schon geladen? Sie kommt kurz nach dem Start.'
+  },
+
+  errors: {
+    invalidGameId: 'Ungültige Spiel-ID.',
+    invalidKey: 'Ungültiger Schlüssel.',
+    invalidInput: 'Ungültige Eingabe.',
+    unknownGame: (gameId) => `Spiel ${gameId} ist nicht bekannt.`,
+    unknownGameShort: 'Spiel ist nicht bekannt.',
+    launchFailed: (detail) => `Start fehlgeschlagen: ${detail}`,
+    installFailed: (detail) => `Installation fehlgeschlagen: ${detail}`,
+    noFolderKnown: 'Für dieses Spiel ist kein Ordner bekannt.',
+    folderGone: (path) => `Der Ordner existiert nicht mehr: ${path}`,
+    folderOpenFailed: (detail) => `Ordner konnte nicht geöffnet werden: ${detail}`,
+    matchFailed: (detail) => `Zuordnung fehlgeschlagen: ${detail}`,
+    matchSavedFetchFailed: 'Die Zuordnung ist gespeichert, der Abruf schlug fehl.',
+    libraryLoadFailed: (detail) => `Bibliothek konnte nicht geladen werden: ${detail}`,
+    refreshFailed: (detail) => `Aktualisieren fehlgeschlagen: ${detail}`,
+    actionFailed: (action, detail) => `${action} fehlgeschlagen: ${detail}`,
+    setFavourite: 'Favorit setzen',
+    saveStoreChoice: 'Store-Wahl speichern',
+    saveSplit: 'Trennung speichern',
+    noAdapter: (storeId) => `Kein Adapter für Store "${storeId}" vorhanden.`,
+    launchUriFailed: (uri, detail) => `Start über ${uri} fehlgeschlagen: ${detail}`,
+    installUriFailed: (uri, detail) => `Installation über ${uri} fehlgeschlagen: ${detail}`,
+    launchNameFailed: (name, detail) => `Start von „${name}“ fehlgeschlagen: ${detail}`,
+    installNameFailed: (name, detail) => `Installation von „${name}“ fehlgeschlagen: ${detail}`
+  },
+
+  stores: {
+    steam: {
+      notFound: 'Steam wurde auf diesem System nicht gefunden.',
+      noApiKey:
+        'Ohne Steam Web API Key werden nur installierte Spiele angezeigt — ' +
+        'keine gekauften und keine Spielzeit.',
+      apiKeyRejected:
+        'Der Steam Web API Key wurde abgelehnt. Bitte in den Einstellungen prüfen.',
+      unreachable: 'Steam ist nicht erreichbar.',
+      unexpectedStatus: (status) => `Steam antwortete unerwartet mit HTTP ${status}.`,
+      invalidJson: 'Steam lieferte keine gültige JSON-Antwort.',
+      unexpectedShape: 'Steam lieferte eine unerwartete Antwortstruktur.',
+      privateProfile:
+        'Dein Steam-Profil gibt die Spieldetails nicht preis. Stelle in den ' +
+        'Steam-Privatsphäre-Einstellungen „Spieldetails“ auf „Öffentlich“.',
+      libraryFailed: 'Die Steam-Bibliothek konnte nicht geladen werden.',
+      invalidAppId: (id) => `Ungültige Steam-AppID: ${id}`
+    },
+    epic: {
+      notFound:
+        'Der Epic Games Launcher wurde auf diesem System nicht gefunden. ' +
+        'Unter Linux gibt es ihn nicht nativ.',
+      onlyInstalled: 'Es werden nur installierte Spiele angezeigt.',
+      catalogCacheMissing:
+        'Epics Katalog-Zwischenspeicher wurde nicht gefunden — es werden nur ' +
+        'installierte Spiele angezeigt. Ein Start des Epic Games Launchers legt ihn an.',
+      notInstalledCannotLaunch: (name) =>
+        `„${name}“ ist bei Epic nicht installiert und kann nicht gestartet werden.`,
+      noCatalogId: (name) =>
+        `Für „${name}“ liefert Epics Katalog keine Kennung — bitte im Epic Games ` +
+        'Launcher installieren.'
+    },
+    ea: {
+      notFound:
+        'Die EA App wurde auf diesem System nicht gefunden. ' +
+        'Unter Linux gibt es keinen nativen Client.',
+      noPublicLibraryApi:
+        'EA bietet keine öffentliche Schnittstelle für die gekaufte Bibliothek; ' +
+        'angezeigt wird, was die Registry kennt.',
+      installStateHeuristic:
+        'Der Installationsstatus wird über einen Namensabgleich zwischen zwei ' +
+        'Registry-Bäumen ermittelt und kann in Einzelfällen fehlen.',
+      installNotice:
+        'EA Desktop lässt sich von außen nicht zum Installieren bewegen — ' +
+        'Arcadia hat deine EA-Bibliothek geöffnet, dort geht es weiter.',
+      invalidOfferId: (id) => `Unzulässige EA-Angebots-ID: ${id}`
+    },
+    ubisoft: {
+      notFound:
+        'Ubisoft Connect wurde auf diesem System nicht gefunden. ' +
+        'Unter Linux gibt es keinen nativen Client.',
+      onlyInstalled:
+        'Es werden nur installierte Spiele angezeigt; Ubisoft bietet keine ' +
+        'öffentliche Schnittstelle für die gekaufte Bibliothek.',
+      namesFromFolders: 'Die Spielnamen stammen aus den Ordnernamen und können abweichen.',
+      invalidGameId: (id) => `Unzulässige Ubisoft-Spiel-ID: ${id}`
+    }
+  }
+}
+
+export const BUNDLES: Record<Language, Strings> = { en, de }
+
+/** Offered in the settings menu, in this order. */
+export const LANGUAGES: readonly Language[] = ['en', 'de']
+
+export const DEFAULT_LANGUAGE: Language = 'en'
+
+/**
+ * Validates a language read from outside — the settings table, an IPC
+ * message.
+ *
+ * Both sources can carry anything: the table is a plain file a user can
+ * edit, and an older or newer version of the app could have written a value
+ * this one does not know. Without the check the value would reach
+ * `BUNDLES[value]`, yield `undefined`, and every string in the interface
+ * would render as blank with no error to explain it.
+ */
+export function parseLanguage(value: unknown): Language | undefined {
+  return value === 'en' || value === 'de' ? value : undefined
+}
+
+/**
+ * Held per process, not shared.
+ *
+ * Main and renderer are separate JavaScript realms; each keeps its own
+ * copy. Switching at runtime therefore means telling both — which is why
+ * there is no setter wired to the UI yet. Everything below the surface is
+ * ready for one.
+ */
+let current: Language = DEFAULT_LANGUAGE
+
+export function setLanguage(language: Language): void {
+  current = language
+}
+
+export function getLanguage(): Language {
+  return current
+}
+
+/** The active bundle. Written as a call so it re-reads after a switch. */
+export function t(): Strings {
+  return BUNDLES[current]
+}

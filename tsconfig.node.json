@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "paths": { "@shared/*": ["./src/shared/*"], "@main/*": ["./src/main/*"] }
+  },
+  "include": [
+    "src/main/**/*",
+    "src/preload/**/*",
+    "src/shared/**/*",
+    "test/**/*",
+    "*.config.ts",
+    // Filter and formatting logic of the library view: pure functions
+    // with no DOM or React involvement, so testable under Node. Their
+    // tests live in test/ and therefore belong to this project, while the
+    // files themselves also belong to the web project.
+    "src/renderer/filter.ts",
+    "src/renderer/detail.ts",
+    "src/renderer/navigation.ts"
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "AppName": "UE_5.7",
+  "DisplayName": "Unreal Engine",
+  "MainGameAppName": "",
+  "InstallLocation": "G:\\UE_5.7",
+  "LaunchExecutable": "Engine/Binaries/Win64/UnrealEditor.exe",
+  "InstallSize": 28204763154,
+  "CatalogNamespace": "ue",
+  "bIsIncompleteInstall": false,
+  "AppCategories": ["engines/ue5", "engines"]
+}

@@ -1,0 +1,62 @@
+appId: com.arcadia.launcher
+productName: Arcadia
+copyright: MIT
+
+directories:
+  output: release
+  buildResources: build
+
+# Only the built output. There are no runtime dependencies to carry: the
+# project has none, and `dotenv` — the one library used in the main process
+# — is bundled into out/main/index.js rather than required at runtime.
+# Everything else the app reaches for is a Node builtin or electron itself,
+# both supplied by the runtime.
+#
+# node:sqlite is what makes this simple. A native module such as
+# better-sqlite3 would have to be rebuilt for Electron's ABI and shipped
+# unpacked; the decision in plan 1 pays off here.
+files:
+  - out/**/*
+  - package.json
+
+# The database, the cached app list and the images all live in userData, so
+# nothing has to be written next to the executable. That is what allows a
+# per-user install without administrator rights.
+win:
+  icon: build/icon.png
+  target:
+    # The installer registers the app, which is what puts it in the Start
+    # menu and lets Windows pin it to the taskbar.
+    - target: nsis
+      arch: [x64]
+    # For anyone who would rather not install anything.
+    - target: portable
+      arch: [x64]
+
+nsis:
+  # Per user, so no administrator prompt and no UAC dialog on a machine
+  # where the user is not an admin.
+  perMachine: false
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Arcadia
+  artifactName: Arcadia-Setup-${version}.${ext}
+
+portable:
+  artifactName: Arcadia-${version}-portable.${ext}
+
+linux:
+  icon: build/icon.png
+  category: Game
+  synopsis: One library for Steam, Epic, EA and Ubisoft
+  target:
+    - AppImage
+    - deb
+  # Ships a .desktop entry, which is the Linux equivalent of the Start menu
+  # entry and what a dock pins.
+  desktop:
+    entry:
+      Name: Arcadia
+      Categories: Game;

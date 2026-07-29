@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!--
+      Images are not downloaded but loaded straight from the source, so
+      img-src allows exactly the four hosts that appear in the real store
+      data — measured, not guessed:
+        cdn1.epicgames.com              185 URLs (Epic catalogue)
+        shared.akamai.steamstatic.com   148 URLs (Steam store)
+        store.akamai.steamstatic.com      3 URLs (Steam store)
+        cdn2.steamgriddb.com             30 URLs (SteamGridDB)
+
+      Deliberately NO blanket https:. The URLs come from store data and are
+      only half trustworthy; an open rule would let a tampered URL reach
+      out to any host at all.
+
+      default-src, script-src and style-src stay untouched. A CSP violation
+      is silent in production — Chromium blocks and only writes to the
+      console. That is why the smoke test loads a real image.
+    -->
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self'; img-src 'self' data: https://cdn1.epicgames.com https://*.akamai.steamstatic.com https://cdn2.steamgriddb.com; style-src 'self' 'unsafe-inline'" />
+    <title>Arcadia</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>
