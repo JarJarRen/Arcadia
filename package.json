@@ -4,7 +4,7 @@
   "description": "One library for Steam, Epic, EA and Ubisoft games",
   "main": "./out/main/index.js",
   "license": "MIT",
-  "author": "Arcadia contributors",
+  "author": "JarJarRen",
   "engines": {
     "node": ">=24.0.0"
   },

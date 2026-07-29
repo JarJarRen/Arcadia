@@ -1,6 +1,9 @@
 appId: com.arcadia.launcher
 productName: Arcadia
-copyright: MIT
+# Becomes the copyright string in the executable's file properties, so it
+# wants a holder rather than a licence name. The licence itself is declared
+# in package.json and spelled out in LICENSE.
+copyright: Copyright © 2026 JarJarRen
 
 directories:
   output: release
@@ -18,6 +21,9 @@ directories:
 files:
   - out/**/*
   - package.json
+  # MIT asks that the notice travel with the software, so it goes into the
+  # package too rather than living only in the repository.
+  - LICENSE
 
 # The database, the cached app list and the images all live in userData, so
 # nothing has to be written next to the executable. That is what allows a

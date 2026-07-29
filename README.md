@@ -145,3 +145,24 @@ Three rules, each pinned down by a test:
 - **`contextIsolation`, `nodeIntegration: false`, `sandbox`** are not negotiable.
 
 The design spec and the implementation plans are kept out of this repository: they record measurements taken against a real installation — account structure, drive layout, library contents. Where a decision needs justifying, the reasoning sits in a comment next to the code instead.
+
+---
+
+## Licence
+
+MIT — see [`LICENSE`](LICENSE). Copyright © 2026 JarJarRen.
+
+The packaged application also ships the licences of the components it
+bundles: `LICENSE.electron.txt` and `LICENSES.chromium.html` sit beside the
+executable.
+
+## Trademarks
+
+Arcadia is not affiliated with, endorsed by, or sponsored by Valve, Epic
+Games, Electronic Arts or Ubisoft. Steam, Epic Games, EA and Ubisoft Connect
+are trademarks of their respective owners, used here only to name the stores
+Arcadia reads from.
+
+Arcadia reads local files those launchers write and opens their own
+protocol handlers to start a game. It does not modify them, does not
+circumvent anything, and never asks for store credentials.
