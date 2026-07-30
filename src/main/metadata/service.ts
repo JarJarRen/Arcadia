@@ -120,8 +120,12 @@ export async function runMetadataService(
  * game. 15 of them can be closed this way.
  *
  * Without a key nothing happens. That is not an error, just one image less.
+ *
+ * Exported as well as called from the service: the renderer discards images
+ * that fail to load, and the gap that leaves has to be closable without
+ * restarting the app. `createGapScheduler` is what calls it again.
  */
-async function closeArtworkGaps(
+export async function closeArtworkGaps(
   games: GameRepository,
   metadata: MetadataRepository,
   options: MetadataServiceOptions

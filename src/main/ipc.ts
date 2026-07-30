@@ -30,6 +30,13 @@ export interface IpcContext {
   appList: SteamAppList
   /** Fetches the details for an AppID — for the immediate correction. */
   fetchDetails: (appId: number) => Promise<GameMetadata | undefined>
+  /**
+   * Called when a broken image has been discarded and a gap now stands open.
+   *
+   * Optional because the handlers work without it — the gap would just wait
+   * for the next start of the app, which is the behaviour this replaces.
+   */
+  onArtworkGap?: () => void
 }
 
 /**
@@ -307,6 +314,9 @@ export function registerIpcHandlers(context: IpcContext): void {
       for (const source of entry.sources) {
         context.metadata.removeArtwork(source.id, kind)
       }
+      // Only now, and only for a gap that really opened: the pass costs a
+      // walk over the whole library and a request per game.
+      context.onArtworkGap?.()
     } catch (error) {
       console.error('Broken artwork could not be discarded:', error)
     }

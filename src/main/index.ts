@@ -8,7 +8,8 @@ import { SettingsRepository } from '@main/db/settings'
 import { createAdapters } from '@main/stores'
 import { registerIpcHandlers } from '@main/ipc'
 import { runSync } from '@main/sync'
-import { runMetadataService } from '@main/metadata/service'
+import { closeArtworkGaps, runMetadataService } from '@main/metadata/service'
+import { createGapScheduler } from '@main/metadata/gapScheduler'
 import { SteamAppList } from '@main/metadata/steamAppList'
 import { fetchAppDetails } from '@main/metadata/steamStore'
 import { SECURE_WEB_PREFERENCES } from '@main/window-options'
@@ -17,6 +18,16 @@ import { parseLanguage, setLanguage } from '@shared/i18n'
 import { envFileCandidates } from '@main/env-file'
 
 let mainWindow: BrowserWindow | undefined
+
+/**
+ * How long to collect discarded images before running a pass for them.
+ *
+ * The renderer reports a broken tile as it paints it, so a screenful arrives
+ * within a few hundred milliseconds. Two seconds catches the burst and is
+ * still quick enough that the pictures appear while the same screen is being
+ * looked at.
+ */
+const ARTWORK_GAP_DELAY_MS = 2_000
 
 /**
  * Loads the API keys.
@@ -119,6 +130,20 @@ app.whenReady().then(() => {
     resolveSteamName: (appId) => appList.nameFor(appId)
   })
 
+  // Closes gaps the app opens itself. The renderer reports images that fail
+  // to load, the handler discards those rows, and without this the
+  // replacement waited for the next start — the artwork pass runs once,
+  // right after the first scan.
+  const artworkGaps = createGapScheduler({
+    delayMs: ARTWORK_GAP_DELAY_MS,
+    run: () =>
+      closeArtworkGaps(repo, metadata, {
+        userDataDir: app.getPath('userData'),
+        steamGridDbKey: process.env.STEAMGRIDDB_API_KEY,
+        onProgress: () => mainWindow?.webContents.send(IPC.libraryChanged)
+      })
+  })
+
   registerIpcHandlers({
     repo,
     metadata,
@@ -126,7 +151,8 @@ app.whenReady().then(() => {
     adapters,
     appList,
     fetchDetails: fetchAppDetails,
-    getWindow: () => mainWindow
+    getWindow: () => mainWindow,
+    onArtworkGap: () => artworkGaps.request()
   })
   mainWindow = createWindow()
 

@@ -81,7 +81,7 @@ npm run dev        # development, with reload
 npm start          # run the built version
 npm run dist       # package: installer + portable exe into release/
 npm run icon       # redraw build/icon.png (see scripts/make-icon.mjs)
-npm test           # 480 unit tests
+npm test           # 502 unit tests
 npm run typecheck  # TypeScript, no output
 npm run smoke      # layout test in real Electron — see below
 ```
