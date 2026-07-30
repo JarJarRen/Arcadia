@@ -17,6 +17,16 @@ export interface GameMetadata {
   genres: string[]
   releaseDate?: string
   metacritic?: number
+  /**
+   * The header image as the store itself reports it.
+   *
+   * Not derivable: Steam puts a content hash between AppID and filename for
+   * newer titles, so `/apps/<appid>/header.jpg` is a 404 for them. Only the
+   * store response knows the hash, and it differs per asset — there is no
+   * portrait capsule to be had this way, which is why the grid still goes
+   * through SteamGridDB.
+   */
+  headerImage?: string
   screenshots: string[]
   fetchedAt?: number
   fetchFailedAt?: number

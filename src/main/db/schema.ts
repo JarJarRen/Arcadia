@@ -169,6 +169,26 @@ function migrate(db: DatabaseSync): void {
  * done, and a second pass would overwrite text that has since been fetched
  * properly.
  */
+/**
+ * Whether a table really has these columns.
+ *
+ * `CREATE TABLE IF NOT EXISTS` never alters a table that is already there,
+ * so a database written by an older plan keeps its old shape and a statement
+ * naming a newer column fails with "no such column". Plan 3's `metadata`
+ * carried only game_id, steam_appid, match_source and fetch_attempts — the
+ * migration test builds exactly that one, and it has now caught this twice.
+ */
+function hasColumns(db: DatabaseSync, table: string, columns: string[]): boolean {
+  const present = new Set(
+    (
+      db.prepare('SELECT name FROM pragma_table_info(?)').all(table) as unknown as Array<{
+        name: string
+      }>
+    ).map((row) => row.name)
+  )
+  return columns.every((column) => present.has(column))
+}
+
 function backfillMetadataText(db: DatabaseSync): void {
   const existing = db
     .prepare('SELECT COUNT(*) AS n FROM metadata_text')
@@ -176,18 +196,10 @@ function backfillMetadataText(db: DatabaseSync): void {
   if (existing.n > 0) return
 
   // A database old enough to predate the text columns has nothing to move,
-  // and reading them would fail with "no such column". Plan 3's metadata
-  // table carried only game_id, steam_appid, match_source and
-  // fetch_attempts — the migration test builds exactly that one.
-  const columns = new Set(
-    (
-      db.prepare('SELECT name FROM pragma_table_info(?)').all('metadata') as unknown as Array<{
-        name: string
-      }>
-    ).map((row) => row.name)
-  )
-  const source = ['short_description', 'description', 'genres', 'release_date']
-  if (!source.every((column) => columns.has(column))) return
+  // and reading them would fail with "no such column".
+  if (!hasColumns(db, 'metadata', ['short_description', 'description', 'genres', 'release_date'])) {
+    return
+  }
 
   db.exec(`
     INSERT INTO metadata_text (
@@ -202,6 +214,69 @@ function backfillMetadataText(db: DatabaseSync): void {
   `)
 }
 
+/**
+ * Runs a repair at most once over the life of a database.
+ *
+ * The marker goes in the settings table rather than being inferred from the
+ * data, because the condition a repair looks for is usually still true
+ * afterwards: a game Steam reports no header for still has no hero. Inferred,
+ * the repair would re-fetch it on every start of the app forever.
+ */
+export function runOnce(
+  db: DatabaseSync,
+  key: string,
+  repair: (db: DatabaseSync) => number
+): void {
+  const done = db.prepare('SELECT value FROM settings WHERE key = ?').get(key)
+  if (done !== undefined) return
+  // The marker is written only when the repair actually changed something.
+  // Otherwise every start of a database with nothing to repair — a fresh
+  // install, or any test that opens one — would write a row it does not
+  // need, and on Windows that leaves the WAL and shm files behind for the
+  // next process to trip over.
+  if (repair(db) > 0) {
+    db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(key, 'done')
+  }
+}
+
+/**
+ * Gives games fetched before the header fix a second chance at their hero.
+ *
+ * Steam serves nothing at the derived `/apps/<appid>/header.jpg` for titles
+ * on its hashed asset path — measured on AppID 3949040 across all four CDN
+ * hosts. The queue now takes the URL the store reports instead, but only
+ * while fetching, and `pendingGameIds` requires `fetched_at IS NULL`: a game
+ * fetched before the fix would never be looked at again.
+ *
+ * Clearing `fetched_at` puts it back in the queue. The text in
+ * `metadata_text` stays where it is, so nothing that cost a request is lost —
+ * the next pass overwrites it with the same content.
+ *
+ * Only games with an AppID: without one there is no store entry that could
+ * report a header, and the pass would spend an attempt to learn nothing.
+ *
+ * `openDatabase` runs this through `runOnce`; called directly it repairs
+ * unconditionally. Returns how many games it reopened, which is what decides
+ * whether the repair needs recording as done.
+ */
+export function repairHeroGaps(db: DatabaseSync): number {
+  // Nothing to reopen in a database whose metadata table predates these
+  // columns: it holds no fetch timestamps at all.
+  if (!hasColumns(db, 'metadata', ['fetched_at', 'steam_appid'])) return 0
+
+  const result = db
+    .prepare(
+      `UPDATE metadata SET fetched_at = NULL
+       WHERE steam_appid IS NOT NULL
+         AND fetched_at IS NOT NULL
+         AND NOT EXISTS (
+           SELECT 1 FROM artwork a WHERE a.game_id = metadata.game_id AND a.kind = 'hero'
+         )`
+    )
+    .run()
+  return Number(result.changes)
+}
+
 export function openDatabase(path: string): DatabaseSync {
   const db = new DatabaseSync(path)
   // node:sqlite has no db.pragma() — PRAGMAs go through exec().
@@ -210,5 +285,6 @@ export function openDatabase(path: string): DatabaseSync {
   db.exec(SCHEMA)
   migrate(db)
   backfillMetadataText(db)
+  runOnce(db, 'repair:hero-gaps', repairHeroGaps)
   return db
 }

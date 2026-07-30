@@ -71,6 +71,7 @@ interface StoreData {
   release_date?: unknown
   metacritic?: unknown
   screenshots?: unknown
+  header_image?: unknown
 }
 
 const strings = (value: unknown): string[] =>
@@ -163,6 +164,11 @@ export async function fetchAppDetails(
   }
   if (typeof d.detailed_description === 'string') {
     meta.description = stripHtml(d.detailed_description)
+  }
+  // The one asset URL that cannot be built from the AppID. Kept verbatim,
+  // cache-busting query and all: it is what Steam's own store page loads.
+  if (typeof d.header_image === 'string' && d.header_image !== '') {
+    meta.headerImage = d.header_image
   }
 
   const release = d.release_date

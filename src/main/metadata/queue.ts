@@ -50,12 +50,19 @@ export interface MetadataPassResult {
  * Steam's image URLs follow a fixed scheme and need no fetch of their own.
  * `library_600x900` is the portrait format for the tile, `header` the wide
  * format for the details page.
+ *
+ * The scheme holds only for the flat asset layout. Titles published under
+ * the newer one carry a content hash in the path, and for those the derived
+ * URLs are both 404 — measured on AppID 3949040 across all four CDN hosts.
+ * `headerImage`, when the store reported one, is therefore preferred over
+ * the guess. There is no equivalent for the grid: the API reports no
+ * portrait capsule, and the hash of the header does not serve one either.
  */
-function steamArtwork(appId: number): ArtworkRef[] {
+function steamArtwork(appId: number, headerImage?: string): ArtworkRef[] {
   const base = `${STEAM_ASSET_BASE}/${appId}`
   return [
     { kind: 'grid', url: `${base}/library_600x900.jpg` },
-    { kind: 'hero', url: `${base}/header.jpg` }
+    { kind: 'hero', url: headerImage ?? `${base}/header.jpg` }
   ]
 }
 
@@ -76,11 +83,15 @@ const defaultImageExists = async (url: string): Promise<boolean> => {
 async function verifiedSteamArtwork(
   appId: number,
   present: ReadonlySet<string>,
-  exists: (url: string) => Promise<boolean>
+  exists: (url: string) => Promise<boolean>,
+  headerImage?: string
 ): Promise<ArtworkRef[]> {
-  const candidates = steamArtwork(appId).filter((image) => !present.has(image.kind))
+  const candidates = steamArtwork(appId, headerImage).filter((image) => !present.has(image.kind))
   const checked = await Promise.all(
     candidates.map(async (image) => {
+      // A URL the store handed over needs no confirming. Checking it would
+      // cost a round trip per game to be told what the API already said.
+      if (image.url === headerImage) return image
       try {
         return (await exists(image.url)) ? image : undefined
       } catch {
@@ -132,7 +143,8 @@ export async function applyManualMatch(
     const missing = await verifiedSteamArtwork(
       appId,
       present,
-      deps.imageExists ?? defaultImageExists
+      deps.imageExists ?? defaultImageExists,
+      data.headerImage
     )
     if (missing.length > 0) metadata.upsertArtwork(gameId, missing)
     return true
@@ -227,7 +239,8 @@ export async function runMetadataPass(
         const missing = await verifiedSteamArtwork(
           appId,
           present,
-          deps.imageExists ?? defaultImageExists
+          deps.imageExists ?? defaultImageExists,
+          data.headerImage
         )
         if (missing.length > 0) metadata.upsertArtwork(gameId, missing)
 
