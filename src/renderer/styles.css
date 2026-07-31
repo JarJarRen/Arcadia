@@ -47,12 +47,33 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* The two filter checkboxes as one column. Side by side they claimed more
+   of the row than any dropdown; stacked they cost a single one. */
+.toolbar__toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .toolbar__toggle {
   display: flex;
   align-items: center;
   gap: 6px;
   color: var(--text-dim);
   white-space: nowrap;
+  /* Smaller than the fields beside them so both rows together still fit the
+     height of one control — otherwise the whole header grows a line taller
+     for the sake of two checkboxes. */
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.toolbar__toggle input {
+  /* The default box is 13px with its own margins, which would push the pair
+     past the height this pays for. */
+  width: 13px;
+  height: 13px;
+  margin: 0;
 }
 
 input,
@@ -778,15 +799,40 @@ button:focus-visible {
   border-bottom: 1px solid #2a3d55;
 }
 
-/* The gear menu in the toolbar. `position: relative` on the wrapper so the
-   popover anchors to the button rather than to the page. */
-.settingsmenu {
+/* The toolbar's popovers — the store filter and the gear menu. Named for
+   what they are rather than for the gear, since there are two of them.
+   `position: relative` on the wrapper so the panel anchors to its button
+   rather than to the page. */
+.popover {
   position: relative;
 }
 
-.settingsmenu__popover {
+/* Looks like the neighbouring selects: in a row of dropdowns, a control that
+   opens a panel should not announce itself as something else. */
+.popover__trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+/* A width that does not change with the selection: without it the whole
+   toolbar shifts sideways every time a store is ticked. */
+.popover__triggertext {
+  min-width: 84px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.popover__panel {
   position: absolute;
-  right: 0;
+  left: 0;
   top: calc(100% + 6px);
   z-index: 20;
   min-width: 170px;
@@ -797,7 +843,14 @@ button:focus-visible {
   box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
 }
 
-.settingsmenu__label {
+/* For a trigger at the end of the toolbar, where a left-anchored panel would
+   hang off the window edge. */
+.popover__panel--end {
+  left: auto;
+  right: 0;
+}
+
+.popover__label {
   margin: 4px 8px 6px;
   color: var(--text-dim);
   font-size: 11px;
@@ -805,7 +858,7 @@ button:focus-visible {
   letter-spacing: 0.6px;
 }
 
-.settingsmenu__item {
+.popover__item {
   display: block;
   width: 100%;
   padding: 7px 10px;
@@ -818,13 +871,20 @@ button:focus-visible {
   cursor: pointer;
 }
 
-.settingsmenu__item:hover {
+.popover__item:hover {
   background: var(--surface-hover);
 }
 
-.settingsmenu__item--active {
+.popover__item--active {
   color: var(--accent);
   font-weight: 600;
+}
+
+/* Fixed width, occupied or not, so the labels line up in a column instead of
+   jumping sideways as boxes are ticked. */
+.popover__check {
+  display: inline-block;
+  width: 14px;
 }
 
 /* Grid/list toggle. One bordered unit so the two options read as a single

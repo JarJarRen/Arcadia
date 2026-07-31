@@ -4,6 +4,8 @@ import {
   formatPlaytime,
   formatSize,
   sortGames,
+  storeFilterLabel,
+  toggleStore,
   type LibraryFilter
 } from '../../src/renderer/filter'
 import type { Game, StoreId } from '@shared/types'
@@ -58,7 +60,7 @@ const ENTRIES: LibraryEntry[] = [
 
 const BASE: LibraryFilter = {
   search: '',
-  store: 'all',
+  stores: [],
   onlyInstalled: false,
   onlyFavorites: false,
   shared: 'all'
@@ -93,7 +95,7 @@ describe('filterGames — shared/free', () => {
     // Anno is shared AND on Steam; Foretales is licensed AND on Epic. Asking
     // for shared+Epic must therefore return nothing rather than falling back
     // to either half.
-    expect(filterGames(SHARED_MIX, { ...BASE, shared: 'only', store: 'epic' })).toEqual([])
+    expect(filterGames(SHARED_MIX, { ...BASE, shared: 'only', stores: ['epic'] })).toEqual([])
   })
 })
 
@@ -115,7 +117,27 @@ describe('filterGames', () => {
   })
 
   it('filters by store', () => {
-    expect(filterGames(ENTRIES, { ...BASE, store: 'epic' }).map((e) => e.name)).toEqual([
+    expect(filterGames(ENTRIES, { ...BASE, stores: ['epic'] }).map((e) => e.name)).toEqual([
+      'Fortnite'
+    ])
+  })
+
+  it('treats an empty selection as every store', () => {
+    // The neutral state. Unticking the last store must show the whole
+    // library, not an empty one.
+    expect(filterGames(ENTRIES, { ...BASE, stores: [] })).toHaveLength(4)
+  })
+
+  it('keeps a game belonging to ANY of the selected stores', () => {
+    // Several stores are ORed: asking for Steam and Epic means "either",
+    // never "both at once" — no game would survive that.
+    expect(filterGames(ENTRIES, { ...BASE, stores: ['steam', 'epic'] }).map((e) => e.name)).toEqual(
+      ['Team Fortress 2', 'Counter-Strike 2', 'Fortnite', 'Far Cry 4']
+    )
+  })
+
+  it('drops games belonging to none of the selected stores', () => {
+    expect(filterGames(ENTRIES, { ...BASE, stores: ['epic', 'ea'] }).map((e) => e.name)).toEqual([
       'Fortnite'
     ])
   })
@@ -124,12 +146,19 @@ describe('filterGames', () => {
     // Far Cry 4 belongs to Steam and Ubisoft. If only the active source
     // were checked, it would vanish when filtering by Ubisoft — even though
     // it is very much registered there.
-    expect(filterGames(ENTRIES, { ...BASE, store: 'ubisoft' }).map((e) => e.name)).toEqual([
+    expect(filterGames(ENTRIES, { ...BASE, stores: ['ubisoft'] }).map((e) => e.name)).toEqual([
       'Far Cry 4'
     ])
-    expect(filterGames(ENTRIES, { ...BASE, store: 'steam' }).map((e) => e.name)).toContain(
+    expect(filterGames(ENTRIES, { ...BASE, stores: ['steam'] }).map((e) => e.name)).toContain(
       'Far Cry 4'
     )
+  })
+
+  it('counts a merged game once when both its stores are selected', () => {
+    const names = filterGames(ENTRIES, { ...BASE, stores: ['steam', 'ubisoft'] }).map(
+      (e) => e.name
+    )
+    expect(names.filter((name) => name === 'Far Cry 4')).toHaveLength(1)
   })
 
   it('filters by install state', () => {
@@ -148,12 +177,56 @@ describe('filterGames', () => {
 
   it('combines filters with AND', () => {
     expect(
-      filterGames(ENTRIES, { ...BASE, store: 'steam', onlyInstalled: true }).map((e) => e.name)
+      filterGames(ENTRIES, { ...BASE, stores: ['steam'], onlyInstalled: true }).map((e) => e.name)
     ).toEqual(['Team Fortress 2', 'Far Cry 4'])
   })
 
   it('ignores surrounding whitespace in the search', () => {
     expect(filterGames(ENTRIES, { ...BASE, search: '  fortnite  ' })).toHaveLength(1)
+  })
+})
+
+describe('toggleStore', () => {
+  it('adds a store that is not selected yet', () => {
+    expect(toggleStore([], 'epic')).toEqual(['epic'])
+  })
+
+  it('removes a store that is already selected', () => {
+    expect(toggleStore(['steam', 'epic'], 'steam')).toEqual(['epic'])
+  })
+
+  it('returns to the empty selection when the last store goes', () => {
+    // Which is the neutral "all stores" state — see filterGames.
+    expect(toggleStore(['epic'], 'epic')).toEqual([])
+  })
+
+  it('normalises to the canonical store order, not the click order', () => {
+    // So the trigger label reads the same whichever was ticked first.
+    expect(toggleStore(['ubisoft'], 'steam')).toEqual(['steam', 'ubisoft'])
+  })
+
+  it('does not mutate the input array', () => {
+    const stores: StoreId[] = ['steam']
+    toggleStore(stores, 'epic')
+    expect(stores).toEqual(['steam'])
+  })
+})
+
+describe('storeFilterLabel', () => {
+  it('names the neutral state for an empty selection', () => {
+    expect(storeFilterLabel([])).toBe('All stores')
+  })
+
+  it('names a single store', () => {
+    expect(storeFilterLabel(['steam'])).toBe('Steam')
+  })
+
+  it('lists two stores', () => {
+    expect(storeFilterLabel(['steam', 'epic'])).toBe('Steam, Epic')
+  })
+
+  it('counts from three, where the names would no longer fit the toolbar', () => {
+    expect(storeFilterLabel(['steam', 'epic', 'ea'])).toBe('3 stores')
   })
 })
 
@@ -164,30 +237,55 @@ describe('sortGames', () => {
   it('sorts by name regardless of case', () => {
     // 'apple' against 'Zebra': a pure code-point sort would put 'Zebra'
     // first.
-    expect(sortGames([s('Zebra'), s('apple')], 'name').map((e) => e.name)).toEqual([
+    expect(sortGames([s('Zebra'), s('apple')], 'name', 'asc').map((e) => e.name)).toEqual([
       'apple',
       'Zebra'
     ])
   })
 
+  it('reverses the name order on descending', () => {
+    expect(sortGames([s('apple'), s('Zebra')], 'name', 'desc').map((e) => e.name)).toEqual([
+      'Zebra',
+      'apple'
+    ])
+  })
+
   it('sorts by playtime descending, values-missing last', () => {
     const list = [s('A'), s('B', { playtimeMinutes: 500 }), s('C', { playtimeMinutes: 100 })]
-    expect(sortGames(list, 'playtime').map((e) => e.name)).toEqual(['B', 'C', 'A'])
+    expect(sortGames(list, 'playtime', 'desc').map((e) => e.name)).toEqual(['B', 'C', 'A'])
+  })
+
+  it('sorts by playtime ascending, values-missing STILL last', () => {
+    // The point of the direction toggle: "which have I played least?" —
+    // which the games without any playtime would drown out if reversing put
+    // them on top.
+    const list = [s('A'), s('B', { playtimeMinutes: 500 }), s('C', { playtimeMinutes: 100 })]
+    expect(sortGames(list, 'playtime', 'asc').map((e) => e.name)).toEqual(['C', 'B', 'A'])
   })
 
   it('sorts by last played, values-missing last', () => {
     const list = [s('A'), s('B', { lastPlayed: 100 }), s('C', { lastPlayed: 900 })]
-    expect(sortGames(list, 'lastPlayed').map((e) => e.name)).toEqual(['C', 'B', 'A'])
+    expect(sortGames(list, 'lastPlayed', 'desc').map((e) => e.name)).toEqual(['C', 'B', 'A'])
+  })
+
+  it('sorts by last played ascending, values-missing last', () => {
+    const list = [s('A'), s('B', { lastPlayed: 100 }), s('C', { lastPlayed: 900 })]
+    expect(sortGames(list, 'lastPlayed', 'asc').map((e) => e.name)).toEqual(['B', 'C', 'A'])
   })
 
   it('sorts by size descending', () => {
     const list = [s('A', { installSizeBytes: 100 }), s('B'), s('C', { installSizeBytes: 900 })]
-    expect(sortGames(list, 'size').map((e) => e.name)).toEqual(['C', 'A', 'B'])
+    expect(sortGames(list, 'size', 'desc').map((e) => e.name)).toEqual(['C', 'A', 'B'])
+  })
+
+  it('sorts by size ascending, values-missing last', () => {
+    const list = [s('A', { installSizeBytes: 100 }), s('B'), s('C', { installSizeBytes: 900 })]
+    expect(sortGames(list, 'size', 'asc').map((e) => e.name)).toEqual(['A', 'C', 'B'])
   })
 
   it('does not mutate the input array', () => {
     const list = [s('zork'), s('Ape')]
-    sortGames(list, 'name')
+    sortGames(list, 'name', 'asc')
     expect(list.map((e) => e.name)).toEqual(['zork', 'Ape'])
   })
 })

@@ -46,8 +46,13 @@ export interface Strings {
     searchPlaceholder: string
     allStores: string
     storeFilterLabel: string
+    /** From three stores on, where the names no longer fit the toolbar. */
+    storesSelected: (count: number) => string
     sortLabel: string
     sort: { name: string; playtime: string; lastPlayed: string; size: string }
+    /** e.g. "Sort direction: ascending" — the toggle's accessible name. */
+    sortDirectionLabel: (state: string) => string
+    sortDirection: { asc: string; desc: string }
     onlyInstalled: string
     onlyFavorites: string
     sharedLabel: string
@@ -222,6 +227,7 @@ const en: Strings = {
     searchPlaceholder: 'Search library…',
     allStores: 'All stores',
     storeFilterLabel: 'Store',
+    storesSelected: (count) => `${count} stores`,
     sortLabel: 'Sorting',
     sort: {
       name: 'Name',
@@ -229,6 +235,8 @@ const en: Strings = {
       lastPlayed: 'Last played',
       size: 'Size'
     },
+    sortDirectionLabel: (state) => `Sort direction: ${state}`,
+    sortDirection: { asc: 'ascending', desc: 'descending' },
     onlyInstalled: 'Installed only',
     onlyFavorites: 'Favourites only',
     sharedLabel: 'Licence',
@@ -437,6 +445,7 @@ const de: Strings = {
     searchPlaceholder: 'Bibliothek durchsuchen…',
     allStores: 'Alle Stores',
     storeFilterLabel: 'Store',
+    storesSelected: (count) => `${count} Stores`,
     sortLabel: 'Sortierung',
     sort: {
       name: 'Name',
@@ -444,6 +453,8 @@ const de: Strings = {
       lastPlayed: 'Zuletzt gespielt',
       size: 'Größe'
     },
+    sortDirectionLabel: (state) => `Sortierrichtung: ${state}`,
+    sortDirection: { asc: 'aufsteigend', desc: 'absteigend' },
     onlyInstalled: 'Nur installierte',
     onlyFavorites: 'Nur Favoriten',
     sharedLabel: 'Lizenz',

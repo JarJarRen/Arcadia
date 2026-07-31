@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type ReactElement } from 'react'
+import { useCallback, useRef, useState, type ReactElement } from 'react'
 import { LANGUAGES, t, type Language } from '@shared/i18n'
 import { useLanguage } from '../i18n/LanguageProvider'
+import { useDismiss } from '../hooks/useDismiss'
 
 /**
  * The gear menu holding the language choice.
@@ -14,29 +15,12 @@ export function LanguageMenu(): ReactElement {
   const { language, change } = useLanguage()
   const [open, setOpen] = useState(false)
   const root = useRef<HTMLDivElement>(null)
+  const close = useCallback(() => setOpen(false), [])
 
-  // Close on an outside click or Escape. Without this the popover stays open
-  // behind the next click, over the tiles.
-  useEffect(() => {
-    if (!open) return
-
-    const onPointerDown = (event: MouseEvent): void => {
-      if (!root.current?.contains(event.target as Node)) setOpen(false)
-    }
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setOpen(false)
-    }
-
-    document.addEventListener('mousedown', onPointerDown)
-    document.addEventListener('keydown', onKeyDown)
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown)
-      document.removeEventListener('keydown', onKeyDown)
-    }
-  }, [open])
+  useDismiss(open, root, close)
 
   return (
-    <div className="settingsmenu" ref={root}>
+    <div className="popover" ref={root}>
       <button
         type="button"
         className="button button--icon"
@@ -48,20 +32,18 @@ export function LanguageMenu(): ReactElement {
       </button>
 
       {open && (
-        <div className="settingsmenu__popover" role="menu">
-          <p className="settingsmenu__label">{t().toolbar.languageLabel}</p>
+        <div className="popover__panel popover__panel--end" role="menu">
+          <p className="popover__label">{t().toolbar.languageLabel}</p>
           {LANGUAGES.map((code: Language) => (
             <button
               key={code}
               type="button"
               role="menuitemradio"
               aria-checked={language === code}
-              className={`settingsmenu__item${
-                language === code ? ' settingsmenu__item--active' : ''
-              }`}
+              className={`popover__item${language === code ? ' popover__item--active' : ''}`}
               onClick={() => {
                 change(code)
-                setOpen(false)
+                close()
               }}
             >
               {t().toolbar.language[code]}

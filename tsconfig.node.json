@@ -23,6 +23,9 @@
     // files themselves also belong to the web project.
     "src/renderer/filter.ts",
     "src/renderer/detail.ts",
-    "src/renderer/navigation.ts"
+    "src/renderer/navigation.ts",
+    // Not logic but a plain lookup table, listed for the same reason: the
+    // store filter's button label is built in filter.ts and needs the names.
+    "src/renderer/components/storeLabels.ts"
   ]
 }

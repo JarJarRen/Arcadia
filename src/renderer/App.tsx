@@ -6,6 +6,7 @@ import {
   filterGames,
   sortGames,
   type LibraryFilter,
+  type SortDirection,
   type SortKey,
   type ViewMode
 } from './filter'
@@ -18,7 +19,7 @@ import './styles.css'
 
 const INITIAL_FILTER: LibraryFilter = {
   search: '',
-  store: 'all',
+  stores: [],
   onlyInstalled: false,
   onlyFavorites: false,
   shared: 'all'
@@ -38,6 +39,10 @@ export function App(): ReactElement {
   } = useLibrary()
   const [filter, setFilter] = useState<LibraryFilter>(INITIAL_FILTER)
   const [sort, setSort] = useState<SortKey>('name')
+  // Held apart from the key and kept when the key changes, so the order never
+  // flips back on its own. 'asc' with the name key is the library as it has
+  // always opened.
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
   const [view, setView] = useState<ViewMode>('grid')
   const [launchError, setLaunchError] = useState<string | undefined>()
   const [notice, setNotice] = useState<string | undefined>()
@@ -53,8 +58,8 @@ export function App(): ReactElement {
   const lastClosed = useRef<string | undefined>(undefined)
 
   const visible = useMemo(
-    () => sortGames(filterGames(entries, filter), sort),
-    [entries, filter, sort]
+    () => sortGames(filterGames(entries, filter), sort, sortDirection),
+    [entries, filter, sort, sortDirection]
   )
 
   const launch = useCallback(async (entry: LibraryEntry): Promise<void> => {
@@ -239,12 +244,14 @@ export function App(): ReactElement {
       <LibraryToolbar
         filter={filter}
         sort={sort}
+        sortDirection={sortDirection}
         view={view}
         total={entries.length}
         shown={visible.length}
         syncing={syncing}
         onFilterChange={setFilter}
         onSortChange={setSort}
+        onSortDirectionChange={setSortDirection}
         onViewChange={(next) => {
           // Drop the selection when the mode changes. The same key means
           // "selected row" in the list and "this page fills the window" in
