@@ -14,6 +14,9 @@ import { runSync } from '@main/sync'
 import { installGame, launchGame } from '@main/launch-bridge'
 import type { SteamAppList } from '@main/metadata/steamAppList'
 import { applyManualMatch } from '@main/metadata/queue'
+import { readEnvConfig, saveEnvConfig } from '@main/env-config'
+import { envValueIsWritable } from '@main/env-file'
+import { ENV_CONFIG_KEYS, type EnvConfigValues } from '@shared/env-config'
 
 export interface IpcContext {
   repo: GameRepository
@@ -30,6 +33,22 @@ export interface IpcContext {
   appList: SteamAppList
   /** Fetches the details for an AppID — for the immediate correction. */
   fetchDetails: (appId: number) => Promise<GameMetadata | undefined>
+  /**
+   * The `.env` files, in the order dotenv loads them.
+   *
+   * Handed in rather than derived here: `app.getPath('userData')` is only
+   * meaningful once Electron is ready, and the handlers are registered by a
+   * process that already knows both paths.
+   */
+  envFilePaths: string[]
+  /**
+   * Restarts the app after the keys changed.
+   *
+   * The keys are read once at startup and handed to the store adapters, so
+   * a running Arcadia holds the old ones. Injected rather than called
+   * directly so the handlers stay free of `app`.
+   */
+  relaunch: () => void
   /**
    * Called when a broken image has been discarded and a gap now stands open.
    *
@@ -333,4 +352,57 @@ export function registerIpcHandlers(context: IpcContext): void {
       console.error('Language could not be saved:', error)
     }
   })
+
+  ipcMain.handle(IPC.envConfigGet, () => readEnvConfig(context.envFilePaths))
+
+  /**
+   * Writes the API keys and the marker that says the question was answered.
+   *
+   * `undefined` is the skip: answered, but nothing written over the keys the
+   * file already holds.
+   *
+   * Every value is validated before anything is written. A line break in one
+   * of them would end its assignment and turn the rest into a variable of
+   * its own — arbitrary settings injected through a text field — and the
+   * file must not be half-written when that is rejected.
+   */
+  ipcMain.handle(IPC.envConfigSave, (_event, values: unknown) => {
+    const checked = validEnvValues(values)
+    if (checked === 'invalid') {
+      return { ok: false, error: t().errors.invalidInput, restarting: false }
+    }
+
+    try {
+      const { changed } = saveEnvConfig(context.envFilePaths, checked)
+      // Only for a real change: a skip, or a save of what was already there,
+      // gives the new process nothing it does not already have.
+      if (changed) context.relaunch()
+      return { ok: true, restarting: changed }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      return { ok: false, error: t().errors.envSaveFailed(message), restarting: false }
+    }
+  })
+}
+
+/**
+ * The values as they may be written, `undefined` for a skip, or `'invalid'`.
+ *
+ * Three outcomes rather than a boolean, because "no values" is a legitimate
+ * request here and must not be confused with "values that were rejected".
+ */
+function validEnvValues(values: unknown): EnvConfigValues | undefined | 'invalid' {
+  if (values === undefined || values === null) return undefined
+  if (typeof values !== 'object') return 'invalid'
+
+  const record = values as Record<string, unknown>
+  const checked = {} as EnvConfigValues
+
+  for (const key of ENV_CONFIG_KEYS) {
+    const value = record[key]
+    if (typeof value !== 'string' || !envValueIsWritable(value)) return 'invalid'
+    checked[key] = value
+  }
+
+  return checked
 }

@@ -61,7 +61,9 @@ describe('artwork:broken', () => {
       appList: new SteamAppList(),
       fetchDetails: async () => undefined,
       getWindow: () => undefined,
-      onArtworkGap: () => gaps++
+      onArtworkGap: () => gaps++,
+      envFilePaths: [],
+      relaunch: () => undefined
     })
 
     const handler = handlers.get(IPC.artworkBroken)!

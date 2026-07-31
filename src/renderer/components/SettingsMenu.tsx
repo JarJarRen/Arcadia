@@ -3,15 +3,23 @@ import { LANGUAGES, t, type Language } from '@shared/i18n'
 import { useLanguage } from '../i18n/LanguageProvider'
 import { useDismiss } from '../hooks/useDismiss'
 
+interface Props {
+  /** Reopens the configuration screen the first start showed. */
+  onOpenSetup: () => void
+}
+
 /**
- * The gear menu holding the language choice.
+ * The gear menu: the configuration screen and the language choice.
  *
- * A popover rather than another select in the filter row: the language is
- * set once and then forgotten, while everything else in the toolbar is
- * changed constantly. Mixing them would grow the row to nine controls and
- * bury the filters.
+ * A popover rather than more controls in the filter row: both are set once
+ * and then forgotten, while everything else in the toolbar is changed
+ * constantly. Mixing them would bury the filters.
+ *
+ * It was called LanguageMenu while the language was all it held. The
+ * configuration entry is what the name was always going to have to cover —
+ * the CSS beneath it stopped being gear-specific one change earlier.
  */
-export function LanguageMenu(): ReactElement {
+export function SettingsMenu({ onOpenSetup }: Props): ReactElement {
   const { language, change } = useLanguage()
   const [open, setOpen] = useState(false)
   const root = useRef<HTMLDivElement>(null)
@@ -33,6 +41,18 @@ export function LanguageMenu(): ReactElement {
 
       {open && (
         <div className="popover__panel popover__panel--end" role="menu">
+          <button
+            type="button"
+            role="menuitem"
+            className="popover__item"
+            onClick={() => {
+              onOpenSetup()
+              close()
+            }}
+          >
+            {t().setup.title}…
+          </button>
+
           <p className="popover__label">{t().toolbar.languageLabel}</p>
           {LANGUAGES.map((code: Language) => (
             <button

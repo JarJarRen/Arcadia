@@ -141,6 +141,20 @@ contextBridge.exposeInMainWorld('arcadia', {
     ok: true,
     notice: 'EA Desktop cannot be driven to install from outside.'
   }),
+  // `done: true`, or the first-run dialog would cover the library on every
+  // smoke run and every measurement below it — tile heights, the store
+  // popover, the scroll position — would fail at once. The gear opens the
+  // same dialog, which is where the smoke test looks at it.
+  getEnvConfig: async () => ({
+    done: true,
+    values: {
+      STEAM_WEB_API_KEY: 'stub-steam-key',
+      STEAM_ID64: '',
+      STEAMGRIDDB_API_KEY: 'stub-grid-key'
+    },
+    path: 'C:\\Users\\smoke\\AppData\\Roaming\\arcadia\\.env'
+  }),
+  saveEnvConfig: async () => ({ ok: true, restarting: false }),
   setFavorite: async () => undefined,
   setPreferredStore: async () => undefined,
   setSplit: async () => undefined,

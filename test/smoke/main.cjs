@@ -757,6 +757,102 @@ app.whenReady().then(async () => {
     )
   }
 
+  /*
+   * The configuration screen, opened from the gear.
+   *
+   * The gate itself cannot be exercised here — the stub reports the question
+   * as answered, precisely so the dialog does not cover everything measured
+   * above. What is checked is the other half of the feature: that the gear
+   * still reaches it, that the fields arrive prefilled, that ticking "skip"
+   * really does put the keys out of reach, and that the language switch the
+   * menu existed for in the first place is still there.
+   */
+  const setup = await win.webContents.executeJavaScript(`(async () => {
+    const wait = () => new Promise((r) => setTimeout(r, 250))
+    const box = () => document.querySelector('.modal__box--wide')
+
+    document.querySelector('[aria-label="Settings"]').click()
+    await wait()
+    const panel = document.querySelector('.popover__panel')
+    const entries = {
+      configuration: [...panel.querySelectorAll('[role="menuitem"]')].map((i) => i.textContent),
+      languages: panel.querySelectorAll('[role="menuitemradio"]').length
+    }
+
+    panel.querySelector('[role="menuitem"]').click()
+    await wait()
+
+    const opened = box() !== null
+    const inputs = () => [...box().querySelectorAll('.modal__field input')]
+    const prefilled = inputs().map((i) => i.value)
+    const links = box().querySelectorAll('.modal__link').length
+
+    const skip = box().querySelector('.modal__toggle input')
+    skip.click()
+    await wait()
+    const disabledAfterSkip = inputs().every((i) => i.disabled)
+    const buttonAfterSkip = box().querySelector('.button--primary').textContent
+
+    skip.click()
+    await wait()
+    const buttonAfterUntick = box().querySelector('.button--primary').textContent
+
+    // The first action is Close — present because this was opened from the
+    // gear rather than as the first-run gate.
+    box().querySelector('.modal__actions .button').click()
+    await wait()
+
+    return {
+      entries,
+      opened,
+      prefilled,
+      links,
+      disabledAfterSkip,
+      buttonAfterSkip,
+      buttonAfterUntick,
+      closed: box() === null,
+      libraryStillThere: document.querySelectorAll('.card').length
+    }
+  })()`)
+
+  const setupProblems = []
+  if (setup.entries.configuration.length !== 1) {
+    setupProblems.push(
+      `The gear offers ${setup.entries.configuration.length} configuration entries instead of 1.`
+    )
+  }
+  if (setup.entries.languages !== 2) {
+    setupProblems.push(
+      `The gear lists ${setup.entries.languages} languages instead of 2 — the ` +
+        'configuration entry displaced the language switch.'
+    )
+  }
+  if (!setup.opened) setupProblems.push('The gear did not open the configuration screen.')
+  if (setup.prefilled.length !== 3) {
+    setupProblems.push(`The screen shows ${setup.prefilled.length} fields instead of 3.`)
+  }
+  if (setup.prefilled[0] !== 'stub-steam-key' || setup.prefilled[2] !== 'stub-grid-key') {
+    setupProblems.push(
+      `The fields arrived as ${JSON.stringify(setup.prefilled)} instead of prefilled from the file.`
+    )
+  }
+  if (setup.links !== 3) {
+    setupProblems.push(`${setup.links} links to obtain a key instead of one per field.`)
+  }
+  if (!setup.disabledAfterSkip) {
+    setupProblems.push('Ticking "skip" left the key fields editable.')
+  }
+  if (setup.buttonAfterSkip === setup.buttonAfterUntick) {
+    setupProblems.push(
+      `The button reads "${setup.buttonAfterSkip}" whether skipping or not — ` +
+        'nothing tells the user which of the two will happen.'
+    )
+  }
+  if (!setup.closed) setupProblems.push('Close did not close the configuration screen.')
+  if (setup.libraryStillThere === 0) {
+    setupProblems.push('The library was gone after the configuration screen closed.')
+  }
+
   const navProblems = []
   if (afterReturn.backInGrid === 0) {
     navProblems.push('The back button did not return to the grid.')
@@ -790,7 +886,8 @@ app.whenReady().then(async () => {
     ...listProblems,
     ...navProblems,
     ...addProblems,
-    ...toolbarProblems
+    ...toolbarProblems,
+    ...setupProblems
   ]
 
   console.log('--- Smoke test: library layout ---')
@@ -805,6 +902,8 @@ app.whenReady().then(async () => {
   console.log(JSON.stringify(dialog, null, 1))
   console.log('--- Smoke test: store multi-select and sort direction ---')
   console.log(JSON.stringify(toolbar, null, 1))
+  console.log('--- Smoke test: configuration screen ---')
+  console.log(JSON.stringify(setup, null, 1))
   console.log('--- Smoke test: scroll position and forward ---')
   console.log(
     JSON.stringify({ scrolledTo: scroll.set, hooked: scroll.hooked, tag: scroll.tag, hookedElements: scroll.hookedElements, ...afterReturn, openedTitle, afterForward }, null, 1)

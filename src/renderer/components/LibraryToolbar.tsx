@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react'
 import { t } from '@shared/i18n'
 import type { LibraryFilter, SharedFilter, SortDirection, SortKey, ViewMode } from '../filter'
-import { LanguageMenu } from './LanguageMenu'
+import { SettingsMenu } from './SettingsMenu'
 import { StoreFilterMenu } from './StoreFilterMenu'
 
 interface Props {
@@ -18,6 +18,7 @@ interface Props {
   onViewChange: (view: ViewMode) => void
   onAddGame: () => void
   onSync: () => void
+  onOpenSetup: () => void
 }
 
 export function LibraryToolbar(props: Props): ReactElement {
@@ -148,7 +149,7 @@ export function LibraryToolbar(props: Props): ReactElement {
         + {t().toolbar.addGame}
       </button>
 
-      <LanguageMenu />
+      <SettingsMenu onOpenSetup={props.onOpenSetup} />
     </header>
   )
 }

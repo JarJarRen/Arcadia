@@ -59,7 +59,9 @@ describe('game:open-folder', () => {
       adapters: [],
       appList: new SteamAppList(),
       fetchDetails: async () => undefined,
-      getWindow: () => undefined
+      getWindow: () => undefined,
+      envFilePaths: [],
+      relaunch: () => undefined
     })
 
     const handler = handlers.get(IPC.gameOpenFolder)!
@@ -119,7 +121,9 @@ describe('game:open-folder', () => {
       adapters: [],
       appList: new SteamAppList(),
       fetchDetails: async () => undefined,
-      getWindow: () => undefined
+      getWindow: () => undefined,
+      envFilePaths: [],
+      relaunch: () => undefined
     })
 
     const result = (await handlers.get(IPC.gameOpenFolder)!({}, 'tf2')) as { ok: boolean }

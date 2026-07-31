@@ -86,6 +86,15 @@ select {
   font: inherit;
 }
 
+/* Chromium's own disabled styling is invisible against a dark custom field:
+   ticking "skip configuration" left three dead inputs looking alive.
+   Matched to .button:disabled so the whole interface dims the same way. */
+input:disabled,
+select:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 input:focus-visible,
 select:focus-visible,
 button:focus-visible {
@@ -955,6 +964,54 @@ button:focus-visible {
   justify-content: flex-end;
   gap: 8px;
   margin-top: 4px;
+}
+
+/* The configuration screen. Wider than the add-game dialog and scrollable:
+   three keys, each with an explanation of what is lost without it, do not
+   fit the 520px box at every window height. */
+.modal__box--wide {
+  width: min(620px, 100%);
+  overflow-y: auto;
+}
+
+/* Opens in the system browser — the window's open handler denies in-app
+   navigation and hands the URL to the shell. */
+.modal__link {
+  color: var(--accent);
+}
+
+/* A field switched off by "skip configuration" dims as a whole — label, box
+   and explanation together. Dimming only the input was measurably correct
+   and visually invisible: an empty box with a faint border looks the same at
+   45% as at 100%, so three dead fields still read as editable. */
+.modal__field:has(input:disabled) {
+  opacity: 0.45;
+}
+
+/* The input already carries the generic rule; inside a dimmed group the two
+   would multiply to 20% and single it out as the faintest thing on screen. */
+.modal__field:has(input:disabled) input:disabled {
+  opacity: 1;
+}
+
+/* The skip checkbox, with its consequence underneath rather than beside it:
+   the sentence is longer than the label and would push the box off the row. */
+.modal__toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 4px 0;
+  color: var(--text-dim);
+}
+
+.modal__toggle input {
+  /* Aligned with the first line of the label rather than the middle of a
+     two-line block. */
+  margin-top: 2px;
+}
+
+.modal__toggle .modal__sublabel {
+  display: block;
 }
 
 /* The details page in grid mode, laid over the library.

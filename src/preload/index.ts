@@ -15,6 +15,8 @@ const api: ArcadiaApi = {
   setMatch: (mergeKey, steamAppId) =>
     ipcRenderer.invoke(IPC.metadataSetMatch, mergeKey, steamAppId),
   setLanguage: (language) => ipcRenderer.invoke(IPC.settingsSetLanguage, language),
+  getEnvConfig: () => ipcRenderer.invoke(IPC.envConfigGet),
+  saveEnvConfig: (values) => ipcRenderer.invoke(IPC.envConfigSave, values),
   addManualGame: (game) => ipcRenderer.invoke(IPC.libraryAddManual, game),
   removeManualGame: (gameId) => ipcRenderer.invoke(IPC.libraryRemoveManual, gameId),
   reportBrokenArtwork: (mergeKey, kind) => ipcRenderer.invoke(IPC.artworkBroken, mergeKey, kind),

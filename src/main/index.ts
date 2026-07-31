@@ -36,8 +36,8 @@ const ARTWORK_GAP_DELAY_MS = 2_000
  * meaningful once Electron is ready, and an installed copy has no checkout
  * to find a `.env` in.
  */
-function loadApiKeys(): void {
-  for (const path of envFileCandidates({ cwd: process.cwd(), userData: app.getPath('userData') })) {
+function loadApiKeys(paths: string[]): void {
+  for (const path of paths) {
     // `override: false` so the first file found wins, matching the order in
     // envFileCandidates: a checkout's .env beats the installed one.
     loadDotenv({ path, override: false, quiet: true })
@@ -95,8 +95,16 @@ function createWindow(): BrowserWindow {
 }
 
 app.whenReady().then(() => {
+  // The same list twice over: dotenv loads from it now, and the
+  // configuration screen writes back to it later. Computed once so the two
+  // can never disagree about which file is in force.
+  const envFilePaths = envFileCandidates({
+    cwd: process.cwd(),
+    userData: app.getPath('userData')
+  })
+
   // Before anything reads process.env — the adapters below do.
-  loadApiKeys()
+  loadApiKeys(envFilePaths)
 
   const db = openDatabase(join(app.getPath('userData'), 'arcadia.db'))
   const repo = new GameRepository(db)
@@ -152,7 +160,14 @@ app.whenReady().then(() => {
     appList,
     fetchDetails: fetchAppDetails,
     getWindow: () => mainWindow,
-    onArtworkGap: () => artworkGaps.request()
+    onArtworkGap: () => artworkGaps.request(),
+    envFilePaths,
+    // The keys reach the adapters at startup and nowhere else, so a changed
+    // key only takes effect in a process that starts after it was written.
+    relaunch: () => {
+      app.relaunch()
+      app.exit(0)
+    }
   })
   mainWindow = createWindow()
 

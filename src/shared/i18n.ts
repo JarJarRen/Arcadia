@@ -81,6 +81,35 @@ export interface Strings {
     cancel: string
   }
 
+  /**
+   * The configuration screen for the `.env` keys.
+   *
+   * The field hints are deliberately concrete about what is lost without a
+   * key: "optional" alone tells nobody whether it is worth fetching one.
+   */
+  setup: {
+    label: string
+    title: string
+    intro: string
+    firstRunHint: string
+    /** e.g. "Saved to C:\Users\…\.env" */
+    fileHint: (path: string) => string
+    steamKeyLabel: string
+    steamKeyHint: string
+    steamIdLabel: string
+    steamIdHint: string
+    gridKeyLabel: string
+    gridKeyHint: string
+    whereToGet: string
+    skip: string
+    skipHint: string
+    save: string
+    saveAndRestart: string
+    continueWithout: string
+    restarting: string
+    close: string
+  }
+
   library: {
     loading: string
     empty: string
@@ -171,6 +200,8 @@ export interface Strings {
     installUriFailed: (uri: string, detail: string) => string
     launchNameFailed: (name: string, detail: string) => string
     installNameFailed: (name: string, detail: string) => string
+    /** The `.env` could not be written — read-only file, no permission. */
+    envSaveFailed: (detail: string) => string
   }
 
   stores: {
@@ -272,6 +303,39 @@ const en: Strings = {
     cancel: 'Cancel'
   },
 
+  setup: {
+    label: 'Configure API keys',
+    title: 'Configuration',
+    intro:
+      'All three are optional. Without them Arcadia still finds everything ' +
+      'discoverable on this machine — installed Steam games, Epic’s ' +
+      'catalogue, EA and Ubisoft from the registry.',
+    firstRunHint:
+      'You will only be asked once. The gear in the toolbar reopens this at ' +
+      'any time.',
+    fileHint: (path) => `Stored in ${path}`,
+    steamKeyLabel: 'Steam Web API key',
+    steamKeyHint:
+      'Without it: installed Steam games only — no owned library, no ' +
+      'playtime, and no name matching for games from other stores.',
+    steamIdLabel: 'SteamID64 (optional)',
+    steamIdHint:
+      'Only needed when several Steam accounts live on this machine and the ' +
+      'wrong one is picked. Otherwise Arcadia reads the most recent login.',
+    gridKeyLabel: 'SteamGridDB API key',
+    gridKeyHint:
+      'Artwork for games whose store page is gone — test branches, ' +
+      'discontinued and older titles. Without it: no error, just fewer images.',
+    whereToGet: 'Where to get one',
+    skip: 'Skip configuration',
+    skipHint: 'Arcadia starts without keys. Nothing already in the file is changed.',
+    save: 'Save',
+    saveAndRestart: 'Save and restart',
+    continueWithout: 'Continue without keys',
+    restarting: 'Restarting…',
+    close: 'Close'
+  },
+
   library: {
     loading: 'Loading library…',
     empty: 'No games found yet. “Refresh” starts the scan.',
@@ -362,7 +426,8 @@ const en: Strings = {
     launchUriFailed: (uri, detail) => `Launch via ${uri} failed: ${detail}`,
     installUriFailed: (uri, detail) => `Install via ${uri} failed: ${detail}`,
     launchNameFailed: (name, detail) => `Launching “${name}” failed: ${detail}`,
-    installNameFailed: (name, detail) => `Installing “${name}” failed: ${detail}`
+    installNameFailed: (name, detail) => `Installing “${name}” failed: ${detail}`,
+    envSaveFailed: (detail) => `The settings could not be saved: ${detail}`
   },
 
   stores: {
@@ -490,6 +555,40 @@ const de: Strings = {
     cancel: 'Abbrechen'
   },
 
+  setup: {
+    label: 'API-Schlüssel einrichten',
+    title: 'Konfiguration',
+    intro:
+      'Alle drei sind optional. Ohne sie findet Arcadia weiterhin alles, was ' +
+      'auf diesem Rechner auffindbar ist — installierte Steam-Spiele, Epics ' +
+      'Katalog, EA und Ubisoft aus der Registry.',
+    firstRunHint:
+      'Du wirst nur einmal gefragt. Das Zahnrad in der Leiste öffnet das ' +
+      'hier jederzeit wieder.',
+    fileHint: (path) => `Gespeichert in ${path}`,
+    steamKeyLabel: 'Steam-Web-API-Schlüssel',
+    steamKeyHint:
+      'Ohne ihn: nur installierte Steam-Spiele — keine gekaufte Bibliothek, ' +
+      'keine Spielzeit und keine Namenszuordnung für Spiele anderer Stores.',
+    steamIdLabel: 'SteamID64 (optional)',
+    steamIdHint:
+      'Nur nötig, wenn mehrere Steam-Konten auf diesem Rechner liegen und ' +
+      'das falsche gewählt wird. Sonst liest Arcadia die letzte Anmeldung.',
+    gridKeyLabel: 'SteamGridDB-API-Schlüssel',
+    gridKeyHint:
+      'Bilder für Spiele, deren Store-Seite es nicht mehr gibt — ' +
+      'Test-Branches, eingestellte und ältere Titel. Ohne ihn: kein Fehler, ' +
+      'nur weniger Bilder.',
+    whereToGet: 'Wo es den gibt',
+    skip: 'Konfiguration überspringen',
+    skipHint: 'Arcadia startet ohne Schlüssel. Vorhandene Werte bleiben unangetastet.',
+    save: 'Speichern',
+    saveAndRestart: 'Speichern und neu starten',
+    continueWithout: 'Ohne Schlüssel fortfahren',
+    restarting: 'Neustart…',
+    close: 'Schließen'
+  },
+
   library: {
     loading: 'Bibliothek wird geladen…',
     empty: 'Noch keine Spiele gefunden. „Aktualisieren“ startet die Suche.',
@@ -580,7 +679,8 @@ const de: Strings = {
     launchUriFailed: (uri, detail) => `Start über ${uri} fehlgeschlagen: ${detail}`,
     installUriFailed: (uri, detail) => `Installation über ${uri} fehlgeschlagen: ${detail}`,
     launchNameFailed: (name, detail) => `Start von „${name}“ fehlgeschlagen: ${detail}`,
-    installNameFailed: (name, detail) => `Installation von „${name}“ fehlgeschlagen: ${detail}`
+    installNameFailed: (name, detail) => `Installation von „${name}“ fehlgeschlagen: ${detail}`,
+    envSaveFailed: (detail) => `Die Einstellungen konnten nicht gespeichert werden: ${detail}`
   },
 
   stores: {
