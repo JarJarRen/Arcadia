@@ -226,10 +226,14 @@ export interface Strings {
     }
     ea: {
       notFound: string
-      noPublicLibraryApi: string
+      ownedFromLocalStore: string
+      namesFromCatalog: string
       installStateHeuristic: string
       installNotice: string
       invalidOfferId: (id: string) => string
+      catalogUnreachable: string
+      catalogHttpError: (status: number) => string
+      catalogUnreadable: string
     }
     ubisoft: {
       notFound: string
@@ -463,16 +467,22 @@ const en: Strings = {
     },
     ea: {
       notFound: 'The EA app was not found on this system. There is no native Linux client.',
-      noPublicLibraryApi:
-        'EA offers no public interface for the owned library; what the registry ' +
-        'knows is what is shown.',
+      ownedFromLocalStore:
+        'The owned library is read from EA Desktop’s own local data and reflects ' +
+        'the last time the EA app signed in here.',
+      namesFromCatalog:
+        'Names for games that are not installed come from EA’s catalogue service ' +
+        'and need a connection; games it does not name are left out.',
       installStateHeuristic:
         'Install state is derived by matching names across two registry trees and ' +
         'may be missing in individual cases.',
       installNotice:
         'EA Desktop cannot be driven to install from outside — Arcadia opened your ' +
         'EA library, carry on from there.',
-      invalidOfferId: (id) => `Invalid EA offer ID: ${id}`
+      invalidOfferId: (id) => `Invalid EA offer ID: ${id}`,
+      catalogUnreachable: 'EA’s catalogue is unreachable.',
+      catalogHttpError: (status) => `EA’s catalogue answered with HTTP ${status}.`,
+      catalogUnreadable: 'EA’s catalogue returned an unexpected answer.'
     },
     ubisoft: {
       notFound: 'Ubisoft Connect was not found on this system. There is no native Linux client.',
@@ -719,16 +729,22 @@ const de: Strings = {
       notFound:
         'Die EA App wurde auf diesem System nicht gefunden. ' +
         'Unter Linux gibt es keinen nativen Client.',
-      noPublicLibraryApi:
-        'EA bietet keine öffentliche Schnittstelle für die gekaufte Bibliothek; ' +
-        'angezeigt wird, was die Registry kennt.',
+      ownedFromLocalStore:
+        'Die gekaufte Bibliothek stammt aus den lokalen Daten von EA Desktop und ' +
+        'entspricht dem Stand der letzten Anmeldung der EA App auf diesem Rechner.',
+      namesFromCatalog:
+        'Namen für nicht installierte Spiele kommen aus EAs Katalogdienst und ' +
+        'brauchen eine Verbindung; was er nicht benennt, bleibt außen vor.',
       installStateHeuristic:
         'Der Installationsstatus wird über einen Namensabgleich zwischen zwei ' +
         'Registry-Bäumen ermittelt und kann in Einzelfällen fehlen.',
       installNotice:
         'EA Desktop lässt sich von außen nicht zum Installieren bewegen — ' +
         'Arcadia hat deine EA-Bibliothek geöffnet, dort geht es weiter.',
-      invalidOfferId: (id) => `Unzulässige EA-Angebots-ID: ${id}`
+      invalidOfferId: (id) => `Unzulässige EA-Angebots-ID: ${id}`,
+      catalogUnreachable: 'EAs Katalog ist nicht erreichbar.',
+      catalogHttpError: (status) => `EAs Katalog hat mit HTTP ${status} geantwortet.`,
+      catalogUnreadable: 'EAs Katalog hat unerwartet geantwortet.'
     },
     ubisoft: {
       notFound:

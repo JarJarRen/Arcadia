@@ -133,6 +133,9 @@ app.whenReady().then(() => {
       apiKey: process.env.STEAM_WEB_API_KEY,
       steamId64: process.env.STEAM_ID64
     },
+    // EA's entitlement store names nothing; the catalogue service does, and
+    // its answers are cached here so a rescan costs no request.
+    ea: { catalogCachePath: join(app.getPath('userData'), 'ea-catalog.json') },
     // Names for the games from localconfig.vdf. The local file knows only
     // identifiers; without a name a game is skipped.
     resolveSteamName: (appId) => appList.nameFor(appId)

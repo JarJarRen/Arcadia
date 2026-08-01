@@ -4,6 +4,18 @@ import type { StoreAdapter } from '@main/stores/types'
 import type { ExecFn } from '@main/platform/registry'
 import { matchOffersToInstalls, readEaInstalls, readEaOffers } from './registry'
 import { readLauncherTitles } from './launcherLog'
+import { readEaOwnedOffers } from './entitlements'
+import { resolveEaOffers, toOwnedGames, type EaCatalogEntry } from './catalog'
+
+export interface EaAdapterConfig {
+  /**
+   * Where the resolved names are cached.
+   *
+   * Without it every scan asks EA's catalogue about the whole library again.
+   * Not fatal, just wasteful — so this stays optional and tests leave it out.
+   */
+  catalogCachePath?: string
+}
 
 export interface EaAdapterDeps {
   exec?: ExecFn
@@ -16,6 +28,10 @@ export interface EaAdapterDeps {
   >
   /** Names for registry keys that carry none — see launcherLog.ts. */
   readTitles?: () => Promise<ReadonlyMap<string, string>>
+  /** Owned offer IDs from EA's local entitlement store — see entitlements.ts. */
+  readOwnedOffers?: () => Promise<string[]>
+  /** Names and numeric IDs for those offers — see catalog.ts. */
+  resolveOffers?: (offerIds: string[]) => Promise<EaCatalogEntry[]>
 }
 
 export class EaAdapter implements StoreAdapter {
@@ -26,13 +42,29 @@ export class EaAdapter implements StoreAdapter {
   private readonly readOffers: NonNullable<EaAdapterDeps['readOffers']>
   private readonly readInstalls: NonNullable<EaAdapterDeps['readInstalls']>
   private readonly readTitles: NonNullable<EaAdapterDeps['readTitles']>
+  private readonly readOwnedOffers: NonNullable<EaAdapterDeps['readOwnedOffers']>
+  private readonly resolveOffers: NonNullable<EaAdapterDeps['resolveOffers']>
 
-  constructor(deps: EaAdapterDeps = {}) {
+  constructor(
+    private readonly config: EaAdapterConfig = {},
+    deps: EaAdapterDeps = {}
+  ) {
     this.exec = deps.exec
     this.readOffers = deps.readOffers ?? readEaOffers
     this.readInstalls = deps.readInstalls ?? readEaInstalls
     this.readTitles = deps.readTitles ?? ((): Promise<ReadonlyMap<string, string>> =>
       readLauncherTitles())
+    this.readOwnedOffers =
+      deps.readOwnedOffers ?? ((): Promise<string[]> => readEaOwnedOffers({ exec: deps.exec }))
+    this.resolveOffers =
+      deps.resolveOffers ??
+      ((offerIds): Promise<EaCatalogEntry[]> =>
+        resolveEaOffers(
+          offerIds,
+          this.config.catalogCachePath === undefined
+            ? {}
+            : { cachePath: this.config.catalogCachePath }
+        ))
   }
 
   async isAvailable(): Promise<AvailabilityResult> {
@@ -45,7 +77,8 @@ export class EaAdapter implements StoreAdapter {
     return {
       available: true,
       limitations: [
-        t().stores.ea.noPublicLibraryApi,
+        t().stores.ea.ownedFromLocalStore,
+        t().stores.ea.namesFromCatalog,
         t().stores.ea.installStateHeuristic
       ]
     }
@@ -60,6 +93,30 @@ export class EaAdapter implements StoreAdapter {
       this.readInstalls(this.exec)
     ])
     return matchOffersToInstalls(offers, installs)
+  }
+
+  /**
+   * The owned library, including games never installed here.
+   *
+   * Two sources, and the split matters. Ownership comes from EA's own
+   * encrypted entitlement store on this machine — no sign-in, no network, and
+   * every local failure degrades to an empty list rather than to a failed
+   * scan. Names and the numeric IDs come from EA's catalogue service, and a
+   * failure there is passed upwards: `sync.ts` records it as a partial
+   * failure and keeps the installed games.
+   *
+   * The identifiers are the same numeric master title IDs the registry scan
+   * produces, so `merge` in sync.ts unites the two without knowing anything
+   * about either.
+   */
+  async scanOwned(): Promise<RawGame[]> {
+    const offerIds = await this.readOwnedOffers()
+    // Nothing owned that we can see is a normal state — EA not installed, or
+    // never signed in on this machine. Asking the catalogue about an empty
+    // list would only be a wasted request.
+    if (offerIds.length === 0) return []
+
+    return toOwnedGames(await this.resolveOffers(offerIds))
   }
 
   launchUri(game: Game): string {

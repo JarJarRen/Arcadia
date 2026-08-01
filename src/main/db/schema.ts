@@ -16,9 +16,10 @@ CREATE TABLE IF NOT EXISTS games (
   launch_id        TEXT,
   -- Playable, but not licensed to this account. See shared/types.ts.
   shared_or_free   INTEGER NOT NULL DEFAULT 0,
-  -- Added by hand for a game no adapter can see: EA reports only what has
-  -- been installed on this machine, so the rest of a library stays
-  -- invisible without this.
+  -- Added by hand for a game no adapter can see. EA used to be the reason:
+  -- it reported only what had been installed here. The adapter now reads the
+  -- entitlement store instead, but offers EA's catalogue neither names nor
+  -- classifies are still dropped, and this remains the way to enter them.
   manual           INTEGER NOT NULL DEFAULT 0,
   last_played      INTEGER,
   favorite         INTEGER NOT NULL DEFAULT 0,

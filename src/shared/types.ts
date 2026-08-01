@@ -43,9 +43,11 @@ export interface RawGame {
   /**
    * Added by hand rather than found by an adapter.
    *
-   * Exists because EA reports only what has been installed on this machine
-   * — the rest of a library is invisible to every local source, and EA
-   * offers no interface that would reveal it. Such an entry can be deleted
+   * Introduced when EA reported only what had been installed on this machine.
+   * That is no longer true — the EA adapter now reads the entitlement store
+   * and sees the whole owned library — but the escape hatch stays: EA's
+   * catalogue leaves a few offers unnamed and unclassified, and those are
+   * still dropped rather than shown as a number. Such an entry can be deleted
    * again, which a scanned one cannot.
    *
    * A scan may take the row over: if the identifier turns out to be a real
