@@ -27,5 +27,6 @@
     // Not logic but a plain lookup table, listed for the same reason: the
     // store filter's button label is built in filter.ts and needs the names.
     "src/renderer/components/storeLabels.ts"
-  ]
+  ],
+  "exclude": ["test/**/*.tsx", "test/renderer/setup.ts"]
 }

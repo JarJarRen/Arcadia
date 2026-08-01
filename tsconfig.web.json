@@ -11,5 +11,10 @@
     "skipLibCheck": true,
     "paths": { "@shared/*": ["./src/shared/*"], "@renderer/*": ["./src/renderer/*"] }
   },
-  "include": ["src/renderer/**/*", "src/shared/**/*"]
+  "include": [
+    "src/renderer/**/*",
+    "src/shared/**/*",
+    "test/**/*.tsx",
+    "test/renderer/setup.ts"
+  ]
 }
