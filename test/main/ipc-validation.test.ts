@@ -255,6 +255,30 @@ describe('IPC input validation', () => {
   })
 
   /**
+   * Two guards are missing from the discrimination tests above, and that is
+   * not an oversight.
+   *
+   * `gameSetFavorite`'s `typeof mergeKey !== 'string'` half is wholly
+   * subsumed by the lookup three lines below it in `ipc.ts`, which compares
+   * `mergeKey` against known keys with `===`; a key that is always a string
+   * can never equal a non-string, so a missing merge key and a wrong-typed
+   * one are indistinguishable no-ops. There is no error to discriminate on,
+   * so no test can tell the guard's absence from its presence.
+   *
+   * `envConfigSave`'s `typeof values !== 'object'` guard is shadowed the
+   * same way: every non-object this suite (or the real renderer) can send
+   * ends up with `undefined` from property access rather than a throw, so
+   * the per-key loop beneath it already returns `'invalid'` on its own.
+   * Deleting the guard changes nothing observable.
+   *
+   * Both guards stay in `ipc.ts` regardless — they state the contract where
+   * a reader looks for it, and cheaply, and either could become load-bearing
+   * if the code beneath it changes shape. They are just not provably tested
+   * here, and this suite passing green must not be read as claiming they
+   * are.
+   */
+
+  /**
    * Counter-cases.
    *
    * `expect(sent).toEqual([])` above only means something if `sent` can
