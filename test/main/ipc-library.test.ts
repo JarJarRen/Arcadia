@@ -96,7 +96,15 @@ describe('IPC library channels', () => {
     await invoke(IPC.mergeSetPreferred, key, 'ubisoft:856')
     await invoke(IPC.mergeSetSplit, key, true)
 
+    const added = (await invoke(IPC.libraryAddManual, {
+      storeId: 'steam',
+      name: 'A Game No Store Reports'
+    })) as { ok: boolean; id?: string }
+    await invoke(IPC.libraryRemoveManual, added.id)
+
     expect(harness.sent).toEqual([
+      IPC.libraryChanged,
+      IPC.libraryChanged,
       IPC.libraryChanged,
       IPC.libraryChanged,
       IPC.libraryChanged
