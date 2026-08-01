@@ -81,7 +81,7 @@ npm run dev        # development, with reload
 npm start          # run the built version
 npm run dist       # package: installer + portable exe into release/
 npm run icon       # redraw build/icon.png (see scripts/make-icon.mjs)
-npm test           # 610 unit tests
+npm test           # 647 unit tests
 npm run typecheck  # TypeScript, no output
 npm run smoke      # layout test in real Electron — see below
 npm run smoke:runtime  # crypto primitives in real Electron — see below
@@ -108,7 +108,7 @@ The same gap exists below the interface, and it bites harder. **Vitest runs on N
 | **Steam** | yes — installed *and* owned | **yes**, four standard paths (`~/.steam/steam`, `~/.local/share/Steam`, Flatpak, Snap) |
 | **Epic** | yes — installed *and* owned, from the local catalogue | no, no native client |
 | **EA** | yes — installed via the registry, owned from EA's local entitlement store | no, no native client |
-| **Ubisoft** | installed only, via the registry | no, no native client |
+| **Ubisoft** | yes — installed via the registry, owned from the launcher's local caches | no, no native client |
 
 On Linux, Epic, EA and Ubisoft cleanly report "no native client" — the app carries on and shows Steam.
 
@@ -119,6 +119,8 @@ On Linux, Epic, EA and Ubisoft cleanly report "no native client" — the app car
 ## Known limits
 
 **Steam shows more games than Arcadia.** `GetOwnedGames` reports only what the account has licensed. Family sharing and free-to-play are missing there. Arcadia therefore also reads Steam's `localconfig.vdf` and marks such games as *Shared/Free*. Measured: 193 → 217, while Steam's own interface shows 226. The remaining nine are unknown to the local file too.
+
+**Ubisoft's library comes from the launcher's caches.** Ubisoft Connect writes both an ownership cache and a configuration catalogue next to each other, so the owned library *and* the real game titles are readable locally — no sign-in and, unlike EA, no network either. Game names now come from that catalogue rather than from the install folder. Both caches reflect the last time Ubisoft Connect signed in, and a game it does not name is left out: measured here, 16 of 17 owned games, against 3 installed.
 
 **EA's owned library is only as fresh as the EA app.** Ownership is read from EA Desktop's own encrypted store on this machine, which is written when the EA app signs in — a purchase made elsewhere appears once EA Desktop has next started. The names come from EA's catalogue service, so that part needs a connection; without one the installed games still appear. Measured on the development machine: 5 games via the registry, 22 owned.
 

@@ -237,8 +237,7 @@ export interface Strings {
     }
     ubisoft: {
       notFound: string
-      onlyInstalled: string
-      namesFromFolders: string
+      ownedFromLocalCache: string
       invalidGameId: (id: string) => string
     }
   }
@@ -486,10 +485,10 @@ const en: Strings = {
     },
     ubisoft: {
       notFound: 'Ubisoft Connect was not found on this system. There is no native Linux client.',
-      onlyInstalled:
-        'Only installed games are shown; Ubisoft offers no public interface for ' +
-        'the owned library.',
-      namesFromFolders: 'Game names come from folder names and may differ.',
+      ownedFromLocalCache:
+        'The owned library and the game names come from Ubisoft Connect’s own ' +
+        'local caches and reflect the last time it signed in; a game it does ' +
+        'not name is left out.',
       invalidGameId: (id) => `Invalid Ubisoft game ID: ${id}`
     }
   }
@@ -750,10 +749,10 @@ const de: Strings = {
       notFound:
         'Ubisoft Connect wurde auf diesem System nicht gefunden. ' +
         'Unter Linux gibt es keinen nativen Client.',
-      onlyInstalled:
-        'Es werden nur installierte Spiele angezeigt; Ubisoft bietet keine ' +
-        'öffentliche Schnittstelle für die gekaufte Bibliothek.',
-      namesFromFolders: 'Die Spielnamen stammen aus den Ordnernamen und können abweichen.',
+      ownedFromLocalCache:
+        'Die gekaufte Bibliothek und die Spielnamen stammen aus den lokalen ' +
+        'Zwischenspeichern von Ubisoft Connect und entsprechen dem Stand der ' +
+        'letzten Anmeldung; ein Spiel ohne Namen bleibt außen vor.',
       invalidGameId: (id) => `Unzulässige Ubisoft-Spiel-ID: ${id}`
     }
   }
