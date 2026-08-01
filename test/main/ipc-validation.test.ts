@@ -11,7 +11,10 @@
  * Written as one table because the assertion is identical for all of them —
  * the interesting part is the list of channels, not the body.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 // Static, because a type cannot be destructured out of a dynamic import.
 // The value imports stay dynamic so they resolve after the electron mock.
 import type { Harness } from './ipc-context'
@@ -37,6 +40,9 @@ vi.mock('electron', () => ({
 const { registerIpcHandlers } = await import('@main/ipc')
 const { makeHarness } = await import('./ipc-context')
 const { IPC } = await import('@shared/ipc')
+// For asserting which error came back, not just that one did — see the
+// discrimination tests below.
+const { t } = await import('@shared/i18n')
 
 /**
  * Rubbish per parameter type, not one list for all of them.
@@ -188,5 +194,118 @@ describe('IPC input validation', () => {
       ok: boolean
     }
     expect(result.ok).toBe(false)
+  })
+
+  /**
+   * Discrimination tests.
+   *
+   * `context.adapters` is empty and the merge key never matches, so these
+   * four channels answer with an error whether or not their first-argument
+   * guard exists — "nothing launched, nothing sent" is guaranteed either
+   * way. What only the guard produces is the *particular* error below; take
+   * it away and the handler falls through to a different one instead. That
+   * difference, not the empty side effects, is what proves the guard ran.
+   */
+
+  it('answers invalidGameId, not the unknown-game error, when the launch id is the wrong type', async () => {
+    for (const nonsense of NOT_A_STRING) {
+      const result = (await invoke(IPC.gameLaunch, nonsense)) as { ok: boolean; error?: string }
+      expect(result.error).toBe(t().errors.invalidGameId)
+    }
+  })
+
+  it('answers invalidGameId, not the unknown-game error, when the install id is the wrong type', async () => {
+    for (const nonsense of NOT_A_STRING) {
+      const result = (await invoke(IPC.gameInstall, nonsense)) as { ok: boolean; error?: string }
+      expect(result.error).toBe(t().errors.invalidGameId)
+    }
+  })
+
+  it('answers invalidGameId, not the thrown unknown-game message, when the removal id is the wrong type', async () => {
+    for (const nonsense of NOT_A_STRING) {
+      const result = (await invoke(IPC.libraryRemoveManual, nonsense)) as {
+        ok: boolean
+        error?: string
+      }
+      expect(result.error).toBe(t().errors.invalidGameId)
+    }
+  })
+
+  it('answers invalidInput, not unknownGameShort, when the match merge key is the wrong type', async () => {
+    for (const nonsense of NOT_A_STRING) {
+      const result = (await invoke(IPC.metadataSetMatch, nonsense, 440)) as {
+        ok: boolean
+        error?: string
+      }
+      expect(result.error).toBe(t().errors.invalidInput)
+    }
+  })
+
+  it('answers invalidInput with restarting false for an env payload that is not an object', async () => {
+    for (const nonsense of [42, true, 'a string', Symbol('x'), () => undefined]) {
+      const result = (await invoke(IPC.envConfigSave, nonsense)) as {
+        ok: boolean
+        error?: string
+        restarting: boolean
+      }
+      expect(result.ok).toBe(false)
+      expect(result.error).toBe(t().errors.invalidInput)
+      expect(result.restarting).toBe(false)
+    }
+  })
+
+  /**
+   * Counter-cases.
+   *
+   * `expect(sent).toEqual([])` above only means something if `sent` can
+   * become non-empty at all. These three are that proof: valid input for
+   * the same channels, checked against the repository write and the
+   * announcement the rejections above must NOT produce.
+   */
+
+  it('writes the favourite and announces the change for a valid merge key', async () => {
+    await invoke(IPC.gameSetFavorite, 'tf2', true)
+    expect(harness.repo.byId('steam:440')?.favorite).toBe(true)
+    expect(harness.sent).toEqual([IPC.libraryChanged])
+  })
+
+  it('announces the change for a valid preferred-store choice', async () => {
+    await invoke(IPC.mergeSetPreferred, 'tf2', 'steam:440')
+    expect(harness.sent).toEqual([IPC.libraryChanged])
+  })
+
+  it('announces the change for a valid split choice', async () => {
+    await invoke(IPC.mergeSetSplit, 'tf2', true)
+    expect(harness.sent).toEqual([IPC.libraryChanged])
+  })
+
+  describe('envConfigSave against a real file', () => {
+    // A skip has to actually succeed to be a skip. The default harness
+    // points envFilePaths at nothing, so a save — even one with nothing to
+    // write — fails at the filesystem rather than proving the distinction
+    // this is meant to pin. A real, writable file is required to tell
+    // "rejected" apart from "skipped".
+    let directory: string
+
+    beforeEach(async () => {
+      directory = await mkdtemp(join(tmpdir(), 'arcadia-ipc-validation-'))
+      const local = makeHarness({ envFilePaths: [join(directory, 'checkout.env')] })
+      registerIpcHandlers(local.context)
+    })
+
+    afterEach(async () => {
+      await rm(directory, { recursive: true, force: true })
+    })
+
+    it('treats undefined and null as a skip, not a rejection', async () => {
+      for (const skip of [undefined, null]) {
+        const result = (await invoke(IPC.envConfigSave, skip)) as {
+          ok: boolean
+          restarting: boolean
+        }
+        expect(result.ok).toBe(true)
+        expect(result.restarting).toBe(false)
+      }
+    })
   })
 })
