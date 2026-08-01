@@ -33,6 +33,7 @@ export function SettingsMenu({ onOpenSetup }: Props): ReactElement {
         type="button"
         className="button button--icon"
         aria-label={t().toolbar.settingsLabel}
+        title={t().toolbar.settingsLabel}
         aria-expanded={open}
         onClick={() => setOpen((was) => !was)}
       >

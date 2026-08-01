@@ -156,6 +156,7 @@ export function App(): ReactElement {
           type="button"
           className="banner__close"
           aria-label={t().common.dismissHint}
+          title={t().common.dismissHint}
           onClick={() => setNotice(undefined)}
         >
           ×
@@ -171,6 +172,7 @@ export function App(): ReactElement {
           type="button"
           className="banner__close"
           aria-label={t().common.dismissMessage}
+          title={t().common.dismissMessage}
           onClick={dismissError}
         >
           ×

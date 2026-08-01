@@ -30,6 +30,7 @@ export function LibraryToolbar(props: Props): ReactElement {
   const directionLabel = t().toolbar.sortDirectionLabel(
     t().toolbar.sortDirection[props.sortDirection]
   )
+  const refreshLabel = props.syncing ? t().toolbar.refreshing : t().toolbar.refresh
 
   return (
     <header className="toolbar">
@@ -141,8 +142,18 @@ export function LibraryToolbar(props: Props): ReactElement {
         {t().toolbar.shownOfTotal(props.shown, props.total)}
       </span>
 
-      <button type="button" className="button" disabled={props.syncing} onClick={props.onSync}>
-        {props.syncing ? t().toolbar.refreshing : t().toolbar.refresh}
+      {/* Icon only, so the label lives in the tooltip and the accessible
+          name — and keeps naming the state while a scan runs, which the
+          disabled look alone does not spell out. */}
+      <button
+        type="button"
+        className="button button--icon"
+        disabled={props.syncing}
+        aria-label={refreshLabel}
+        title={refreshLabel}
+        onClick={props.onSync}
+      >
+        <span aria-hidden="true">⟳</span>
       </button>
 
       <button type="button" className="button" onClick={props.onAddGame}>

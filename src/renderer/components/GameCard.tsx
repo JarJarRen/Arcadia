@@ -30,6 +30,7 @@ export function GameCard({
   const playtime = formatPlaytime(entry.playtimeMinutes)
   const size = formatSize(entry.installSizeBytes)
   const activeStore = STORE_LABELS[entry.active.storeId] ?? entry.active.storeId
+  const favoriteLabel = entry.favorite ? t().card.removeFavorite : t().card.addFavorite
 
   return (
     <article className={`card ${entry.installed ? '' : 'card--not-installed'}`}>
@@ -121,7 +122,8 @@ export function GameCard({
           type="button"
           className="button button--icon"
           aria-pressed={entry.favorite}
-          aria-label={entry.favorite ? t().card.removeFavorite : t().card.addFavorite}
+          aria-label={favoriteLabel}
+          title={favoriteLabel}
           onClick={() => onToggleFavorite(entry)}
         >
           {entry.favorite ? '★' : '☆'}
