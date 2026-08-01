@@ -26,7 +26,7 @@ vi.mock('electron', () => ({
 const { registerIpcHandlers } = await import('@main/ipc')
 const { makeHarness } = await import('./ipc-context')
 const { IPC } = await import('@shared/ipc')
-const { setLanguage } = await import('@shared/i18n')
+const { setLanguage, t } = await import('@shared/i18n')
 
 describe('IPC settings channels', () => {
   let harness: Harness
@@ -97,8 +97,9 @@ describe('IPC settings channels', () => {
     await invoke(IPC.envConfigSave, values)
     restarts = 0
 
-    const again = (await invoke(IPC.envConfigSave, values)) as { restarting: boolean }
+    const again = (await invoke(IPC.envConfigSave, values)) as { ok: boolean; restarting: boolean }
 
+    expect(again.ok).toBe(true)
     expect(again.restarting).toBe(false)
     expect(restarts).toBe(0)
   })
@@ -120,6 +121,12 @@ describe('IPC settings channels', () => {
     expect(skipped.restarting).toBe(false)
     expect(restarts).toBe(0)
     expect(readFileSync(envPath, 'utf8')).toContain('KEEPTHIS')
+
+    // "Answered" is the ENV_CONFIG_DONE marker, surfaced through
+    // envConfigGet as `done` — the skip must record it just as a save does,
+    // or the dialog would reopen on the next start regardless.
+    const state = (await invoke(IPC.envConfigGet)) as { done: boolean }
+    expect(state.done).toBe(true)
   })
 
   it('reads back what it wrote', async () => {
@@ -149,9 +156,10 @@ describe('IPC settings channels', () => {
       STEAM_WEB_API_KEY: 'NEWVALUE',
       STEAM_ID64: 'has\nnewline',
       STEAMGRIDDB_API_KEY: ''
-    })) as { ok: boolean }
+    })) as { ok: boolean; error?: string }
 
     expect(rejected.ok).toBe(false)
+    expect(rejected.error).toBe(t().errors.invalidInput)
     expect(readFileSync(envPath, 'utf8')).toBe(before)
   })
 })
