@@ -1,5 +1,6 @@
 import type { LibraryEntry } from './library'
 import type { SyncResult } from './sync-types'
+import type { EnvConfigSaveResult, EnvConfigState, EnvConfigValues } from './env-config'
 
 export const IPC = {
   libraryGet: 'library:get',
@@ -14,6 +15,8 @@ export const IPC = {
   metadataSearch: 'metadata:search',
   metadataSetMatch: 'metadata:set-match',
   settingsSetLanguage: 'settings:set-language',
+  envConfigGet: 'env-config:get',
+  envConfigSave: 'env-config:save',
   libraryAddManual: 'library:add-manual',
   libraryRemoveManual: 'library:remove-manual',
   artworkBroken: 'artwork:broken',
@@ -75,6 +78,24 @@ export interface ArcadiaApi {
    * The value is persisted, so the next start opens in this language.
    */
   setLanguage(language: string): Promise<void>
+  /**
+   * The API keys as the `.env` currently holds them, plus whether the
+   * configuration question has been answered.
+   *
+   * Read from the file rather than from `process.env`: an inherited
+   * `STEAM_ID64` from the machine's own environment is not Arcadia's to
+   * write into anybody's file, and prefilling a field with it would invite
+   * exactly that.
+   */
+  getEnvConfig(): Promise<EnvConfigState>
+  /**
+   * Writes the keys and the "answered" marker, then restarts if anything
+   * changed.
+   *
+   * Called without values to skip: the question counts as answered and the
+   * file keeps whatever it already held.
+   */
+  saveEnvConfig(values?: EnvConfigValues): Promise<EnvConfigSaveResult>
   /**
    * Adds a game no adapter can see.
    *

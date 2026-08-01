@@ -46,8 +46,18 @@ export interface Strings {
     searchPlaceholder: string
     allStores: string
     storeFilterLabel: string
+    /** From three stores on, where the names no longer fit the toolbar. */
+    storesSelected: (count: number) => string
+    /**
+     * The trigger's tooltip, e.g. "Store: Steam, Epic, EA" — the selection
+     * in full, which the label itself no longer shows once it counts.
+     */
+    storeFilterTitle: (selection: string) => string
     sortLabel: string
     sort: { name: string; playtime: string; lastPlayed: string; size: string }
+    /** e.g. "Sort direction: ascending" — the toggle's accessible name. */
+    sortDirectionLabel: (state: string) => string
+    sortDirection: { asc: string; desc: string }
     onlyInstalled: string
     onlyFavorites: string
     sharedLabel: string
@@ -74,6 +84,35 @@ export interface Strings {
     idHint: string
     submit: string
     cancel: string
+  }
+
+  /**
+   * The configuration screen for the `.env` keys.
+   *
+   * The field hints are deliberately concrete about what is lost without a
+   * key: "optional" alone tells nobody whether it is worth fetching one.
+   */
+  setup: {
+    label: string
+    title: string
+    intro: string
+    firstRunHint: string
+    /** e.g. "Saved to C:\Users\…\.env" */
+    fileHint: (path: string) => string
+    steamKeyLabel: string
+    steamKeyHint: string
+    steamIdLabel: string
+    steamIdHint: string
+    gridKeyLabel: string
+    gridKeyHint: string
+    whereToGet: string
+    skip: string
+    skipHint: string
+    save: string
+    saveAndRestart: string
+    continueWithout: string
+    restarting: string
+    close: string
   }
 
   library: {
@@ -166,6 +205,8 @@ export interface Strings {
     installUriFailed: (uri: string, detail: string) => string
     launchNameFailed: (name: string, detail: string) => string
     installNameFailed: (name: string, detail: string) => string
+    /** The `.env` could not be written — read-only file, no permission. */
+    envSaveFailed: (detail: string) => string
   }
 
   stores: {
@@ -190,15 +231,18 @@ export interface Strings {
     }
     ea: {
       notFound: string
-      noPublicLibraryApi: string
+      ownedFromLocalStore: string
+      namesFromCatalog: string
       installStateHeuristic: string
       installNotice: string
       invalidOfferId: (id: string) => string
+      catalogUnreachable: string
+      catalogHttpError: (status: number) => string
+      catalogUnreadable: string
     }
     ubisoft: {
       notFound: string
-      onlyInstalled: string
-      namesFromFolders: string
+      ownedFromLocalCache: string
       invalidGameId: (id: string) => string
     }
   }
@@ -222,6 +266,8 @@ const en: Strings = {
     searchPlaceholder: 'Search library…',
     allStores: 'All stores',
     storeFilterLabel: 'Store',
+    storesSelected: (count) => `${count} stores`,
+    storeFilterTitle: (selection) => `Store: ${selection}`,
     sortLabel: 'Sorting',
     sort: {
       name: 'Name',
@@ -229,6 +275,8 @@ const en: Strings = {
       lastPlayed: 'Last played',
       size: 'Size'
     },
+    sortDirectionLabel: (state) => `Sort direction: ${state}`,
+    sortDirection: { asc: 'ascending', desc: 'descending' },
     onlyInstalled: 'Installed only',
     onlyFavorites: 'Favourites only',
     sharedLabel: 'Licence',
@@ -262,6 +310,39 @@ const en: Strings = {
       'description, but cannot be launched.',
     submit: 'Add',
     cancel: 'Cancel'
+  },
+
+  setup: {
+    label: 'Configure API keys',
+    title: 'Configuration',
+    intro:
+      'All three are optional. Without them Arcadia still finds everything ' +
+      'discoverable on this machine — installed Steam games, Epic’s ' +
+      'catalogue, EA and Ubisoft from the registry.',
+    firstRunHint:
+      'You will only be asked once. The gear in the toolbar reopens this at ' +
+      'any time.',
+    fileHint: (path) => `Stored in ${path}`,
+    steamKeyLabel: 'Steam Web API key',
+    steamKeyHint:
+      'Without it: installed Steam games only — no owned library, no ' +
+      'playtime, and no name matching for games from other stores.',
+    steamIdLabel: 'SteamID64 (optional)',
+    steamIdHint:
+      'Only needed when several Steam accounts live on this machine and the ' +
+      'wrong one is picked. Otherwise Arcadia reads the most recent login.',
+    gridKeyLabel: 'SteamGridDB API key',
+    gridKeyHint:
+      'Artwork for games whose store page is gone — test branches, ' +
+      'discontinued and older titles. Without it: no error, just fewer images.',
+    whereToGet: 'Where to get one',
+    skip: 'Skip configuration',
+    skipHint: 'Arcadia starts without keys. Nothing already in the file is changed.',
+    save: 'Save',
+    saveAndRestart: 'Save and restart',
+    continueWithout: 'Continue without keys',
+    restarting: 'Restarting…',
+    close: 'Close'
   },
 
   library: {
@@ -354,7 +435,8 @@ const en: Strings = {
     launchUriFailed: (uri, detail) => `Launch via ${uri} failed: ${detail}`,
     installUriFailed: (uri, detail) => `Install via ${uri} failed: ${detail}`,
     launchNameFailed: (name, detail) => `Launching “${name}” failed: ${detail}`,
-    installNameFailed: (name, detail) => `Installing “${name}” failed: ${detail}`
+    installNameFailed: (name, detail) => `Installing “${name}” failed: ${detail}`,
+    envSaveFailed: (detail) => `The settings could not be saved: ${detail}`
   },
 
   stores: {
@@ -390,23 +472,29 @@ const en: Strings = {
     },
     ea: {
       notFound: 'The EA app was not found on this system. There is no native Linux client.',
-      noPublicLibraryApi:
-        'EA offers no public interface for the owned library; what the registry ' +
-        'knows is what is shown.',
+      ownedFromLocalStore:
+        'The owned library is read from EA Desktop’s own local data and reflects ' +
+        'the last time the EA app signed in here.',
+      namesFromCatalog:
+        'Names for games that are not installed come from EA’s catalogue service ' +
+        'and need a connection; games it does not name are left out.',
       installStateHeuristic:
         'Install state is derived by matching names across two registry trees and ' +
         'may be missing in individual cases.',
       installNotice:
         'EA Desktop cannot be driven to install from outside — Arcadia opened your ' +
         'EA library, carry on from there.',
-      invalidOfferId: (id) => `Invalid EA offer ID: ${id}`
+      invalidOfferId: (id) => `Invalid EA offer ID: ${id}`,
+      catalogUnreachable: 'EA’s catalogue is unreachable.',
+      catalogHttpError: (status) => `EA’s catalogue answered with HTTP ${status}.`,
+      catalogUnreadable: 'EA’s catalogue returned an unexpected answer.'
     },
     ubisoft: {
       notFound: 'Ubisoft Connect was not found on this system. There is no native Linux client.',
-      onlyInstalled:
-        'Only installed games are shown; Ubisoft offers no public interface for ' +
-        'the owned library.',
-      namesFromFolders: 'Game names come from folder names and may differ.',
+      ownedFromLocalCache:
+        'The owned library and the game names come from Ubisoft Connect’s own ' +
+        'local caches and reflect the last time it signed in; a game it does ' +
+        'not name is left out.',
       invalidGameId: (id) => `Invalid Ubisoft game ID: ${id}`
     }
   }
@@ -437,6 +525,8 @@ const de: Strings = {
     searchPlaceholder: 'Bibliothek durchsuchen…',
     allStores: 'Alle Stores',
     storeFilterLabel: 'Store',
+    storesSelected: (count) => `${count} Stores`,
+    storeFilterTitle: (selection) => `Store: ${selection}`,
     sortLabel: 'Sortierung',
     sort: {
       name: 'Name',
@@ -444,6 +534,8 @@ const de: Strings = {
       lastPlayed: 'Zuletzt gespielt',
       size: 'Größe'
     },
+    sortDirectionLabel: (state) => `Sortierrichtung: ${state}`,
+    sortDirection: { asc: 'aufsteigend', desc: 'absteigend' },
     onlyInstalled: 'Nur installierte',
     onlyFavorites: 'Nur Favoriten',
     sharedLabel: 'Lizenz',
@@ -477,6 +569,40 @@ const de: Strings = {
       'und Beschreibung, lässt sich aber nicht starten.',
     submit: 'Hinzufügen',
     cancel: 'Abbrechen'
+  },
+
+  setup: {
+    label: 'API-Schlüssel einrichten',
+    title: 'Konfiguration',
+    intro:
+      'Alle drei sind optional. Ohne sie findet Arcadia weiterhin alles, was ' +
+      'auf diesem Rechner auffindbar ist — installierte Steam-Spiele, Epics ' +
+      'Katalog, EA und Ubisoft aus der Registry.',
+    firstRunHint:
+      'Du wirst nur einmal gefragt. Das Zahnrad in der Leiste öffnet das ' +
+      'hier jederzeit wieder.',
+    fileHint: (path) => `Gespeichert in ${path}`,
+    steamKeyLabel: 'Steam-Web-API-Schlüssel',
+    steamKeyHint:
+      'Ohne ihn: nur installierte Steam-Spiele — keine gekaufte Bibliothek, ' +
+      'keine Spielzeit und keine Namenszuordnung für Spiele anderer Stores.',
+    steamIdLabel: 'SteamID64 (optional)',
+    steamIdHint:
+      'Nur nötig, wenn mehrere Steam-Konten auf diesem Rechner liegen und ' +
+      'das falsche gewählt wird. Sonst liest Arcadia die letzte Anmeldung.',
+    gridKeyLabel: 'SteamGridDB-API-Schlüssel',
+    gridKeyHint:
+      'Bilder für Spiele, deren Store-Seite es nicht mehr gibt — ' +
+      'Test-Branches, eingestellte und ältere Titel. Ohne ihn: kein Fehler, ' +
+      'nur weniger Bilder.',
+    whereToGet: 'Wo es den gibt',
+    skip: 'Konfiguration überspringen',
+    skipHint: 'Arcadia startet ohne Schlüssel. Vorhandene Werte bleiben unangetastet.',
+    save: 'Speichern',
+    saveAndRestart: 'Speichern und neu starten',
+    continueWithout: 'Ohne Schlüssel fortfahren',
+    restarting: 'Neustart…',
+    close: 'Schließen'
   },
 
   library: {
@@ -569,7 +695,8 @@ const de: Strings = {
     launchUriFailed: (uri, detail) => `Start über ${uri} fehlgeschlagen: ${detail}`,
     installUriFailed: (uri, detail) => `Installation über ${uri} fehlgeschlagen: ${detail}`,
     launchNameFailed: (name, detail) => `Start von „${name}“ fehlgeschlagen: ${detail}`,
-    installNameFailed: (name, detail) => `Installation von „${name}“ fehlgeschlagen: ${detail}`
+    installNameFailed: (name, detail) => `Installation von „${name}“ fehlgeschlagen: ${detail}`,
+    envSaveFailed: (detail) => `Die Einstellungen konnten nicht gespeichert werden: ${detail}`
   },
 
   stores: {
@@ -608,25 +735,31 @@ const de: Strings = {
       notFound:
         'Die EA App wurde auf diesem System nicht gefunden. ' +
         'Unter Linux gibt es keinen nativen Client.',
-      noPublicLibraryApi:
-        'EA bietet keine öffentliche Schnittstelle für die gekaufte Bibliothek; ' +
-        'angezeigt wird, was die Registry kennt.',
+      ownedFromLocalStore:
+        'Die gekaufte Bibliothek stammt aus den lokalen Daten von EA Desktop und ' +
+        'entspricht dem Stand der letzten Anmeldung der EA App auf diesem Rechner.',
+      namesFromCatalog:
+        'Namen für nicht installierte Spiele kommen aus EAs Katalogdienst und ' +
+        'brauchen eine Verbindung; was er nicht benennt, bleibt außen vor.',
       installStateHeuristic:
         'Der Installationsstatus wird über einen Namensabgleich zwischen zwei ' +
         'Registry-Bäumen ermittelt und kann in Einzelfällen fehlen.',
       installNotice:
         'EA Desktop lässt sich von außen nicht zum Installieren bewegen — ' +
         'Arcadia hat deine EA-Bibliothek geöffnet, dort geht es weiter.',
-      invalidOfferId: (id) => `Unzulässige EA-Angebots-ID: ${id}`
+      invalidOfferId: (id) => `Unzulässige EA-Angebots-ID: ${id}`,
+      catalogUnreachable: 'EAs Katalog ist nicht erreichbar.',
+      catalogHttpError: (status) => `EAs Katalog hat mit HTTP ${status} geantwortet.`,
+      catalogUnreadable: 'EAs Katalog hat unerwartet geantwortet.'
     },
     ubisoft: {
       notFound:
         'Ubisoft Connect wurde auf diesem System nicht gefunden. ' +
         'Unter Linux gibt es keinen nativen Client.',
-      onlyInstalled:
-        'Es werden nur installierte Spiele angezeigt; Ubisoft bietet keine ' +
-        'öffentliche Schnittstelle für die gekaufte Bibliothek.',
-      namesFromFolders: 'Die Spielnamen stammen aus den Ordnernamen und können abweichen.',
+      ownedFromLocalCache:
+        'Die gekaufte Bibliothek und die Spielnamen stammen aus den lokalen ' +
+        'Zwischenspeichern von Ubisoft Connect und entsprechen dem Stand der ' +
+        'letzten Anmeldung; ein Spiel ohne Namen bleibt außen vor.',
       invalidGameId: (id) => `Unzulässige Ubisoft-Spiel-ID: ${id}`
     }
   }

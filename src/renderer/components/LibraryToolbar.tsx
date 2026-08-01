@@ -1,22 +1,24 @@
 import type { ReactElement } from 'react'
-import { STORE_IDS } from '@shared/types'
 import { t } from '@shared/i18n'
-import type { LibraryFilter, SharedFilter, SortKey, ViewMode } from '../filter'
-import { STORE_LABELS } from './storeLabels'
-import { LanguageMenu } from './LanguageMenu'
+import type { LibraryFilter, SharedFilter, SortDirection, SortKey, ViewMode } from '../filter'
+import { SettingsMenu } from './SettingsMenu'
+import { StoreFilterMenu } from './StoreFilterMenu'
 
 interface Props {
   filter: LibraryFilter
   sort: SortKey
+  sortDirection: SortDirection
   view: ViewMode
   total: number
   shown: number
   syncing: boolean
   onFilterChange: (filter: LibraryFilter) => void
   onSortChange: (sort: SortKey) => void
+  onSortDirectionChange: (direction: SortDirection) => void
   onViewChange: (view: ViewMode) => void
   onAddGame: () => void
   onSync: () => void
+  onOpenSetup: () => void
 }
 
 export function LibraryToolbar(props: Props): ReactElement {
@@ -25,6 +27,10 @@ export function LibraryToolbar(props: Props): ReactElement {
   // Read once per render so a language switch reaches every label at the
   // same time rather than half of them.
   const sortLabels: Record<SortKey, string> = t().toolbar.sort
+  const directionLabel = t().toolbar.sortDirectionLabel(
+    t().toolbar.sortDirection[props.sortDirection]
+  )
+  const refreshLabel = props.syncing ? t().toolbar.refreshing : t().toolbar.refresh
 
   return (
     <header className="toolbar">
@@ -36,21 +42,10 @@ export function LibraryToolbar(props: Props): ReactElement {
         onChange={(event) => onFilterChange({ ...filter, search: event.target.value })}
       />
 
-      <select
-        className="toolbar__select"
-        value={filter.store}
-        aria-label={t().toolbar.storeFilterLabel}
-        onChange={(event) =>
-          onFilterChange({ ...filter, store: event.target.value as LibraryFilter['store'] })
-        }
-      >
-        <option value="all">{t().toolbar.allStores}</option>
-        {STORE_IDS.map((id) => (
-          <option key={id} value={id}>
-            {STORE_LABELS[id] ?? id}
-          </option>
-        ))}
-      </select>
+      <StoreFilterMenu
+        stores={filter.stores}
+        onChange={(stores) => onFilterChange({ ...filter, stores })}
+      />
 
       <select
         className="toolbar__select"
@@ -65,27 +60,45 @@ export function LibraryToolbar(props: Props): ReactElement {
         ))}
       </select>
 
-      <label className="toolbar__toggle">
-        <input
-          type="checkbox"
-          checked={filter.onlyInstalled}
-          onChange={(event) =>
-            onFilterChange({ ...filter, onlyInstalled: event.target.checked })
-          }
-        />
-        {t().toolbar.onlyInstalled}
-      </label>
+      {/* The accessible name states the direction rather than leaving a
+          screen reader with a bare arrow. */}
+      <button
+        type="button"
+        className="button button--icon"
+        aria-label={directionLabel}
+        title={directionLabel}
+        onClick={() => props.onSortDirectionChange(props.sortDirection === 'asc' ? 'desc' : 'asc')}
+      >
+        <span aria-hidden="true">{props.sortDirection === 'asc' ? '↑' : '↓'}</span>
+      </button>
 
-      <label className="toolbar__toggle">
-        <input
-          type="checkbox"
-          checked={filter.onlyFavorites}
-          onChange={(event) =>
-            onFilterChange({ ...filter, onlyFavorites: event.target.checked })
-          }
-        />
-        {t().toolbar.onlyFavorites}
-      </label>
+      {/* Stacked, not side by side: two short checkboxes cost as much of the
+          row as a whole dropdown, and the row has none to spare. Vertically
+          they take one column's width and no more height than the fields
+          beside them. */}
+      <div className="toolbar__toggles">
+        <label className="toolbar__toggle">
+          <input
+            type="checkbox"
+            checked={filter.onlyInstalled}
+            onChange={(event) =>
+              onFilterChange({ ...filter, onlyInstalled: event.target.checked })
+            }
+          />
+          {t().toolbar.onlyInstalled}
+        </label>
+
+        <label className="toolbar__toggle">
+          <input
+            type="checkbox"
+            checked={filter.onlyFavorites}
+            onChange={(event) =>
+              onFilterChange({ ...filter, onlyFavorites: event.target.checked })
+            }
+          />
+          {t().toolbar.onlyFavorites}
+        </label>
+      </div>
 
       {/* Three states, so that "hide the shared ones" is reachable — a
           checkbox could only ever show them. */}
@@ -129,15 +142,25 @@ export function LibraryToolbar(props: Props): ReactElement {
         {t().toolbar.shownOfTotal(props.shown, props.total)}
       </span>
 
-      <button type="button" className="button" disabled={props.syncing} onClick={props.onSync}>
-        {props.syncing ? t().toolbar.refreshing : t().toolbar.refresh}
+      {/* Icon only, so the label lives in the tooltip and the accessible
+          name — and keeps naming the state while a scan runs, which the
+          disabled look alone does not spell out. */}
+      <button
+        type="button"
+        className="button button--icon"
+        disabled={props.syncing}
+        aria-label={refreshLabel}
+        title={refreshLabel}
+        onClick={props.onSync}
+      >
+        <span aria-hidden="true">⟳</span>
       </button>
 
       <button type="button" className="button" onClick={props.onAddGame}>
         + {t().toolbar.addGame}
       </button>
 
-      <LanguageMenu />
+      <SettingsMenu onOpenSetup={props.onOpenSetup} />
     </header>
   )
 }

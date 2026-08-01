@@ -118,6 +118,8 @@ export function GameDetail({
     }
   }
 
+  const favoriteLabel = entry.favorite ? t().card.removeFavorite : t().card.addFavorite
+
   return (
     <main className={variant === 'pane' ? 'detail detail--pane' : 'detail'}>
       <header className="detail__hero">
@@ -150,6 +152,7 @@ export function GameDetail({
             type="button"
             className="banner__close"
             aria-label={t().common.dismissMessage}
+            title={t().common.dismissMessage}
             onClick={() => setFolderError(undefined)}
           >
             ×
@@ -172,6 +175,7 @@ export function GameDetail({
                   className="gallery__button"
                   onClick={() => setLightboxImage(url)}
                   aria-label={t().detail.enlargeScreenshot}
+                  title={t().detail.enlargeScreenshot}
                 >
                   <img className="gallery__image" src={url} alt="" loading="lazy" />
                 </button>
@@ -209,7 +213,8 @@ export function GameDetail({
               type="button"
               className="button button--icon"
               aria-pressed={entry.favorite}
-              aria-label={entry.favorite ? t().card.removeFavorite : t().card.addFavorite}
+              aria-label={favoriteLabel}
+              title={favoriteLabel}
               onClick={() => onToggleFavorite(entry)}
             >
               {entry.favorite ? '★' : '☆'}

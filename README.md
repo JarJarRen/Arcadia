@@ -81,9 +81,10 @@ npm run dev        # development, with reload
 npm start          # run the built version
 npm run dist       # package: installer + portable exe into release/
 npm run icon       # redraw build/icon.png (see scripts/make-icon.mjs)
-npm test           # 502 unit tests
+npm test           # 647 unit tests
 npm run typecheck  # TypeScript, no output
 npm run smoke      # layout test in real Electron — see below
+npm run smoke:runtime  # crypto primitives in real Electron — see below
 ```
 
 The database lives in `%APPDATA%\arcadia` or `~/.config/arcadia`. Deleting it forces a full rebuild.
@@ -94,6 +95,10 @@ The unit tests cover parsers, adapters, database and filter logic — but none o
 
 `npm run smoke` starts the built interface in real Electron and measures: tile heights, the two-column details page, the screenshot gallery, and whether an image really loads under the CSP.
 
+The same gap exists below the interface, and it bites harder. **Vitest runs on Node, the app runs on Electron, and their crypto is not the same:** Electron links BoringSSL (`process.versions.openssl` reads `0.0.0`), which has no SHA-3 at all. `createHash('sha3-256')` throws *"Digest method not supported"* there while passing every test under Node — which is exactly what happened: 604 green tests next to an EA library that was silently always empty. That is why EA's SHA3-256 is implemented in [`sha3.ts`](src/main/stores/ea/sha3.ts) against published vectors instead of taken from `node:crypto`.
+
+`npm run smoke:runtime` runs those primitives inside real Electron: the NIST vectors, the directory hash a real EA installation uses, and a full encrypt/decrypt round trip through the adapter's own key derivation. It needs no EA installation, no account and no network — the store it decrypts is one it encrypted itself.
+
 ---
 
 ## What works where
@@ -102,8 +107,8 @@ The unit tests cover parsers, adapters, database and filter logic — but none o
 |---|---|---|
 | **Steam** | yes — installed *and* owned | **yes**, four standard paths (`~/.steam/steam`, `~/.local/share/Steam`, Flatpak, Snap) |
 | **Epic** | yes — installed *and* owned, from the local catalogue | no, no native client |
-| **EA** | installed only, via the registry | no, no native client |
-| **Ubisoft** | installed only, via the registry | no, no native client |
+| **EA** | yes — installed via the registry, owned from EA's local entitlement store | no, no native client |
+| **Ubisoft** | yes — installed via the registry, owned from the launcher's local caches | no, no native client |
 
 On Linux, Epic, EA and Ubisoft cleanly report "no native client" — the app carries on and shows Steam.
 
@@ -115,11 +120,15 @@ On Linux, Epic, EA and Ubisoft cleanly report "no native client" — the app car
 
 **Steam shows more games than Arcadia.** `GetOwnedGames` reports only what the account has licensed. Family sharing and free-to-play are missing there. Arcadia therefore also reads Steam's `localconfig.vdf` and marks such games as *Shared/Free*. Measured: 193 → 217, while Steam's own interface shows 226. The remaining nine are unknown to the local file too.
 
+**Ubisoft's library comes from the launcher's caches.** Ubisoft Connect writes both an ownership cache and a configuration catalogue next to each other, so the owned library *and* the real game titles are readable locally — no sign-in and, unlike EA, no network either. Game names now come from that catalogue rather than from the install folder. Both caches reflect the last time Ubisoft Connect signed in, and a game it does not name is left out: measured here, 16 of 17 owned games, against 3 installed.
+
+**EA's owned library is only as fresh as the EA app.** Ownership is read from EA Desktop's own encrypted store on this machine, which is written when the EA app signs in — a purchase made elsewhere appears once EA Desktop has next started. The names come from EA's catalogue service, so that part needs a connection; without one the installed games still appear. Measured on the development machine: 5 games via the registry, 22 owned.
+
 **EA cannot be installed through Arcadia.** The launcher has no deep link for it — checked in the binaries: it knows exactly `game/launch`, `library/open` and `store/open`. Arcadia therefore opens the EA library and says so. Steam, Epic and Ubisoft install for real.
 
 **Some games stay without an image.** Where name matching is uncertain, *no* image is set deliberately: SteamGridDB returns "EA Sports FIFA 21" as the best hit for "EA SPORTS™ FIFA 23", and a wrong image goes unnoticed while a missing one does not. *"Wrong game matched?"* on the details page lets you fix it by hand.
 
-**Images are not downloaded** but loaded straight from the source. Consequence: no images offline, and opening the app produces requests to Valve, Epic and SteamGridDB. The CSP allows exactly those hosts.
+**Images are not downloaded** but loaded straight from the source. Consequence: no images offline, and opening the app produces requests to Valve, Epic and SteamGridDB. The CSP allows exactly those hosts. A scan additionally asks EA's catalogue service for the names of owned EA games; that answer is cached, so it happens once per game rather than once per scan.
 
 **The interface is English, with German fully translated alongside.** All user-visible text lives in [`src/shared/i18n.ts`](src/shared/i18n.ts). English is the default; the German bundle is complete, so adding a language switch means wiring a setting, not writing translations.
 
@@ -163,6 +172,7 @@ Games, Electronic Arts or Ubisoft. Steam, Epic Games, EA and Ubisoft Connect
 are trademarks of their respective owners, used here only to name the stores
 Arcadia reads from.
 
-Arcadia reads local files those launchers write and opens their own
-protocol handlers to start a game. It does not modify them, does not
-circumvent anything, and never asks for store credentials.
+Arcadia reads local files those launchers write, asks their public
+catalogue services what a game is called, and opens their own protocol
+handlers to start a game. It does not modify them, does not circumvent
+anything, and never asks for store credentials.

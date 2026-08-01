@@ -621,6 +621,238 @@ app.whenReady().then(async () => {
        ? '' : document.querySelector('.detail__title').textContent`
   )
 
+  /*
+   * Store multi-selection and sort direction.
+   *
+   * Both controls live entirely in the DOM — a popover that has to open,
+   * receive several clicks without closing, and drive the filter; and a
+   * button whose only job is to reverse a list. Nothing of that is reachable
+   * from the Node tests, which see the pure functions and never a click.
+   *
+   * The stub library is built for this: exactly one Epic game, one EA game
+   * and one Ubisoft source, against 203 on Steam. Any miscount is therefore
+   * unmistakable rather than off by one in a sea of 205.
+   */
+  await win.webContents.executeJavaScript(
+    `window.dispatchEvent(new MouseEvent('mouseup', { button: 3, bubbles: true }))`
+  )
+  await new Promise((resolve) => setTimeout(resolve, 300))
+
+  const toolbar = await win.webContents.executeJavaScript(`(async () => {
+    const wait = () => new Promise((r) => setTimeout(r, 250))
+    const trigger = document.querySelector('.popover__trigger')
+    const count = () => document.querySelector('.toolbar__count').textContent
+    const firstCard = () => {
+      const card = document.querySelector('.card__open')
+      return card === null ? '' : card.textContent
+    }
+
+    const initialLabel = trigger === null ? null : trigger.textContent
+    const sortedAscending = firstCard()
+
+    trigger.click()
+    await wait()
+    const items = [...document.querySelectorAll('.popover__panel [role="menuitemcheckbox"]')]
+    const byName = (name) => items.find((i) => i.textContent.includes(name))
+
+    byName('Epic').click()
+    await wait()
+    const oneStore = { label: trigger.textContent, count: count(), stillOpen: document.querySelector('.popover__panel') !== null }
+
+    // A second store while the panel is still open — the whole point of a
+    // popover over a single-choice select.
+    byName('EA').click()
+    await wait()
+    const twoStores = { label: trigger.textContent, count: count() }
+
+    byName('Epic').click()
+    await wait()
+    const unticked = { label: trigger.textContent, count: count() }
+
+    const all = document.querySelector('.popover__panel [role="menuitemradio"]')
+    all.click()
+    await wait()
+    const cleared = { label: trigger.textContent, count: count(), closed: document.querySelector('.popover__panel') === null }
+
+    // The direction toggle: same key, reversed list.
+    const toggle = [...document.querySelectorAll('.toolbar .button--icon')].find(
+      (b) => b.textContent === '↑' || b.textContent === '↓'
+    )
+    const arrowBefore = toggle === undefined ? null : toggle.textContent
+    toggle.click()
+    await wait()
+    const reversed = { arrow: toggle.textContent, first: firstCard() }
+    toggle.click()
+    await wait()
+
+    return {
+      initialLabel,
+      sortedAscending,
+      oneStore,
+      twoStores,
+      unticked,
+      cleared,
+      arrowBefore,
+      reversed,
+      restored: firstCard()
+    }
+  })()`)
+
+  const toolbarProblems = []
+  if (toolbar.initialLabel === null) {
+    toolbarProblems.push('The store filter button was not rendered.')
+  } else if (!toolbar.initialLabel.includes('All stores')) {
+    toolbarProblems.push(
+      `The store button opens on "${toolbar.initialLabel}" instead of "All stores".`
+    )
+  }
+  if (toolbar.oneStore.count !== '1 of 205') {
+    toolbarProblems.push(
+      `Epic alone shows "${toolbar.oneStore.count}" instead of "1 of 205".`
+    )
+  }
+  if (!toolbar.oneStore.label.includes('Epic')) {
+    toolbarProblems.push(`The button reads "${toolbar.oneStore.label}" instead of "Epic".`)
+  }
+  if (!toolbar.oneStore.stillOpen) {
+    toolbarProblems.push('The panel closed after one store — selecting several is impossible.')
+  }
+  if (toolbar.twoStores.count !== '2 of 205') {
+    toolbarProblems.push(
+      `Epic and EA together show "${toolbar.twoStores.count}" instead of "2 of 205" — ` +
+        'the stores are not being ORed.'
+    )
+  }
+  if (!toolbar.twoStores.label.includes('Epic') || !toolbar.twoStores.label.includes('EA')) {
+    toolbarProblems.push(`Two stores are labelled "${toolbar.twoStores.label}".`)
+  }
+  if (toolbar.unticked.count !== '1 of 205') {
+    toolbarProblems.push(
+      `Unticking Epic left "${toolbar.unticked.count}" instead of the EA game alone.`
+    )
+  }
+  if (toolbar.cleared.count !== '205 of 205') {
+    toolbarProblems.push(
+      `"All stores" shows "${toolbar.cleared.count}" instead of the whole library.`
+    )
+  }
+  if (!toolbar.cleared.closed) {
+    toolbarProblems.push('The panel stayed open after "All stores".')
+  }
+  if (toolbar.arrowBefore !== '↑') {
+    toolbarProblems.push(`The library opens on "${toolbar.arrowBefore}" instead of ascending.`)
+  }
+  if (toolbar.reversed.arrow !== '↓') {
+    toolbarProblems.push('The arrow did not follow the direction it set.')
+  }
+  if (toolbar.reversed.first === toolbar.sortedAscending) {
+    toolbarProblems.push(
+      `Reversing the direction left "${toolbar.reversed.first}" at the top — ` +
+        'the list was not re-sorted.'
+    )
+  }
+  if (toolbar.restored !== toolbar.sortedAscending) {
+    toolbarProblems.push(
+      `Toggling back gave "${toolbar.restored}" instead of "${toolbar.sortedAscending}".`
+    )
+  }
+
+  /*
+   * The configuration screen, opened from the gear.
+   *
+   * The gate itself cannot be exercised here — the stub reports the question
+   * as answered, precisely so the dialog does not cover everything measured
+   * above. What is checked is the other half of the feature: that the gear
+   * still reaches it, that the fields arrive prefilled, that ticking "skip"
+   * really does put the keys out of reach, and that the language switch the
+   * menu existed for in the first place is still there.
+   */
+  const setup = await win.webContents.executeJavaScript(`(async () => {
+    const wait = () => new Promise((r) => setTimeout(r, 250))
+    const box = () => document.querySelector('.modal__box--wide')
+
+    document.querySelector('[aria-label="Settings"]').click()
+    await wait()
+    const panel = document.querySelector('.popover__panel')
+    const entries = {
+      configuration: [...panel.querySelectorAll('[role="menuitem"]')].map((i) => i.textContent),
+      languages: panel.querySelectorAll('[role="menuitemradio"]').length
+    }
+
+    panel.querySelector('[role="menuitem"]').click()
+    await wait()
+
+    const opened = box() !== null
+    const inputs = () => [...box().querySelectorAll('.modal__field input')]
+    const prefilled = inputs().map((i) => i.value)
+    const links = box().querySelectorAll('.modal__link').length
+
+    const skip = box().querySelector('.modal__toggle input')
+    skip.click()
+    await wait()
+    const disabledAfterSkip = inputs().every((i) => i.disabled)
+    const buttonAfterSkip = box().querySelector('.button--primary').textContent
+
+    skip.click()
+    await wait()
+    const buttonAfterUntick = box().querySelector('.button--primary').textContent
+
+    // The first action is Close — present because this was opened from the
+    // gear rather than as the first-run gate.
+    box().querySelector('.modal__actions .button').click()
+    await wait()
+
+    return {
+      entries,
+      opened,
+      prefilled,
+      links,
+      disabledAfterSkip,
+      buttonAfterSkip,
+      buttonAfterUntick,
+      closed: box() === null,
+      libraryStillThere: document.querySelectorAll('.card').length
+    }
+  })()`)
+
+  const setupProblems = []
+  if (setup.entries.configuration.length !== 1) {
+    setupProblems.push(
+      `The gear offers ${setup.entries.configuration.length} configuration entries instead of 1.`
+    )
+  }
+  if (setup.entries.languages !== 2) {
+    setupProblems.push(
+      `The gear lists ${setup.entries.languages} languages instead of 2 — the ` +
+        'configuration entry displaced the language switch.'
+    )
+  }
+  if (!setup.opened) setupProblems.push('The gear did not open the configuration screen.')
+  if (setup.prefilled.length !== 3) {
+    setupProblems.push(`The screen shows ${setup.prefilled.length} fields instead of 3.`)
+  }
+  if (setup.prefilled[0] !== 'stub-steam-key' || setup.prefilled[2] !== 'stub-grid-key') {
+    setupProblems.push(
+      `The fields arrived as ${JSON.stringify(setup.prefilled)} instead of prefilled from the file.`
+    )
+  }
+  if (setup.links !== 3) {
+    setupProblems.push(`${setup.links} links to obtain a key instead of one per field.`)
+  }
+  if (!setup.disabledAfterSkip) {
+    setupProblems.push('Ticking "skip" left the key fields editable.')
+  }
+  if (setup.buttonAfterSkip === setup.buttonAfterUntick) {
+    setupProblems.push(
+      `The button reads "${setup.buttonAfterSkip}" whether skipping or not — ` +
+        'nothing tells the user which of the two will happen.'
+    )
+  }
+  if (!setup.closed) setupProblems.push('Close did not close the configuration screen.')
+  if (setup.libraryStillThere === 0) {
+    setupProblems.push('The library was gone after the configuration screen closed.')
+  }
+
   const navProblems = []
   if (afterReturn.backInGrid === 0) {
     navProblems.push('The back button did not return to the grid.')
@@ -653,7 +885,9 @@ app.whenReady().then(async () => {
     ...detailProblems,
     ...listProblems,
     ...navProblems,
-    ...addProblems
+    ...addProblems,
+    ...toolbarProblems,
+    ...setupProblems
   ]
 
   console.log('--- Smoke test: library layout ---')
@@ -666,6 +900,10 @@ app.whenReady().then(async () => {
   console.log(JSON.stringify({ ...thumbs, afterBack }, null, 1))
   console.log('--- Smoke test: add-game dialog ---')
   console.log(JSON.stringify(dialog, null, 1))
+  console.log('--- Smoke test: store multi-select and sort direction ---')
+  console.log(JSON.stringify(toolbar, null, 1))
+  console.log('--- Smoke test: configuration screen ---')
+  console.log(JSON.stringify(setup, null, 1))
   console.log('--- Smoke test: scroll position and forward ---')
   console.log(
     JSON.stringify({ scrolledTo: scroll.set, hooked: scroll.hooked, tag: scroll.tag, hookedElements: scroll.hookedElements, ...afterReturn, openedTitle, afterForward }, null, 1)

@@ -36,8 +36,8 @@ const ARTWORK_GAP_DELAY_MS = 2_000
  * meaningful once Electron is ready, and an installed copy has no checkout
  * to find a `.env` in.
  */
-function loadApiKeys(): void {
-  for (const path of envFileCandidates({ cwd: process.cwd(), userData: app.getPath('userData') })) {
+function loadApiKeys(paths: string[]): void {
+  for (const path of paths) {
     // `override: false` so the first file found wins, matching the order in
     // envFileCandidates: a checkout's .env beats the installed one.
     loadDotenv({ path, override: false, quiet: true })
@@ -95,8 +95,16 @@ function createWindow(): BrowserWindow {
 }
 
 app.whenReady().then(() => {
+  // The same list twice over: dotenv loads from it now, and the
+  // configuration screen writes back to it later. Computed once so the two
+  // can never disagree about which file is in force.
+  const envFilePaths = envFileCandidates({
+    cwd: process.cwd(),
+    userData: app.getPath('userData')
+  })
+
   // Before anything reads process.env — the adapters below do.
-  loadApiKeys()
+  loadApiKeys(envFilePaths)
 
   const db = openDatabase(join(app.getPath('userData'), 'arcadia.db'))
   const repo = new GameRepository(db)
@@ -125,6 +133,9 @@ app.whenReady().then(() => {
       apiKey: process.env.STEAM_WEB_API_KEY,
       steamId64: process.env.STEAM_ID64
     },
+    // EA's entitlement store names nothing; the catalogue service does, and
+    // its answers are cached here so a rescan costs no request.
+    ea: { catalogCachePath: join(app.getPath('userData'), 'ea-catalog.json') },
     // Names for the games from localconfig.vdf. The local file knows only
     // identifiers; without a name a game is skipped.
     resolveSteamName: (appId) => appList.nameFor(appId)
@@ -152,7 +163,14 @@ app.whenReady().then(() => {
     appList,
     fetchDetails: fetchAppDetails,
     getWindow: () => mainWindow,
-    onArtworkGap: () => artworkGaps.request()
+    onArtworkGap: () => artworkGaps.request(),
+    envFilePaths,
+    // The keys reach the adapters at startup and nowhere else, so a changed
+    // key only takes effect in a process that starts after it was written.
+    relaunch: () => {
+      app.relaunch()
+      app.exit(0)
+    }
   })
   mainWindow = createWindow()
 

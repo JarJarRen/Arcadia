@@ -1,11 +1,12 @@
 import type { StoreAdapter } from './types'
 import { SteamAdapter, type SteamAdapterConfig } from './steam'
 import { EpicAdapter } from './epic'
-import { EaAdapter } from './ea'
+import { EaAdapter, type EaAdapterConfig } from './ea'
 import { UbisoftAdapter } from './ubisoft'
 
 export interface AdapterConfig {
   steam: SteamAdapterConfig
+  ea?: EaAdapterConfig
   /**
    * AppID to game name, from Steam's app list.
    *
@@ -19,9 +20,11 @@ export interface AdapterConfig {
 /**
  * Builds every adapter.
  *
- * Only Steam needs configuration (API key and account). The other three
- * read purely locally — Epic from the manifest files, EA and Ubisoft from
- * the registry — and need no credentials at all.
+ * Steam is the only one that needs a credential. Epic reads its manifests and
+ * catalogue cache, Ubisoft the registry, and EA reads the registry plus its
+ * own encrypted entitlement store — EA then asks a public catalogue service
+ * for the names, which needs a connection but no sign-in. Nothing here holds
+ * a store account.
  */
 export function createAdapters(config: AdapterConfig): StoreAdapter[] {
   return [
@@ -30,9 +33,10 @@ export function createAdapters(config: AdapterConfig): StoreAdapter[] {
       config.resolveSteamName === undefined ? {} : { resolveName: config.resolveSteamName }
     ),
     new EpicAdapter(),
-    new EaAdapter(),
+    new EaAdapter(config.ea ?? {}),
     new UbisoftAdapter()
   ]
 }
 
 export type { StoreAdapter }
+export type { EaAdapterConfig }

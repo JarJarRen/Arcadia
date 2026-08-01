@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 import type { LibraryEntry } from '@shared/library'
 import { t } from '@shared/i18n'
+import type { EnvConfigState } from '@shared/env-config'
 import { useLibrary } from './hooks/useLibrary'
 import {
   filterGames,
   sortGames,
   type LibraryFilter,
+  type SortDirection,
   type SortKey,
   type ViewMode
 } from './filter'
 import { Library } from './Library'
 import { AddGameDialog } from './components/AddGameDialog'
+import { SetupDialog } from './components/SetupDialog'
 import { isMouseBackButton, isMouseForwardButton } from './navigation'
 import { LibraryToolbar } from './components/LibraryToolbar'
 import { GameDetail } from './pages/GameDetail'
@@ -18,7 +21,7 @@ import './styles.css'
 
 const INITIAL_FILTER: LibraryFilter = {
   search: '',
-  store: 'all',
+  stores: [],
   onlyInstalled: false,
   onlyFavorites: false,
   shared: 'all'
@@ -38,6 +41,10 @@ export function App(): ReactElement {
   } = useLibrary()
   const [filter, setFilter] = useState<LibraryFilter>(INITIAL_FILTER)
   const [sort, setSort] = useState<SortKey>('name')
+  // Held apart from the key and kept when the key changes, so the order never
+  // flips back on its own. 'asc' with the name key is the library as it has
+  // always opened.
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
   const [view, setView] = useState<ViewMode>('grid')
   const [launchError, setLaunchError] = useState<string | undefined>()
   const [notice, setNotice] = useState<string | undefined>()
@@ -47,15 +54,67 @@ export function App(): ReactElement {
   // arrives.
   const [openKey, setOpenKey] = useState<string | undefined>()
   const [addOpen, setAddOpen] = useState(false)
+  /**
+   * The `.env` as the main process reads it, or undefined until it answers.
+   *
+   * Kept rather than fetched when the dialog opens: the first start has to
+   * decide whether to show it at all, and the values it would prefill come
+   * from the same answer.
+   */
+  const [envConfig, setEnvConfig] = useState<EnvConfigState | undefined>()
+  const [setupOpen, setSetupOpen] = useState(false)
+  /** True only for the dialog the first start puts up, where there is no way past it but answering. */
+  const [setupIsGate, setSetupIsGate] = useState(false)
   // The id of a just-added game, waiting for the library to catch up.
   const [pendingSelect, setPendingSelect] = useState<string | undefined>()
   /** The page most recently closed, so the forward button can reopen it. */
   const lastClosed = useRef<string | undefined>(undefined)
 
   const visible = useMemo(
-    () => sortGames(filterGames(entries, filter), sort),
-    [entries, filter, sort]
+    () => sortGames(filterGames(entries, filter), sort, sortDirection),
+    [entries, filter, sort, sortDirection]
   )
+
+  /**
+   * The configuration gate.
+   *
+   * Asked once on mount: the marker in the `.env` says whether this question
+   * has ever been answered, and only its absence opens the dialog. A failure
+   * is swallowed on purpose — being unable to read the file is no reason to
+   * block someone from their library, and the gear still opens the screen.
+   */
+  useEffect(() => {
+    let cancelled = false
+    window.arcadia
+      .getEnvConfig()
+      .then((state) => {
+        if (cancelled) return
+        setEnvConfig(state)
+        if (!state.done) {
+          setSetupIsGate(true)
+          setSetupOpen(true)
+        }
+      })
+      .catch((error: unknown) => console.error('Configuration could not be read:', error))
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  /** Reopens the screen from the gear, with what the file says right now. */
+  const openSetup = useCallback(async (): Promise<void> => {
+    try {
+      // Re-read rather than reuse what the gate fetched: the file may have
+      // been edited by hand since, and showing a stale value would invite
+      // saving it back over the newer one.
+      setEnvConfig(await window.arcadia.getEnvConfig())
+      setSetupIsGate(false)
+      setSetupOpen(true)
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : String(caught)
+      setLaunchError(t().errors.envSaveFailed(message))
+    }
+  }, [])
 
   const launch = useCallback(async (entry: LibraryEntry): Promise<void> => {
     try {
@@ -97,6 +156,7 @@ export function App(): ReactElement {
           type="button"
           className="banner__close"
           aria-label={t().common.dismissHint}
+          title={t().common.dismissHint}
           onClick={() => setNotice(undefined)}
         >
           ×
@@ -112,6 +172,7 @@ export function App(): ReactElement {
           type="button"
           className="banner__close"
           aria-label={t().common.dismissMessage}
+          title={t().common.dismissMessage}
           onClick={dismissError}
         >
           ×
@@ -239,12 +300,14 @@ export function App(): ReactElement {
       <LibraryToolbar
         filter={filter}
         sort={sort}
+        sortDirection={sortDirection}
         view={view}
         total={entries.length}
         shown={visible.length}
         syncing={syncing}
         onFilterChange={setFilter}
         onSortChange={setSort}
+        onSortDirectionChange={setSortDirection}
         onViewChange={(next) => {
           // Drop the selection when the mode changes. The same key means
           // "selected row" in the list and "this page fills the window" in
@@ -255,10 +318,20 @@ export function App(): ReactElement {
         }}
         onAddGame={() => setAddOpen(true)}
         onSync={() => void sync()}
+        onOpenSetup={() => void openSetup()}
       />
 
       {errorBanner}
       {noticeBanner}
+
+      {setupOpen && envConfig !== undefined && (
+        <SetupDialog
+          values={envConfig.values}
+          path={envConfig.path}
+          firstRun={setupIsGate}
+          onClose={() => setSetupOpen(false)}
+        />
+      )}
 
       {addOpen && (
         <AddGameDialog
