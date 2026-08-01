@@ -5,6 +5,7 @@ import {
   formatSize,
   sortGames,
   storeFilterLabel,
+  storeFilterTitle,
   toggleStore,
   type LibraryFilter
 } from '../../src/renderer/filter'
@@ -227,6 +228,22 @@ describe('storeFilterLabel', () => {
 
   it('counts from three, where the names would no longer fit the toolbar', () => {
     expect(storeFilterLabel(['steam', 'epic', 'ea'])).toBe('3 stores')
+  })
+})
+
+describe('storeFilterTitle', () => {
+  it('names the neutral state for an empty selection', () => {
+    expect(storeFilterTitle([])).toBe('Store: All stores')
+  })
+
+  it('lists a selection the label still shows in full', () => {
+    expect(storeFilterTitle(['steam', 'epic'])).toBe('Store: Steam, Epic')
+  })
+
+  it('spells out the names the label collapses into a count', () => {
+    // The point of the tooltip: from three stores on, this is the only
+    // place the selection is readable.
+    expect(storeFilterTitle(['steam', 'epic', 'ea'])).toBe('Store: Steam, Epic, EA')
   })
 })
 

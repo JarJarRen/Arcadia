@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState, type ReactElement } from 'react'
 import { STORE_IDS, type StoreId } from '@shared/types'
 import { t } from '@shared/i18n'
-import { storeFilterLabel, toggleStore } from '../filter'
+import { storeFilterLabel, storeFilterTitle, toggleStore } from '../filter'
 import { useDismiss } from '../hooks/useDismiss'
 import { STORE_LABELS } from './storeLabels'
 
@@ -31,6 +31,9 @@ export function StoreFilterMenu({ stores, onChange }: Props): ReactElement {
         type="button"
         className="popover__trigger"
         aria-label={t().toolbar.storeFilterLabel}
+        // Names the selection rather than repeating the button: from three
+        // stores on the label is a bare count.
+        title={storeFilterTitle(stores)}
         aria-expanded={open}
         onClick={() => setOpen((was) => !was)}
       >

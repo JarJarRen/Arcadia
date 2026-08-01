@@ -70,6 +70,19 @@ export function storeFilterLabel(stores: StoreId[]): string {
   return stores.map((id) => STORE_LABELS[id] ?? id).join(', ')
 }
 
+/**
+ * What the store button's tooltip reads: the same selection, but always by
+ * name. Once the label counts, "3 stores" is all the toolbar says, and
+ * which three is otherwise only answerable by opening the menu.
+ */
+export function storeFilterTitle(stores: StoreId[]): string {
+  const selection =
+    stores.length === 0
+      ? t().toolbar.allStores
+      : stores.map((id) => STORE_LABELS[id] ?? id).join(', ')
+  return t().toolbar.storeFilterTitle(selection)
+}
+
 export function filterGames(entries: LibraryEntry[], filter: LibraryFilter): LibraryEntry[] {
   const needle = filter.search.trim().toLowerCase()
 

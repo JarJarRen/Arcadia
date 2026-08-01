@@ -48,6 +48,11 @@ export interface Strings {
     storeFilterLabel: string
     /** From three stores on, where the names no longer fit the toolbar. */
     storesSelected: (count: number) => string
+    /**
+     * The trigger's tooltip, e.g. "Store: Steam, Epic, EA" — the selection
+     * in full, which the label itself no longer shows once it counts.
+     */
+    storeFilterTitle: (selection: string) => string
     sortLabel: string
     sort: { name: string; playtime: string; lastPlayed: string; size: string }
     /** e.g. "Sort direction: ascending" — the toggle's accessible name. */
@@ -262,6 +267,7 @@ const en: Strings = {
     allStores: 'All stores',
     storeFilterLabel: 'Store',
     storesSelected: (count) => `${count} stores`,
+    storeFilterTitle: (selection) => `Store: ${selection}`,
     sortLabel: 'Sorting',
     sort: {
       name: 'Name',
@@ -520,6 +526,7 @@ const de: Strings = {
     allStores: 'Alle Stores',
     storeFilterLabel: 'Store',
     storesSelected: (count) => `${count} Stores`,
+    storeFilterTitle: (selection) => `Store: ${selection}`,
     sortLabel: 'Sortierung',
     sort: {
       name: 'Name',
