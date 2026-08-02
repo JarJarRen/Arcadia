@@ -244,18 +244,6 @@ export function registerIpcHandlers(context: IpcContext): void {
   })
 
   /**
-   * Records the interface language.
-   *
-   * Validated rather than trusted: the value crosses a process boundary, and
-   * an unrecognised one would leave `BUNDLES[value]` undefined and blank the
-   * whole interface.
-   *
-   * `notifyChanged` at the end is not decoration. The library carries the
-   * metadata for one language; after a switch the renderer has to fetch it
-   * again, or descriptions would stay in the previous language until the
-   * next scan.
-   */
-  /**
    * Adds a game by hand.
    *
    * Every field is validated in the repository rather than here, because
@@ -341,6 +329,18 @@ export function registerIpcHandlers(context: IpcContext): void {
     }
   })
 
+  /**
+   * Records the interface language.
+   *
+   * Validated rather than trusted: the value crosses a process boundary, and
+   * an unrecognised one would leave `BUNDLES[value]` undefined and blank the
+   * whole interface.
+   *
+   * `notifyChanged` at the end is not decoration. The library carries the
+   * metadata for one language; after a switch the renderer has to fetch it
+   * again, or descriptions would stay in the previous language until the
+   * next scan.
+   */
   ipcMain.handle(IPC.settingsSetLanguage, (_event, language: unknown) => {
     const parsed = parseLanguage(language)
     if (parsed === undefined) return
