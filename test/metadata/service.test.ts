@@ -26,7 +26,12 @@ import type { DatabaseSync } from 'node:sqlite'
 import { openDatabase } from '@main/db/schema'
 import { GameRepository } from '@main/db/repository'
 import { MetadataRepository } from '@main/db/metadata'
-import { runMetadataService, type MetadataServiceOptions } from '@main/metadata/service'
+import {
+  runMetadataService,
+  type MetadataServiceOptions,
+  BATCH_PAUSE_MS,
+  RATE_LIMIT_PAUSE_MS
+} from '@main/metadata/service'
 import { SteamAppList } from '@main/metadata/steamAppList'
 import { fetchAppDetails, SteamStoreError } from '@main/metadata/steamStore'
 import { fetchArtwork, lookupBySteamAppId, searchExact } from '@main/metadata/steamGridDb'
@@ -82,11 +87,6 @@ afterEach(() => {
   vi.unstubAllGlobals()
   vi.clearAllMocks()
 })
-
-// Mirrors the private constants in src/main/metadata/service.ts — not
-// importable, since the module doesn't export them.
-const BATCH_PAUSE_MS = 2_000
-const RATE_LIMIT_PAUSE_MS = 60_000
 
 const T0 = 1_700_000_000
 
