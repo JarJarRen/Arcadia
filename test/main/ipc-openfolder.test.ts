@@ -33,6 +33,7 @@ vi.mock('electron', () => ({
 const { registerIpcHandlers } = await import('@main/ipc')
 const { makeHarness } = await import('./ipc-context')
 const { IPC } = await import('@shared/ipc')
+const { t } = await import('@shared/i18n')
 
 describe('game:open-folder', () => {
   let harness: Harness
@@ -105,5 +106,49 @@ describe('game:open-folder', () => {
     const result = (await handlers.get(IPC.gameOpenFolder)!({}, 'tf2')) as { ok: boolean }
     expect(result.ok).toBe(true)
     expect(opened).toEqual([process.cwd()])
+  })
+
+  it('turns an unexpected failure into a message instead of a rejection', async () => {
+    // Something other than a missing path — the database itself unreadable
+    // while looking the entry up, ahead of the stat check that handles a
+    // merely-deleted folder.
+    const broken = makeHarness({
+      repo: {
+        all: () => {
+          throw new Error('database is locked')
+        }
+      } as unknown as Harness['repo']
+    })
+    handlers.clear()
+    registerIpcHandlers(broken.context)
+
+    const result = (await handlers.get(IPC.gameOpenFolder)!({}, 'tf2')) as {
+      ok: boolean
+      error?: string
+    }
+
+    expect(result.ok).toBe(false)
+    expect(result.error).toBe(t().errors.folderOpenFailed('database is locked'))
+    expect(opened).toEqual([])
+  })
+
+  it('stringifies a non-Error thrown by an unexpected failure', async () => {
+    const broken = makeHarness({
+      repo: {
+        all: () => {
+          // eslint-disable-next-line @typescript-eslint/no-throw-literal
+          throw 'raw failure'
+        }
+      } as unknown as Harness['repo']
+    })
+    handlers.clear()
+    registerIpcHandlers(broken.context)
+
+    const result = (await handlers.get(IPC.gameOpenFolder)!({}, 'tf2')) as {
+      ok: boolean
+      error?: string
+    }
+
+    expect(result).toEqual({ ok: false, error: t().errors.folderOpenFailed('raw failure') })
   })
 })

@@ -23,6 +23,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DatabaseSync } from 'node:sqlite'
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { openDatabase } from '@main/db/schema'
 import { GameRepository } from '@main/db/repository'
 import { MetadataRepository } from '@main/db/metadata'
@@ -35,6 +37,7 @@ import {
 import { SteamAppList } from '@main/metadata/steamAppList'
 import { fetchAppDetails, SteamStoreError } from '@main/metadata/steamStore'
 import { fetchArtwork, lookupBySteamAppId, searchExact } from '@main/metadata/steamGridDb'
+import { readEpicArtwork } from '@main/metadata/epicArtwork'
 import type { GameMetadata } from '@shared/metadata'
 
 vi.mock('@main/metadata/steamStore', async (importOriginal) => {
@@ -217,6 +220,126 @@ describe('runMetadataService', () => {
     await promise
 
     expect(fetchArtwork).toHaveBeenCalledWith(9001, { apiKey: 'sgdb-key' })
+  })
+
+  it('logs the count when the Steam app list refresh succeeds', async () => {
+    // fromCache stays false (readFile always rejects ENOENT in this file's
+    // mock), so a key present takes the refresh branch.
+    const appList = new SteamAppList()
+    const refresh = vi.spyOn(appList, 'refresh').mockResolvedValue(150)
+    const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => undefined)
+
+    const promise = runMetadataService(
+      games,
+      metadata,
+      baseOptions({ appList, steamApiKey: 'KEY' })
+    )
+    await vi.advanceTimersByTimeAsync(1_000)
+    await promise
+
+    expect(refresh).toHaveBeenCalledWith(join('nonexistent-user-data-dir', 'steam-apps.json'), {
+      apiKey: 'KEY'
+    })
+    expect(consoleLog).toHaveBeenCalledWith('Steam app list loaded: 150 entries')
+    consoleLog.mockRestore()
+  })
+
+  it('warns rather than crashing when the Steam app list refresh fails', async () => {
+    const appList = new SteamAppList()
+    const refresh = vi.spyOn(appList, 'refresh').mockRejectedValue(new Error('network down'))
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+
+    const promise = runMetadataService(
+      games,
+      metadata,
+      baseOptions({ appList, steamApiKey: 'KEY' })
+    )
+    await vi.advanceTimersByTimeAsync(1_000)
+    await promise
+
+    expect(refresh).toHaveBeenCalled()
+    expect(consoleWarn).toHaveBeenCalledWith(
+      'Steam app list could not be loaded:',
+      expect.any(Error)
+    )
+    consoleWarn.mockRestore()
+  })
+
+  it('does not refresh when a usable cache was already loaded, even with an API key configured', async () => {
+    vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify([{ appid: 1, name: 'Some Game' }]))
+    const appList = new SteamAppList()
+    const refresh = vi.spyOn(appList, 'refresh')
+
+    const promise = runMetadataService(
+      games,
+      metadata,
+      baseOptions({ appList, steamApiKey: 'KEY' })
+    )
+    await vi.advanceTimersByTimeAsync(1_000)
+    await promise
+
+    expect(refresh).not.toHaveBeenCalled()
+  })
+
+  it('skips the missing-app-list warning once the cache actually has entries', async () => {
+    vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify([{ appid: 1, name: 'Some Game' }]))
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+
+    const promise = runMetadataService(games, metadata, baseOptions())
+    await vi.advanceTimersByTimeAsync(1_000)
+    await promise
+
+    expect(consoleWarn).not.toHaveBeenCalledWith(
+      expect.stringContaining('Without the Steam app list')
+    )
+    consoleWarn.mockRestore()
+  })
+
+  it('logs the Epic artwork count once the catalogue actually has entries', async () => {
+    vi.mocked(readEpicArtwork).mockResolvedValueOnce(new Map([['epic-id', []]]))
+    const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => undefined)
+
+    const promise = runMetadataService(games, metadata, baseOptions())
+    await vi.advanceTimersByTimeAsync(1_000)
+    await promise
+
+    expect(consoleLog).toHaveBeenCalledWith('Epic artwork from the catalogue: 1 games')
+    consoleLog.mockRestore()
+  })
+
+  it('looks up a non-Steam game by name through the app list', async () => {
+    games.upsertScan('ubisoft', [{ storeGameId: '900', name: 'Anno 1800', installed: true }], T0)
+    const appList = new SteamAppList()
+    const findAppId = vi.spyOn(appList, 'findAppId')
+
+    const promise = runMetadataService(games, metadata, baseOptions({ appList }))
+    // Every pass fails to match (the app list is empty), so the game is
+    // reconsidered until MAX_ATTEMPTS (3) is reached — three passes at
+    // ~1.5s each plus the batch pause between them, then a final empty one.
+    await vi.advanceTimersByTimeAsync(4 * (2_000 + BATCH_PAUSE_MS))
+    await promise
+
+    expect(findAppId).toHaveBeenCalledWith('Anno 1800')
+  })
+
+  it('falls back to a name search for a non-Steam game with no known AppID', async () => {
+    // Unlike a Steam game, there is no storeGameId that is itself the
+    // AppID — and with no manual match yet, lookupBySteamAppId is never
+    // reached at all, so this is the only path to fetchArtwork here.
+    games.upsertScan('ubisoft', [{ storeGameId: '856', name: 'Far Cry 4', installed: true }], T0)
+    metadata.upsert('ubisoft:856', fixture({ fetchedAt: T0 }), 'en')
+    vi.mocked(searchExact).mockResolvedValueOnce(9002)
+
+    const promise = runMetadataService(
+      games,
+      metadata,
+      baseOptions({ steamGridDbKey: 'sgdb-key' })
+    )
+    await vi.advanceTimersByTimeAsync(4 * BATCH_PAUSE_MS)
+    await promise
+
+    expect(searchExact).toHaveBeenCalledWith('Far Cry 4', { apiKey: 'sgdb-key' })
+    expect(fetchArtwork).toHaveBeenCalledWith(9002, { apiKey: 'sgdb-key' })
   })
 
   it('reuses the app list it was handed', async () => {

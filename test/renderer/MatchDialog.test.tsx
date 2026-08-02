@@ -162,4 +162,164 @@ describe('MatchDialog', () => {
 
     expect(screen.getByText('Search unavailable')).toBeDefined()
   })
+
+  it('stringifies a non-Error rejection from the search itself', async () => {
+    // eslint-disable-next-line prefer-promise-reject-errors
+    stubArcadia({ searchApps: async () => Promise.reject('offline') })
+    renderMatch()
+
+    await settleSearch()
+
+    expect(screen.getByText('offline')).toBeDefined()
+  })
+
+  it('clears the results and asks for nothing once the query is cleared', async () => {
+    stubArcadia({ searchApps: async () => suggestions })
+    renderMatch()
+    await settleSearch()
+    expect(screen.getByRole('button', { name: /Team Fortress 2.*12345/s })).toBeDefined()
+
+    fireEvent.change(screen.getByPlaceholderText('Type a title…'), { target: { value: '' } })
+
+    expect(screen.queryByRole('button', { name: /Team Fortress 2.*12345/s })).toBeNull()
+    expect(screen.queryByText('Nothing found.')).toBeNull()
+  })
+
+  it('shows the error when applying a match throws, not only when the result says ok: false', async () => {
+    stubArcadia({
+      searchApps: async () => suggestions,
+      setMatch: async () => {
+        throw new Error('Network down')
+      }
+    })
+    const props = renderMatch()
+
+    await settleSearch()
+    fireEvent.click(screen.getByRole('button', { name: /Team Fortress 2.*12345/s }))
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(screen.getByText('Network down')).toBeDefined()
+    expect(props.onClose).not.toHaveBeenCalled()
+  })
+
+  it('stringifies a non-Error thrown while applying a match', async () => {
+    stubArcadia({
+      searchApps: async () => suggestions,
+      setMatch: async () => {
+        // eslint-disable-next-line @typescript-eslint/no-throw-literal
+        throw 'raw failure'
+      }
+    })
+    renderMatch()
+
+    await settleSearch()
+    fireEvent.click(screen.getByRole('button', { name: /Team Fortress 2.*12345/s }))
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(screen.getByText('raw failure')).toBeDefined()
+  })
+
+  it('ignores a slow, stale search that resolves after a faster, newer one has already answered', async () => {
+    // The classic race this component guards against: typing again before
+    // the first request returns must not let that first answer overwrite
+    // the second, more current one when it finally settles. The stale
+    // answer here carries genuinely different data — an app id absent from
+    // the newer answer — so an unguarded overwrite is observable, not
+    // merely a no-op replacement of identical data.
+    const calls: Array<{ resolve: (value: AppSuggestion[]) => void }> = []
+    const searchApps = vi.fn(
+      () => new Promise<AppSuggestion[]>((resolve) => calls.push({ resolve }))
+    )
+    stubArcadia({ searchApps })
+    renderMatch()
+
+    // The mount itself queues search #1, for the entry's own name.
+    await vi.advanceTimersByTimeAsync(250)
+    expect(calls).toHaveLength(1)
+
+    // Typing queues search #2 for a different query before #1 answers.
+    fireEvent.change(screen.getByPlaceholderText('Type a title…'), {
+      target: { value: 'Portal' }
+    })
+    await vi.advanceTimersByTimeAsync(250)
+    expect(calls).toHaveLength(2)
+
+    // #2, the current one, answers first.
+    calls[1]!.resolve([{ appId: 400, name: 'Portal' }])
+    await vi.advanceTimersByTimeAsync(0)
+    expect(screen.getByRole('button', { name: /Portal.*400/s })).toBeDefined()
+
+    // #1, now stale, answers late with different suggestions. Without the
+    // sequence guard this would overwrite the newer, still-accurate list.
+    calls[0]!.resolve([{ appId: 999, name: 'Team Fortress 2 Beta' }])
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(screen.getByRole('button', { name: /Portal.*400/s })).toBeDefined()
+    expect(screen.queryByRole('button', { name: /999/s })).toBeNull()
+  })
+
+  it('ignores a slow, stale search that rejects after a faster, newer one has already answered', async () => {
+    const calls: Array<{
+      resolve: (value: AppSuggestion[]) => void
+      reject: (reason: unknown) => void
+    }> = []
+    const searchApps = vi.fn(
+      () =>
+        new Promise<AppSuggestion[]>((resolve, reject) => {
+          calls.push({ resolve, reject })
+        })
+    )
+    stubArcadia({ searchApps })
+    renderMatch()
+
+    await vi.advanceTimersByTimeAsync(250) // search #1 (mount)
+    fireEvent.change(screen.getByPlaceholderText('Type a title…'), {
+      target: { value: 'Portal' }
+    })
+    await vi.advanceTimersByTimeAsync(250) // search #2 (typed)
+    expect(calls).toHaveLength(2)
+
+    calls[1]!.resolve([{ appId: 400, name: 'Portal' }])
+    await vi.advanceTimersByTimeAsync(0)
+    expect(screen.getByRole('button', { name: /Portal.*400/s })).toBeDefined()
+
+    // #1, now stale, rejects late. Without the sequence guard this would
+    // show a spurious error over the still-accurate result.
+    calls[0]!.reject(new Error('Search unavailable'))
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(screen.getByRole('button', { name: /Portal.*400/s })).toBeDefined()
+    expect(screen.queryByText('Search unavailable')).toBeNull()
+  })
+
+  it('keeps showing the searching hint while a newer request is still in flight, even after a stale one settles', async () => {
+    const calls: Array<{ resolve: (value: AppSuggestion[]) => void }> = []
+    const searchApps = vi.fn(
+      () => new Promise<AppSuggestion[]>((resolve) => calls.push({ resolve }))
+    )
+    stubArcadia({ searchApps })
+    renderMatch()
+
+    await vi.advanceTimersByTimeAsync(250) // search #1 (mount)
+    fireEvent.change(screen.getByPlaceholderText('Type a title…'), {
+      target: { value: 'Portal' }
+    })
+    await vi.advanceTimersByTimeAsync(250) // search #2 (typed), still in flight
+    expect(calls).toHaveLength(2)
+
+    expect(screen.getByText('Searching…')).toBeDefined()
+
+    // The stale #1 settles while #2 is still pending. Without the finally's
+    // sequence guard, this would incorrectly clear `searching` and hide the
+    // hint while a real search is still running.
+    calls[0]!.resolve([])
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(screen.getByText('Searching…')).toBeDefined()
+
+    calls[1]!.resolve([{ appId: 400, name: 'Portal' }])
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(screen.queryByText('Searching…')).toBeNull()
+  })
 })

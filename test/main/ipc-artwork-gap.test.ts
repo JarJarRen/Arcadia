@@ -73,4 +73,28 @@ describe('artwork:broken', () => {
     expect(harness.metadata.artworkFor('steam:3949040')).toHaveLength(1)
     expect(gaps).toBe(0)
   })
+
+  it('rejects a merge key that is not a string, asking for nothing', async () => {
+    await invoke(42, 'hero')
+
+    expect(harness.metadata.artworkFor('steam:3949040')).toHaveLength(1)
+    expect(gaps).toBe(0)
+  })
+
+  it('turns a database failure while discarding artwork into a log, not a crash', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    vi.spyOn(harness.metadata, 'removeArtwork').mockImplementation(() => {
+      throw new Error('disk full')
+    })
+
+    await invoke(mergeKey('RV There Yet?'), 'hero')
+
+    expect(consoleError).toHaveBeenCalledWith(
+      'Broken artwork could not be discarded:',
+      expect.any(Error)
+    )
+    // The failure happens inside the loop, before onArtworkGap is reached.
+    expect(gaps).toBe(0)
+    consoleError.mockRestore()
+  })
 })

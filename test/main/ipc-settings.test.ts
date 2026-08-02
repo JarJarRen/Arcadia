@@ -162,4 +162,39 @@ describe('IPC settings channels', () => {
     expect(rejected.error).toBe(t().errors.invalidInput)
     expect(readFileSync(envPath, 'utf8')).toBe(before)
   })
+
+  it('turns a filesystem failure while saving into errors.envSaveFailed, not a crash', async () => {
+    // A target whose directory does not exist: writeFileSync inside
+    // saveEnvConfig throws, past every validation check.
+    const broken = makeHarness({
+      envFilePaths: [join(dir, 'does-not-exist', '.env')]
+    })
+    handlers.clear()
+    registerIpcHandlers(broken.context)
+
+    const result = (await invoke(IPC.envConfigSave, {
+      STEAM_WEB_API_KEY: 'X',
+      STEAM_ID64: '',
+      STEAMGRIDDB_API_KEY: ''
+    })) as { ok: boolean; error?: string; restarting: boolean }
+
+    expect(result.ok).toBe(false)
+    expect(result.restarting).toBe(false)
+    // The exact OS message is platform-dependent; the prefix is what proves
+    // the catch actually wrapped it through errors.envSaveFailed.
+    expect(result.error?.startsWith('The settings could not be saved: ')).toBe(true)
+  })
+
+  it('turns a database failure while saving the language into a log, not a crash', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    vi.spyOn(harness.settings, 'set').mockImplementation(() => {
+      throw new Error('disk full')
+    })
+
+    await invoke(IPC.settingsSetLanguage, 'de')
+
+    expect(consoleError).toHaveBeenCalledWith('Language could not be saved:', expect.any(Error))
+    expect(harness.sent).toEqual([])
+    consoleError.mockRestore()
+  })
 })

@@ -18,8 +18,9 @@
  * brief's contract list treats the click as a single step.
  */
 import { describe, expect, it, vi } from 'vitest'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { App } from '@renderer/App'
+import { t } from '@shared/i18n'
 import { entry, game, stubArcadia } from './fixtures'
 
 const TF2 = entry('Team Fortress 2', [game('steam', '440', 'Team Fortress 2')])
@@ -362,5 +363,454 @@ describe('App', () => {
     })
 
     expect(setSplit).toHaveBeenCalledWith(merged.key, true)
+  })
+
+  /**
+   * The catch arms.
+   *
+   * Each of these forces the promise a handler awaits to reject or resolve
+   * with a failure, and checks the *specific* message that reaches the
+   * banner — not merely that some banner appeared. A handler that swallowed
+   * the error, or wrapped the wrong one, would still show "a" banner and
+   * pass a looser assertion; it would fail these.
+   */
+
+  it('a getEnvConfig failure on mount is logged and does not block the library or open the gate', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    stubArcadia({
+      getGames: async () => [TF2],
+      getEnvConfig: async () => {
+        throw new Error('permission denied')
+      }
+    })
+    render(<App />)
+
+    await waitFor(() => expect(screen.getByText('Team Fortress 2')).toBeDefined())
+
+    expect(consoleError).toHaveBeenCalledWith(
+      'Configuration could not be read:',
+      expect.any(Error)
+    )
+    expect(screen.queryByRole('dialog', { name: 'Configure API keys' })).toBeNull()
+    consoleError.mockRestore()
+  })
+
+  it('reopening the configuration screen from the gear reports a re-read failure as an error banner', async () => {
+    let calls = 0
+    stubArcadia({
+      getGames: async () => [TF2],
+      getEnvConfig: async () => {
+        calls += 1
+        if (calls > 1) throw new Error('file is locked')
+        return {
+          values: { STEAM_WEB_API_KEY: '', STEAM_ID64: '', STEAMGRIDDB_API_KEY: '' },
+          done: true,
+          path: 'C:\\test\\.env'
+        }
+      }
+    })
+    render(<App />)
+    await waitFor(() => expect(screen.getByText('Team Fortress 2')).toBeDefined())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    await act(async () => {
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Configuration…' }))
+      await Promise.resolve()
+    })
+
+    expect(screen.getByText(t().errors.envSaveFailed('file is locked'))).toBeDefined()
+    expect(screen.queryByRole('dialog', { name: 'Configure API keys' })).toBeNull()
+  })
+
+  it('a launch failure result is shown verbatim, not wrapped in a generic message', async () => {
+    stubArcadia({
+      getGames: async () => [TF2],
+      launch: async () => ({ ok: false, error: 'Steam refused the launch request.' })
+    })
+    render(<App />)
+    await waitFor(() => expect(screen.getByText('Team Fortress 2')).toBeDefined())
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Play' }))
+      await Promise.resolve()
+    })
+
+    expect(screen.getByText('Steam refused the launch request.')).toBeDefined()
+  })
+
+  it('a thrown launch rejection is reported through errors.launchFailed', async () => {
+    stubArcadia({
+      getGames: async () => [TF2],
+      launch: async () => {
+        throw new Error('IPC channel closed')
+      }
+    })
+    render(<App />)
+    await waitFor(() => expect(screen.getByText('Team Fortress 2')).toBeDefined())
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Play' }))
+      await Promise.resolve()
+    })
+
+    expect(screen.getByText(t().errors.launchFailed('IPC channel closed'))).toBeDefined()
+  })
+
+  it('an install failure result is shown verbatim, not wrapped in a generic message', async () => {
+    stubArcadia({
+      getGames: async () => [PORTAL],
+      install: async () => ({ ok: false, error: 'No installer is registered.' })
+    })
+    render(<App />)
+    await waitFor(() => expect(screen.getByText('Portal')).toBeDefined())
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Install' }))
+      await Promise.resolve()
+    })
+
+    expect(screen.getByText('No installer is registered.')).toBeDefined()
+  })
+
+  it('a thrown install rejection is reported through errors.installFailed', async () => {
+    stubArcadia({
+      getGames: async () => [PORTAL],
+      install: async () => {
+        throw new Error('IPC channel closed')
+      }
+    })
+    render(<App />)
+    await waitFor(() => expect(screen.getByText('Portal')).toBeDefined())
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Install' }))
+      await Promise.resolve()
+    })
+
+    expect(screen.getByText(t().errors.installFailed('IPC channel closed'))).toBeDefined()
+  })
+
+  it('an install notice is shown in its own banner and can be dismissed without touching the error banner', async () => {
+    // EA cannot be installed from outside — it only opens its own launcher —
+    // and without this hint the click would look as though it had done
+    // nothing at all.
+    stubArcadia({
+      getGames: async () => [PORTAL],
+      install: async () => ({ ok: true, notice: 'Opened the EA app to finish installing.' })
+    })
+    render(<App />)
+    await waitFor(() => expect(screen.getByText('Portal')).toBeDefined())
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Install' }))
+      await Promise.resolve()
+    })
+
+    expect(screen.getByText('Opened the EA app to finish installing.')).toBeDefined()
+    expect(screen.queryByRole('alert')).toBeNull() // no error banner alongside it
+
+    fireEvent.click(screen.getByLabelText('Dismiss hint'))
+
+    expect(screen.queryByText('Opened the EA app to finish installing.')).toBeNull()
+  })
+
+  it('closes the open detail page when its entry disappears from a reload', async () => {
+    // A scan can split a merged game apart mid-session; the key the page was
+    // opened with then points nowhere. It must not be left showing stale
+    // data, or silently keep the page up forever.
+    let changed: (() => void) | undefined
+    let call = 0
+    stubArcadia({
+      getGames: async () => (call++ === 0 ? [TF2, PORTAL] : [PORTAL]),
+      onLibraryChanged: (callback) => {
+        changed = callback
+        return () => undefined
+      }
+    })
+    render(<App />)
+    await waitFor(() => expect(screen.getByText('Team Fortress 2')).toBeDefined())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Team Fortress 2' }))
+    expect(screen.getByRole('button', { name: '← Back to library' })).toBeDefined()
+
+    await act(async () => {
+      changed?.()
+      await Promise.resolve()
+    })
+
+    expect(screen.queryByRole('button', { name: '← Back to library' })).toBeNull()
+  })
+
+  it('opens a newly added game once the library reload actually includes it', async () => {
+    // The id is not in `entries` at the moment the add dialog closes — the
+    // reload arrives over IPC a beat later — so the id is parked and the
+    // page only opens once a reload actually contains it.
+    let changed: (() => void) | undefined
+    let call = 0
+    const MANUAL = entry('Manual Game', [game('steam', 'manual-1', 'Manual Game')])
+    stubArcadia({
+      getGames: async () => (call++ === 0 ? [TF2] : [TF2, MANUAL]),
+      onLibraryChanged: (callback) => {
+        changed = callback
+        return () => undefined
+      }
+      // addManualGame keeps fixtures.tsx's default, which resolves
+      // { ok: true, id: 'steam:manual-1' } — matching MANUAL's source id.
+    })
+    render(<App />)
+    await waitFor(() => expect(screen.getByText('Team Fortress 2')).toBeDefined())
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Add game' }))
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Manual Game' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+      await Promise.resolve()
+    })
+
+    // The dialog closed on its own success path; the game has not appeared
+    // yet, and nothing should be open.
+    expect(screen.queryByRole('dialog', { name: 'Add a game by hand' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '← Back to library' })).toBeNull()
+
+    await act(async () => {
+      changed?.()
+      await Promise.resolve()
+    })
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '← Back to library' })).toBeDefined()
+    )
+    const detail = within(screen.getAllByRole('main').at(-1)!)
+    expect(detail.getByRole('heading', { name: 'Manual Game', level: 1 })).toBeDefined()
+  })
+
+  /**
+   * The mouse's back/forward buttons as real DOM events, on Linux: Windows
+   * delivers them as an app-command through `window.arcadia.onNavigateBack`
+   * (tested above), but on Linux there is no such bridge — App listens for
+   * `mouseup` on `window` itself. `navigation.ts` already pins
+   * `isMouseBackButton`/`isMouseForwardButton` in isolation; what is only
+   * provable here is that App actually wires a `mouseup` listener to them.
+   */
+
+  it('a real mouseup with the back button (button 3) closes the detail page', async () => {
+    stubArcadia({ getGames: async () => [TF2] })
+    render(<App />)
+    await waitFor(() => expect(screen.getByText('Team Fortress 2')).toBeDefined())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Team Fortress 2' }))
+    expect(screen.getByRole('button', { name: '← Back to library' })).toBeDefined()
+
+    fireEvent.mouseUp(window, { button: 3 })
+
+    expect(screen.queryByRole('button', { name: '← Back to library' })).toBeNull()
+  })
+
+  it('a mouseup with an unrelated button does nothing', async () => {
+    stubArcadia({ getGames: async () => [TF2] })
+    render(<App />)
+    await waitFor(() => expect(screen.getByText('Team Fortress 2')).toBeDefined())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Team Fortress 2' }))
+    fireEvent.mouseUp(window, { button: 0 })
+
+    expect(screen.getByRole('button', { name: '← Back to library' })).toBeDefined()
+  })
+
+  it('the mouse forward button (button 4) reopens the page the back button last closed', async () => {
+    stubArcadia({ getGames: async () => [TF2] })
+    render(<App />)
+    await waitFor(() => expect(screen.getByText('Team Fortress 2')).toBeDefined())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Team Fortress 2' }))
+    fireEvent.mouseUp(window, { button: 3 })
+    expect(screen.queryByRole('button', { name: '← Back to library' })).toBeNull()
+
+    fireEvent.mouseUp(window, { button: 4 })
+
+    expect(screen.getByRole('button', { name: '← Back to library' })).toBeDefined()
+  })
+
+  /**
+   * The detail page overlay wires the same five callbacks App hands to the
+   * grid tile (see the block above) to `<GameDetail>`. Both surfaces show
+   * controls with the same accessible name at once once a page is open — the
+   * grid tile behind, the detail page on top — so each of these scopes its
+   * query to the last `main` landmark, which is the detail page's, since
+   * `App` renders `<Library>` before the overlay.
+   */
+
+  it('the detail page launches and toggles favourite via the same handlers as the grid tile', async () => {
+    const launch = vi.fn(async () => ({ ok: true }))
+    const setFavorite = vi.fn(async () => undefined)
+    stubArcadia({ getGames: async () => [TF2], launch, setFavorite })
+    render(<App />)
+    await waitFor(() => expect(screen.getByText('Team Fortress 2')).toBeDefined())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Team Fortress 2' }))
+    const detail = within(screen.getAllByRole('main').at(-1)!)
+
+    await act(async () => {
+      fireEvent.click(detail.getByRole('button', { name: 'Play' }))
+      await Promise.resolve()
+    })
+    expect(launch).toHaveBeenCalledWith(TF2.active.id)
+
+    await act(async () => {
+      fireEvent.click(detail.getByLabelText('Mark as favourite'))
+      await Promise.resolve()
+    })
+    expect(setFavorite).toHaveBeenCalledWith(TF2.key, true)
+  })
+
+  it('the detail page installs via the same handler as the grid tile, for an uninstalled entry', async () => {
+    const install = vi.fn(async () => ({ ok: true }))
+    stubArcadia({ getGames: async () => [PORTAL], install })
+    render(<App />)
+    await waitFor(() => expect(screen.getByText('Portal')).toBeDefined())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Portal' }))
+    const detail = within(screen.getAllByRole('main').at(-1)!)
+
+    await act(async () => {
+      fireEvent.click(detail.getByRole('button', { name: 'Install' }))
+      await Promise.resolve()
+    })
+
+    expect(install).toHaveBeenCalledWith(PORTAL.active.id)
+  })
+
+  it("the detail page's store switch calls window.arcadia.setPreferredStore with the merge key and the chosen source id", async () => {
+    const setPreferredStore = vi.fn(async () => undefined)
+    const merged = entry('Far Cry 4', [
+      game('steam', '298110', 'Far Cry 4'),
+      game('ubisoft', '856', 'Far Cry 4')
+    ])
+    stubArcadia({ getGames: async () => [merged], setPreferredStore })
+    render(<App />)
+    await waitFor(() => expect(screen.getByText('Far Cry 4')).toBeDefined())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Far Cry 4' }))
+    const detail = within(screen.getAllByRole('main').at(-1)!)
+
+    await act(async () => {
+      fireEvent.click(detail.getByRole('button', { name: 'Ubisoft' }))
+      await Promise.resolve()
+    })
+
+    expect(setPreferredStore).toHaveBeenCalledWith(merged.key, 'ubisoft:856')
+  })
+
+  it('the refresh control calls window.arcadia.sync', async () => {
+    const sync = vi.fn(async () => ({ stores: [], totalGames: 0 }))
+    stubArcadia({ getGames: async () => [TF2], sync })
+    render(<App />)
+    await waitFor(() => expect(screen.getByText('Team Fortress 2')).toBeDefined())
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+      await Promise.resolve()
+    })
+
+    expect(sync).toHaveBeenCalledOnce()
+  })
+
+  it('stringifies a non-Error thrown while reopening the configuration screen', async () => {
+    stubArcadia({
+      getGames: async () => [TF2],
+      getEnvConfig: async () => {
+        // eslint-disable-next-line @typescript-eslint/no-throw-literal
+        throw 'raw failure'
+      }
+    })
+    render(<App />)
+    await waitFor(() => expect(screen.getByText('Team Fortress 2')).toBeDefined())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    await act(async () => {
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Configuration…' }))
+      await Promise.resolve()
+    })
+
+    expect(screen.getByText(t().errors.envSaveFailed('raw failure'))).toBeDefined()
+  })
+
+  it('stringifies a non-Error thrown while launching', async () => {
+    stubArcadia({
+      getGames: async () => [TF2],
+      launch: async () => {
+        // eslint-disable-next-line @typescript-eslint/no-throw-literal
+        throw 'raw failure'
+      }
+    })
+    render(<App />)
+    await waitFor(() => expect(screen.getByText('Team Fortress 2')).toBeDefined())
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Play' }))
+      await Promise.resolve()
+    })
+
+    expect(screen.getByText(t().errors.launchFailed('raw failure'))).toBeDefined()
+  })
+
+  it('stringifies a non-Error thrown while installing', async () => {
+    stubArcadia({
+      getGames: async () => [PORTAL],
+      install: async () => {
+        // eslint-disable-next-line @typescript-eslint/no-throw-literal
+        throw 'raw failure'
+      }
+    })
+    render(<App />)
+    await waitFor(() => expect(screen.getByText('Portal')).toBeDefined())
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Install' }))
+      await Promise.resolve()
+    })
+
+    expect(screen.getByText(t().errors.installFailed('raw failure'))).toBeDefined()
+  })
+
+  it('the mouse back button does nothing when nothing is open', async () => {
+    stubArcadia({ getGames: async () => [TF2] })
+    render(<App />)
+    await waitFor(() => expect(screen.getByText('Team Fortress 2')).toBeDefined())
+
+    fireEvent.mouseUp(window, { button: 3 })
+
+    expect(screen.queryByRole('button', { name: '← Back to library' })).toBeNull()
+  })
+
+  it('the forward button does nothing when the detail page is already open', async () => {
+    stubArcadia({ getGames: async () => [TF2] })
+    render(<App />)
+    await waitFor(() => expect(screen.getByText('Team Fortress 2')).toBeDefined())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Team Fortress 2' }))
+    expect(screen.getByRole('button', { name: '← Back to library' })).toBeDefined()
+
+    fireEvent.mouseUp(window, { button: 4 })
+
+    expect(screen.getByRole('button', { name: '← Back to library' })).toBeDefined()
+  })
+
+  it('the gear\'s "Close" button dismisses the setup dialog once the question is already answered', async () => {
+    // stubArcadia's default getEnvConfig reports done: true, so opening from
+    // the gear is not the gate — closing without answering has to work.
+    stubArcadia({ getGames: async () => [TF2] })
+    render(<App />)
+    await waitFor(() => expect(screen.getByText('Team Fortress 2')).toBeDefined())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Configuration…' }))
+    await waitFor(() =>
+      expect(screen.getByRole('dialog', { name: 'Configure API keys' })).toBeDefined()
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+    expect(screen.queryByRole('dialog', { name: 'Configure API keys' })).toBeNull()
   })
 })
