@@ -128,7 +128,6 @@ export interface Strings {
     install: string
     notInstalled: string
     installVia: (store: string) => string
-    openDetails: (name: string) => string
     addFavorite: string
     removeFavorite: string
     sharedOrFree: string
@@ -357,7 +356,6 @@ const en: Strings = {
     install: 'Install',
     notInstalled: 'Not installed',
     installVia: (store) => `Install via ${store}`,
-    openDetails: (name) => `Details for ${name}`,
     addFavorite: 'Mark as favourite',
     removeFavorite: 'Remove favourite',
     sharedOrFree: 'Shared/Free',
@@ -617,7 +615,6 @@ const de: Strings = {
     install: 'Installieren',
     notInstalled: 'Nicht installiert',
     installVia: (store) => `Über ${store} installieren`,
-    openDetails: (name) => `Infoseite zu ${name}`,
     addFavorite: 'Als Favorit markieren',
     removeFavorite: 'Favorit entfernen',
     sharedOrFree: 'Geteilt/Gratis',

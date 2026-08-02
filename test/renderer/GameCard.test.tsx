@@ -5,9 +5,8 @@
  * target for opening details, named "Details for <game>". Reading the
  * component shows otherwise: the artwork is `aria-hidden` and inert; the
  * clickable element is the title button, and its accessible name is the
- * game's own name — `card.openDetails` is defined in the i18n bundle but
- * never referenced from this file. The tests below pin what the component
- * actually does.
+ * game's own name, taken from its visible content rather than a separate
+ * label. The tests below pin what the component actually does.
  */
 import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
