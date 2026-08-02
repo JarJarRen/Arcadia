@@ -104,7 +104,13 @@ function library(repo: GameRepository, metadata: MetadataRepository): LibraryEnt
  * dialog somewhere else entirely.
  */
 function installFrame(window: BrowserWindow | undefined): InstallFrame | undefined {
-  if (window === undefined || window.isDestroyed()) return undefined
+  // All three cases InstallAssist.frame promises. Minimised belongs here
+  // because Windows reports degenerate bounds for it — centring on that
+  // rectangle would put the dialog somewhere off-screen, which is worse
+  // than not centring it at all.
+  if (window === undefined || window.isDestroyed() || window.isMinimized()) {
+    return undefined
+  }
 
   const rect = screen.dipToScreenRect(window, window.getBounds())
 
