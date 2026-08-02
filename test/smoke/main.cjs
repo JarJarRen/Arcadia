@@ -641,7 +641,7 @@ app.whenReady().then(async () => {
   const toolbar = await win.webContents.executeJavaScript(`(async () => {
     const wait = () => new Promise((r) => setTimeout(r, 250))
     const trigger = document.querySelector('.popover__trigger')
-    const count = () => document.querySelector('.toolbar__count').textContent
+    const count = () => document.querySelector('.toolbar__counttext').textContent
     const firstCard = () => {
       const card = document.querySelector('.card__open')
       return card === null ? '' : card.textContent

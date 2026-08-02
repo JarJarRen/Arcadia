@@ -148,7 +148,9 @@ export function LibraryToolbar(props: Props): ReactElement {
         <span className="toolbar__countsizer" aria-hidden="true">
           {t().toolbar.shownOfTotal(props.total, props.total)}
         </span>
-        <span>{t().toolbar.shownOfTotal(props.shown, props.total)}</span>
+        <span className="toolbar__counttext">
+          {t().toolbar.shownOfTotal(props.shown, props.total)}
+        </span>
       </span>
 
       {/* Icon only, so the label lives in the tooltip and the accessible
