@@ -102,7 +102,7 @@ describe('LibraryToolbar', () => {
   it('switches the view mode', () => {
     const props = renderToolbar({ view: 'grid' })
 
-    fireEvent.click(screen.getByTitle('List'))
+    fireEvent.click(screen.getByRole('button', { name: 'List' }))
 
     expect(props.onViewChange).toHaveBeenCalledWith('list')
   })
@@ -110,8 +110,10 @@ describe('LibraryToolbar', () => {
   it('marks the current view as pressed', () => {
     renderToolbar({ view: 'list' })
 
-    expect(screen.getByTitle('List').getAttribute('aria-pressed')).toBe('true')
-    expect(screen.getByTitle('Grid').getAttribute('aria-pressed')).toBe('false')
+    expect(screen.getByRole('button', { name: 'List' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('button', { name: 'Grid' }).getAttribute('aria-pressed')).toBe(
+      'false'
+    )
   })
 
   it('reserves the count width for the widest label it can show', () => {

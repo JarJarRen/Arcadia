@@ -141,6 +141,25 @@ describe('SetupDialog', () => {
     expect(props.onClose).not.toHaveBeenCalled()
   })
 
+  it('closes on Escape once the question has been answered', () => {
+    stubArcadia()
+    const props = renderSetup({ firstRun: false })
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+
+    expect(props.onClose).toHaveBeenCalledOnce()
+  })
+
+  it('does not close on Escape on the first run — the gate stays until answered', () => {
+    stubArcadia()
+    const props = renderSetup({ firstRun: true })
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+
+    expect(props.onClose).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog')).toBeDefined()
+  })
+
   it('shows the error and stays open when saving fails', async () => {
     stubArcadia({
       saveEnvConfig: async () => ({

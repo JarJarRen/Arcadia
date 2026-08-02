@@ -45,10 +45,26 @@ describe('StoreFilterMenu', () => {
   })
 
   it('stays open after a store is picked', () => {
+    // This dispatches a `click` only, so it does not exercise useDismiss's
+    // mousedown listener at all — it pins the onChange-does-not-close
+    // behaviour, not the "click landed inside" guard. See the mousedown
+    // test below for that.
     render(<StoreFilterMenu stores={[]} onChange={vi.fn()} />)
 
     fireEvent.click(screen.getByLabelText('Store'))
     fireEvent.click(screen.getByRole('menuitemcheckbox', { name: /steam/i }))
+
+    expect(screen.queryByRole('menu')).not.toBeNull()
+  })
+
+  it('stays open on a mousedown that lands inside the panel', () => {
+    // useDismiss listens on mousedown, not click (useDismiss.ts:29), so this
+    // is what actually exercises the `root.current?.contains(event.target)`
+    // branch that keeps the panel open for a click on one of its own items.
+    render(<StoreFilterMenu stores={[]} onChange={vi.fn()} />)
+
+    fireEvent.click(screen.getByLabelText('Store'))
+    fireEvent.mouseDown(screen.getByRole('menuitemcheckbox', { name: /steam/i }))
 
     expect(screen.queryByRole('menu')).not.toBeNull()
   })
