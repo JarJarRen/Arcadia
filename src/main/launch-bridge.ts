@@ -2,7 +2,8 @@ import { shell } from 'electron'
 import type { Game } from '@shared/types'
 import type { LaunchResult } from '@shared/ipc'
 import { t } from '@shared/i18n'
-import type { StoreAdapter } from '@main/stores/types'
+import type { GuidedInstall, StoreAdapter } from '@main/stores/types'
+import { runWindowAgent, type AgentHandle, type AgentTarget } from '@main/platform/windows'
 
 /**
  * Runs an adapter's launch URI.
@@ -18,17 +19,126 @@ export async function launchGame(
   return open(adapters, game, 'launch')
 }
 
+/** Arcadia's own window, as the agent needs to see it. */
+export interface InstallFrame {
+  target: AgentTarget
+  owner: string
+}
+
+export interface InstallAssist {
+  /**
+   * Arcadia's rectangle and handle, or undefined when there is no usable
+   * window — minimised, destroyed, not yet created.
+   */
+  frame: () => InstallFrame | undefined
+  /** Injection point for tests. In production the real agent runs. */
+  run?: typeof runWindowAgent
+}
+
+/** How long to wait for the store's dialog before giving up on it. */
+const TIMEOUT_MS = 30_000
+
+/** How long to keep pushing further store windows out of the way after. */
+const SETTLE_MS = 5_000
+
+/**
+ * The agent of the install currently being waited on.
+ *
+ * At most one: a second install cancels the first, because two agents
+ * fighting over the z-order would be worse than either alone.
+ */
+let current: AgentHandle | undefined
+
 /**
  * Opens the store's install dialog.
  *
  * Arcadia downloads nothing itself — it hands the store the same kind of
- * URI as for launching, only with a different verb.
+ * URI as for launching, only with a different verb. Where the store has a
+ * guided route and Arcadia has a window to centre on, the agent takes over
+ * and the shell is not involved at all.
  */
 export async function installGame(
   adapters: StoreAdapter[],
-  game: Game
+  game: Game,
+  assist?: InstallAssist
 ): Promise<LaunchResult> {
-  return open(adapters, game, 'install')
+  const adapter = adapters.find((candidate) => candidate.id === game.storeId)
+  if (adapter === undefined) {
+    return { ok: false, error: t().errors.noAdapter(game.storeId) }
+  }
+
+  let plan: GuidedInstall | undefined
+  try {
+    // Building the URI validates the game ID and throws on invalid values.
+    // Doing it before anything else means a bad ID never reaches a process
+    // start.
+    adapter.installUri(game)
+    plan = assist === undefined ? undefined : await adapter.guidedInstall?.(game)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return { ok: false, error: t().errors.installNameFailed(game.name, message) }
+  }
+
+  if (plan === undefined || assist === undefined) return open(adapters, game, 'install')
+
+  const frame = assist.frame()
+  if (frame === undefined) return open(adapters, game, 'install')
+
+  return guided(adapters, game, plan, assist, frame)
+}
+
+/**
+ * Stops waiting for the store's install dialog.
+ *
+ * Cancels the **assistance**, not the installation: the store already has
+ * the URI and carries on downloading. Only the agent ends.
+ */
+export function cancelInstall(): void {
+  current?.cancel()
+  current = undefined
+}
+
+async function guided(
+  adapters: StoreAdapter[],
+  game: Game,
+  plan: GuidedInstall,
+  assist: InstallAssist,
+  frame: InstallFrame
+): Promise<LaunchResult> {
+  // Before starting the next one, so the two never overlap.
+  cancelInstall()
+
+  const run = assist.run ?? runWindowAgent
+  const handle = run({
+    exe: plan.exe,
+    args: plan.args,
+    processNames: plan.processNames,
+    ignoreTitles: plan.ignoreTitles,
+    target: frame.target,
+    owner: frame.owner,
+    timeoutMs: TIMEOUT_MS,
+    settleMs: SETTLE_MS
+  })
+  current = handle
+
+  if (!(await handle.started)) {
+    // The agent is what starts the store, so an agent that never got that
+    // far has installed nothing. Without this the click does nothing at
+    // all — no window, no error, no download.
+    if (current === handle) current = undefined
+    return open(adapters, game, 'install')
+  }
+
+  const placed = await handle.placed
+  if (current === handle) current = undefined
+
+  // A timeout is the only outcome worth a word. A refused placement means
+  // the install is running and only the window could not be moved, and a
+  // cancelled agent means the user asked for the waiting to stop.
+  if (placed?.ok === false && placed.reason === 'timeout') {
+    return { ok: true, notice: plan.timeoutNotice }
+  }
+  return { ok: true }
 }
 
 async function open(

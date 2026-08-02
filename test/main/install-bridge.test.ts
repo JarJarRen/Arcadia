@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Game, StoreId } from '@shared/types'
-import type { StoreAdapter } from '@main/stores/types'
+import type { GuidedInstall, StoreAdapter } from '@main/stores/types'
 
 const opened: string[] = []
 
@@ -12,7 +12,7 @@ vi.mock('electron', () => ({
   }
 }))
 
-const { installGame, launchGame } = await import('@main/launch-bridge')
+const { installGame, launchGame, cancelInstall } = await import('@main/launch-bridge')
 
 function game(storeId: StoreId): Game {
   return {
@@ -94,5 +94,171 @@ describe('installGame', () => {
     const result = await installGame([], game('ubisoft'))
     expect(result.ok).toBe(false)
     expect(opened).toEqual([])
+  })
+})
+
+import type { AgentHandle, PlacedEvent } from '@main/platform/windows'
+
+function plan(overrides: Partial<GuidedInstall> = {}): GuidedInstall {
+  return {
+    exe: 'C:\\Steam\\steam.exe',
+    args: ['-silent', 'steam://install/1'],
+    processNames: ['steam.exe'],
+    ignoreTitles: ['Steam'],
+    timeoutNotice: 'No dialog appeared.',
+    ...overrides
+  }
+}
+
+function guidedAdapter(overrides: Partial<GuidedInstall> = {}): StoreAdapter {
+  return adapter('steam', { guidedInstall: async () => plan(overrides) })
+}
+
+const FRAME = {
+  target: { x: 0, y: 0, width: 1000, height: 700 },
+  owner: '4242'
+}
+
+/** An agent whose two answers the test decides up front. */
+function fakeAgent(
+  started: boolean,
+  placed: PlacedEvent | undefined
+): { assist: { frame: () => typeof FRAME; run: () => AgentHandle }; cancels: () => number } {
+  let cancels = 0
+  return {
+    assist: {
+      frame: () => FRAME,
+      run: () => ({
+        started: Promise.resolve(started),
+        placed: Promise.resolve(placed),
+        cancel: () => {
+          cancels += 1
+        }
+      })
+    },
+    cancels: () => cancels
+  }
+}
+
+describe('guided install', () => {
+  beforeEach(() => {
+    opened.length = 0
+    cancelInstall()
+  })
+
+  it('does not touch the shell when the agent starts the store itself', async () => {
+    const agent = fakeAgent(true, { ok: true, hwnd: 9 })
+    const result = await installGame([guidedAdapter()], game('steam'), agent.assist)
+
+    expect(result).toEqual({ ok: true })
+    // The agent runs steam.exe. Opening the URI as well would start a
+    // second install of the same game.
+    expect(opened).toEqual([])
+  })
+
+  it('runs the URI itself when the agent never launched anything', async () => {
+    // The dangerous case: the agent is what starts Steam, so without this
+    // the click would do nothing whatsoever.
+    const agent = fakeAgent(false, undefined)
+    const result = await installGame([guidedAdapter()], game('steam'), agent.assist)
+
+    expect(result).toEqual({ ok: true })
+    expect(opened).toEqual(['steam://install'])
+  })
+
+  it('explains a dialog that never appeared', async () => {
+    const agent = fakeAgent(true, { ok: false, reason: 'timeout' })
+    const result = await installGame([guidedAdapter()], game('steam'), agent.assist)
+
+    expect(result).toEqual({ ok: true, notice: 'No dialog appeared.' })
+  })
+
+  it('says nothing when the placement was merely refused', async () => {
+    // Steam running elevated and Arcadia not. The install is fine and a
+    // banner about window handles would be noise.
+    const agent = fakeAgent(true, { ok: false, reason: 'denied' })
+    const result = await installGame([guidedAdapter()], game('steam'), agent.assist)
+
+    expect(result).toEqual({ ok: true })
+  })
+
+  it('says nothing when the agent died after starting the store', async () => {
+    const agent = fakeAgent(true, undefined)
+    expect(await installGame([guidedAdapter()], game('steam'), agent.assist)).toEqual({ ok: true })
+  })
+
+  it('falls back to the shell when the window is unknown', async () => {
+    // No frame means no window to centre on — a minimised or destroyed
+    // Arcadia. The install must still happen.
+    const result = await installGame([guidedAdapter()], game('steam'), {
+      frame: () => undefined,
+      run: () => {
+        throw new Error('must not run the agent without a frame')
+      }
+    })
+
+    expect(result).toEqual({ ok: true })
+    expect(opened).toEqual(['steam://install'])
+  })
+
+  it('takes the plain route when no assist is offered at all', async () => {
+    const result = await installGame([guidedAdapter()], game('steam'))
+
+    expect(result).toEqual({ ok: true })
+    expect(opened).toEqual(['steam://install'])
+  })
+
+  it('takes the plain route for an adapter with no guided route', async () => {
+    const agent = fakeAgent(true, { ok: true })
+    const result = await installGame([adapter('epic')], game('epic'), agent.assist)
+
+    expect(result).toEqual({ ok: true })
+    expect(opened).toEqual(['epic://install'])
+  })
+
+  it('reports a bad game ID without starting an agent', async () => {
+    const broken = adapter('steam', {
+      installUri: () => {
+        throw new Error('no identifier')
+      },
+      guidedInstall: async () => plan()
+    })
+    const result = await installGame([broken], game('steam'), {
+      frame: () => FRAME,
+      run: () => {
+        throw new Error('must not run the agent for an invalid ID')
+      }
+    })
+
+    expect(result.ok).toBe(false)
+    expect(opened).toEqual([])
+  })
+
+  it('cancels the agent on request', async () => {
+    const agent = fakeAgent(true, { ok: true })
+    let cancelled = 0
+    const handle: AgentHandle = {
+      started: Promise.resolve(true),
+      // Never settles, so the agent is still current when cancel arrives.
+      placed: new Promise(() => {}),
+      cancel: () => {
+        cancelled += 1
+      }
+    }
+    void installGame([guidedAdapter()], game('steam'), {
+      frame: agent.assist.frame,
+      run: () => handle
+    })
+    // Let the bridge get as far as awaiting the placement.
+    await Promise.resolve()
+    await Promise.resolve()
+
+    cancelInstall()
+
+    expect(cancelled).toBe(1)
+  })
+
+  it('cancelling with no install running does nothing', () => {
+    expect(() => cancelInstall()).not.toThrow()
   })
 })
