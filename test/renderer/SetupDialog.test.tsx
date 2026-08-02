@@ -64,6 +64,34 @@ describe('SetupDialog', () => {
     expect(saveEnvConfig).toHaveBeenCalledWith(VALUES)
   })
 
+  it('sends edits to the field they were typed into, not the prefilled values', async () => {
+    // Without this, "saves all three keys" only pins the pass-through of the
+    // *unedited* prop — it clicks Save without typing anything, so it cannot
+    // catch a wrong `field.key` capture, a missing state update, or a stale
+    // closure in the field's onChange (SetupDialog.tsx:131-133). Editing two
+    // fields to distinct values and checking each lands under its own key
+    // catches a handler that writes every edit to the same key, or swaps
+    // which key an edit lands under, which editing a single field would not.
+    const saveEnvConfig = vi.fn(async () => ({ ok: true, restarting: false }))
+    stubArcadia({ saveEnvConfig })
+    renderSetup()
+
+    fireEvent.change(screen.getByLabelText(/^Steam Web API key/), {
+      target: { value: 'new-web-key' }
+    })
+    fireEvent.change(screen.getByLabelText(/^SteamGridDB API key/), {
+      target: { value: 'new-grid-key' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(saveEnvConfig).toHaveBeenCalledOnce())
+    expect(saveEnvConfig).toHaveBeenCalledWith({
+      ...VALUES,
+      STEAM_WEB_API_KEY: 'new-web-key',
+      STEAMGRIDDB_API_KEY: 'new-grid-key'
+    })
+  })
+
   it('on first run there is no close control, only the way through', () => {
     stubArcadia()
     renderSetup({ firstRun: true })
