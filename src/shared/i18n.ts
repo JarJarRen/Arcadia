@@ -220,6 +220,8 @@ export interface Strings {
       privateProfile: string
       libraryFailed: string
       invalidAppId: (id: string) => string
+      /** Shown when the install was fired but no dialog ever appeared. */
+      noInstallDialog: string
     }
     epic: {
       notFound: string
@@ -452,7 +454,10 @@ const en: Strings = {
         'Your Steam profile does not disclose game details. Set “Game details” ' +
         'to “Public” in Steam’s privacy settings.',
       libraryFailed: 'The Steam library could not be loaded.',
-      invalidAppId: (id) => `Invalid Steam AppID: ${id}`
+      invalidAppId: (id) => `Invalid Steam AppID: ${id}`,
+      noInstallDialog:
+        'Steam did not open an install dialog. It may be asking you to sign in — ' +
+        'check the Steam window.'
     },
     epic: {
       notFound:
@@ -712,7 +717,10 @@ const de: Strings = {
         'Dein Steam-Profil gibt die Spieldetails nicht preis. Stelle in den ' +
         'Steam-Privatsphäre-Einstellungen „Spieldetails“ auf „Öffentlich“.',
       libraryFailed: 'Die Steam-Bibliothek konnte nicht geladen werden.',
-      invalidAppId: (id) => `Ungültige Steam-AppID: ${id}`
+      invalidAppId: (id) => `Ungültige Steam-AppID: ${id}`,
+      noInstallDialog:
+        'Steam hat keinen Installationsdialog geöffnet. Möglicherweise ist eine ' +
+        'Anmeldung nötig — bitte im Steam-Fenster nachsehen.'
     },
     epic: {
       notFound:

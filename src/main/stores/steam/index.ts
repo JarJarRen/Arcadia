@@ -1,11 +1,12 @@
 import type { AvailabilityResult, Game, RawGame } from '@shared/types'
 import { t } from '@shared/i18n'
-import type { StoreAdapter } from '@main/stores/types'
+import type { StoreAdapter, GuidedInstall } from '@main/stores/types'
 import { findSteamPath } from './paths'
 import { scanSteamLibraries } from './manifests'
 import { readSteamAccounts, selectAccount, type SteamAccount } from './accounts'
 import { fetchOwnedGames, SteamApiError } from './webApi'
 import { readLocalPlayedApps } from './localConfig'
+import { steamGuidedInstall } from './install'
 
 export interface SteamAdapterConfig {
   apiKey?: string
@@ -168,6 +169,13 @@ export class SteamAdapter implements StoreAdapter {
     // Opens Steam's install dialog. Works for family-shared games too —
     // Steam decides for itself whether it is allowed.
     return `steam://install/${game.storeGameId}`
+  }
+
+  async guidedInstall(game: Game): Promise<GuidedInstall | undefined> {
+    // installUri validates the AppID and throws on a bad one. Letting that
+    // happen here too is right: the bridge calls it first and reports the
+    // message, so this never runs with an identifier it should not.
+    return steamGuidedInstall(await this.steamPath(), this.installUri(game))
   }
 
   /** A manually chosen account beats the automatic selection. */
