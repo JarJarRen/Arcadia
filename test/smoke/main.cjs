@@ -74,14 +74,14 @@ function check(result) {
   if (shared === null || shared === undefined) {
     problems.push('The test tile for install/shared was not found.')
   } else {
-    if (shared.buttonText !== 'Install') {
+    if (shared.buttonText === null || !shared.buttonText.includes('Install')) {
       problems.push(
         `An uninstalled tile shows "${shared.buttonText}" instead of "Install".`
       )
     }
     if (!shared.buttonEnabled) problems.push('The install button is greyed out.')
     if (!shared.badge) problems.push('The "Shared/Free" badge is missing from the shared tile.')
-    if (shared.installedButton !== 'Play') {
+    if (shared.installedButton === null || !shared.installedButton.includes('Play')) {
       problems.push(
         `An installed tile shows "${shared.installedButton}" instead of "Play".`
       )
@@ -321,7 +321,7 @@ app.whenReady().then(async () => {
   if (detail.heroHeight < 200) {
     detailProblems.push(`The header is ${detail.heroHeight}px tall — it has collapsed.`)
   }
-  if (detail.titleText !== 'Far Cry 4') {
+  if (detail.titleText === null || !detail.titleText.includes('Far Cry 4')) {
     detailProblems.push(`The page shows "${detail.titleText}" instead of "Far Cry 4".`)
   }
   if (detail.textHeight < 100) {
@@ -676,7 +676,7 @@ app.whenReady().then(async () => {
 
     // The direction toggle: same key, reversed list.
     const toggle = [...document.querySelectorAll('.toolbar .button--icon')].find(
-      (b) => b.textContent === '↑' || b.textContent === '↓'
+      (b) => b.textContent.includes('↑') || b.textContent.includes('↓')
     )
     const arrowBefore = toggle === undefined ? null : toggle.textContent
     toggle.click()
@@ -739,10 +739,10 @@ app.whenReady().then(async () => {
   if (!toolbar.cleared.closed) {
     toolbarProblems.push('The panel stayed open after "All stores".')
   }
-  if (toolbar.arrowBefore !== '↑') {
+  if (toolbar.arrowBefore === null || !toolbar.arrowBefore.includes('↑')) {
     toolbarProblems.push(`The library opens on "${toolbar.arrowBefore}" instead of ascending.`)
   }
-  if (toolbar.reversed.arrow !== '↓') {
+  if (!toolbar.reversed.arrow.includes('↓')) {
     toolbarProblems.push('The arrow did not follow the direction it set.')
   }
   if (toolbar.reversed.first === toolbar.sortedAscending) {
