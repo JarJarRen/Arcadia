@@ -1,8 +1,10 @@
-import { describe, expect, it } from 'vitest'
-import { readFile } from 'node:fs/promises'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   parseLoginUsers,
+  readSteamAccounts,
   selectAccount,
   type SteamAccount
 } from '@main/stores/steam/accounts'
@@ -84,5 +86,36 @@ describe('selectAccount', () => {
   it('picks the AutoLogin account on the real target structure', async () => {
     const accounts = parseLoginUsers(await fixture('loginusers.vdf'))
     expect(selectAccount(accounts)?.accountName).toBe('testuser')
+  })
+})
+
+describe('readSteamAccounts', () => {
+  // Real directories rather than a mocked file system, matching how the
+  // rest of this store's I/O-error handling is tested.
+  let steamPath: string
+
+  beforeEach(async () => {
+    steamPath = await mkdtemp(join(tmpdir(), 'arcadia-steam-accounts-'))
+  })
+
+  afterEach(async () => {
+    await rm(steamPath, { recursive: true, force: true })
+  })
+
+  it('reads accounts from a real loginusers.vdf', async () => {
+    await mkdir(join(steamPath, 'config'), { recursive: true })
+    await writeFile(
+      join(steamPath, 'config', 'loginusers.vdf'),
+      await fixture('loginusers.vdf'),
+      'utf8'
+    )
+
+    const accounts = await readSteamAccounts(steamPath)
+    expect(accounts).toHaveLength(2)
+    expect(accounts.map((a) => a.accountName)).toContain('testuser')
+  })
+
+  it('returns an empty list when loginusers.vdf does not exist', async () => {
+    expect(await readSteamAccounts(steamPath)).toEqual([])
   })
 })

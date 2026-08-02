@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join, posix } from 'node:path'
 import { findSteamPath } from '@main/stores/steam/paths'
 
 describe('findSteamPath on Windows', () => {
@@ -62,5 +65,35 @@ describe('findSteamPath on Linux', () => {
       exists: async () => false
     })
     expect(result).toBeUndefined()
+  })
+})
+
+describe('findSteamPath with the default file existence check', () => {
+  // No `exists` override here: these exercise the real node:fs/promises
+  // `access` call against real directories, rather than mocking the file
+  // system. The Linux branch is used so the registry/exec plumbing never
+  // comes into it.
+  let home: string
+
+  beforeEach(async () => {
+    home = await mkdtemp(join(tmpdir(), 'arcadia-steam-path-'))
+  })
+
+  afterEach(async () => {
+    await rm(home, { recursive: true, force: true })
+  })
+
+  it('finds a real candidate directory that exists', async () => {
+    // `linuxCandidates` builds the path with `posix.join` on the raw
+    // `homeDir` passed in, so the directory created here has to match that
+    // exactly rather than the ambient (win32-separator) `join`.
+    const steam = posix.join(home, '.steam', 'steam')
+    await mkdir(steam, { recursive: true })
+
+    expect(await findSteamPath({ platform: 'linux', homeDir: home })).toBe(steam)
+  })
+
+  it('returns undefined when none of the real candidates exist', async () => {
+    expect(await findSteamPath({ platform: 'linux', homeDir: home })).toBeUndefined()
   })
 })

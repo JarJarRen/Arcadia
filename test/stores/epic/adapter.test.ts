@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { EpicAdapter } from '@main/stores/epic'
 import { gameId, type Game } from '@shared/types'
 
@@ -105,5 +108,33 @@ describe('EpicAdapter', () => {
     })
     expect(await adapter.scanOwned()).toEqual([])
     expect(await adapter.scanInstalled()).toHaveLength(1)
+  })
+})
+
+describe('EpicAdapter with the default file existence check', () => {
+  // No `exists` override here: these exercise the real node:fs/promises
+  // `access` call, using real directories rather than mocking the file
+  // system.
+  let dir: string
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'arcadia-epic-adapter-'))
+  })
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true })
+  })
+
+  it('reports itself available when the real manifest directory exists', async () => {
+    const adapter = new EpicAdapter({ manifestDir: dir, catalogFile: join(dir, 'nope.bin') })
+    const result = await adapter.isAvailable()
+    expect(result.available).toBe(true)
+    expect(result.limitations?.join(' ')).toMatch(/cache/i)
+  })
+
+  it('reports itself unavailable when the real manifest directory is missing', async () => {
+    const adapter = new EpicAdapter({ manifestDir: join(dir, 'does-not-exist') })
+    const result = await adapter.isAvailable()
+    expect(result.available).toBe(false)
   })
 })

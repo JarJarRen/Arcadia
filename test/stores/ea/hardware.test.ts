@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildHardwareString,
   HARDWARE_COMMAND,
+  HARDWARE_FIELDS,
   parseHardwareOutput,
   readHardwareString
 } from '@main/stores/ea/hardware'
@@ -90,4 +91,17 @@ describe('EA hardware fingerprint', () => {
     expect(await readHardwareString(async () => '')).toBeUndefined()
     expect(await readHardwareString(async () => 'baseBoardManufacturer=')).toBeUndefined()
   })
+
+  it('reads the string through the real PowerShell/WMI runner by default', async () => {
+    // The only test in this file that exercises `defaultExec` rather than
+    // an injected fake — it runs the real HARDWARE_COMMAND against this
+    // machine's own WMI data. The exact values are unverifiable (they
+    // depend on the machine this runs on), so this only pins the shape: a
+    // real fingerprint comes back, in the format buildHardwareString
+    // produces.
+    const value = await readHardwareString()
+    expect(value).toBeDefined()
+    expect(value?.endsWith(';')).toBe(true)
+    expect(value?.split(';')).toHaveLength(HARDWARE_FIELDS.length + 1)
+  }, 15000)
 })

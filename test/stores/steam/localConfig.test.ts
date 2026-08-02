@@ -1,7 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import {
   accountIdFromSteamId64,
-  parseLocalPlayedApps
+  parseLocalPlayedApps,
+  readLocalPlayedApps
 } from '@main/stores/steam/localConfig'
 
 /**
@@ -126,5 +130,38 @@ describe('accountIdFromSteamId64', () => {
 
   it('rejects an ID below the base', () => {
     expect(accountIdFromSteamId64('00000000000000001')).toBeUndefined()
+  })
+})
+
+describe('readLocalPlayedApps', () => {
+  // Valve's public example ID, matching the accountIdFromSteamId64 tests
+  // above: it converts to account number 22202.
+  const STEAM_ID = '76561197960287930'
+  let steamPath: string
+
+  beforeEach(async () => {
+    steamPath = await mkdtemp(join(tmpdir(), 'arcadia-steam-local-'))
+  })
+
+  afterEach(async () => {
+    await rm(steamPath, { recursive: true, force: true })
+  })
+
+  it('reads play traces from a real localconfig.vdf', async () => {
+    const configDir = join(steamPath, 'userdata', '22202', 'config')
+    await mkdir(configDir, { recursive: true })
+    await writeFile(join(configDir, 'localconfig.vdf'), FILE, 'utf8')
+
+    expect((await readLocalPlayedApps(steamPath, STEAM_ID)).sort()).toEqual(['400', '440'])
+  })
+
+  it('returns an empty list when localconfig.vdf does not exist', async () => {
+    // Normal for a freshly signed-in account, and the only location on
+    // Linux differs entirely — neither is a reason to fail the scan.
+    expect(await readLocalPlayedApps(steamPath, STEAM_ID)).toEqual([])
+  })
+
+  it('returns an empty list for a SteamID64 that cannot be converted', async () => {
+    expect(await readLocalPlayedApps(steamPath, 'not-a-steam-id')).toEqual([])
   })
 })
