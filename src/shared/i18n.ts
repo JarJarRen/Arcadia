@@ -123,6 +123,13 @@ export interface Strings {
     nothingSelected: string
   }
 
+  install: {
+    /** e.g. "Opening Steam's install dialog…" */
+    overlayTitle: (store: string) => string
+    overlayBody: string
+    overlayDismiss: string
+  }
+
   card: {
     play: string
     install: string
@@ -351,6 +358,12 @@ const en: Strings = {
     empty: 'No games found yet. “Refresh” starts the scan.',
     noMatches: 'No game matches the current filters.',
     nothingSelected: 'Pick a game from the list.'
+  },
+
+  install: {
+    overlayTitle: (store) => `Opening ${store}'s install dialog…`,
+    overlayBody: 'This can take a moment while the store starts.',
+    overlayDismiss: 'Press Esc to keep browsing'
   },
 
   card: {
@@ -613,6 +626,12 @@ const de: Strings = {
     empty: 'Noch keine Spiele gefunden. „Aktualisieren“ startet die Suche.',
     noMatches: 'Kein Spiel passt zu den aktuellen Filtern.',
     nothingSelected: 'Wähle ein Spiel aus der Liste.'
+  },
+
+  install: {
+    overlayTitle: (store) => `${store}-Installationsdialog wird geöffnet …`,
+    overlayBody: 'Das kann einen Moment dauern, während der Store startet.',
+    overlayDismiss: 'Zum Weiterstöbern Esc drücken'
   },
 
   card: {

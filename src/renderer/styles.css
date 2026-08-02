@@ -1045,3 +1045,25 @@ button:focus-visible {
   overflow-y: auto;
   background: var(--bg);
 }
+
+/* ── Install overlay ─────────────────────────────────────────────────── */
+.modal__box--install {
+  width: min(360px, 100%);
+  align-items: center;
+  text-align: center;
+}
+
+.install__spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: install-spin 0.9s linear infinite;
+}
+
+@keyframes install-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
