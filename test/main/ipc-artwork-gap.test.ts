@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Harness, IpcHandlers } from './ipc-context'
 
 /**
  * A discarded image has to reach the pass that would replace it.
@@ -10,7 +11,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  * them findable on SteamGridDB.
  */
 
-const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
+const handlers: IpcHandlers = new Map()
 
 vi.mock('electron', () => ({
   ipcMain: {
@@ -21,12 +22,8 @@ vi.mock('electron', () => ({
   shell: { showItemInFolder: () => undefined, openExternal: async () => undefined }
 }))
 
-const { openDatabase } = await import('@main/db/schema')
-const { GameRepository } = await import('@main/db/repository')
-const { MetadataRepository } = await import('@main/db/metadata')
-const { SettingsRepository } = await import('@main/db/settings')
 const { registerIpcHandlers } = await import('@main/ipc')
-const { SteamAppList } = await import('@main/metadata/steamAppList')
+const { makeHarness } = await import('./ipc-context')
 const { IPC } = await import('@shared/ipc')
 const { mergeKey } = await import('@main/library/merge')
 
@@ -35,36 +32,23 @@ const STEAM_HEADER =
   'https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/3949040/header.jpg'
 
 describe('artwork:broken', () => {
+  let harness: Harness
   let invoke: (...args: unknown[]) => Promise<void>
-  let metadata: InstanceType<typeof MetadataRepository>
   let gaps: number
 
   beforeEach(() => {
     handlers.clear()
     gaps = 0
 
-    const db = openDatabase(':memory:')
-    const repo = new GameRepository(db)
-    repo.upsertScan(
+    harness = makeHarness({ onArtworkGap: () => gaps++ })
+    harness.repo.upsertScan(
       'steam',
       [{ storeGameId: '3949040', name: 'RV There Yet?', installed: true }],
       T0
     )
-    metadata = new MetadataRepository(db)
-    metadata.upsertArtwork('steam:3949040', [{ kind: 'hero', url: STEAM_HEADER }])
+    harness.metadata.upsertArtwork('steam:3949040', [{ kind: 'hero', url: STEAM_HEADER }])
 
-    registerIpcHandlers({
-      repo,
-      metadata,
-      settings: new SettingsRepository(db),
-      adapters: [],
-      appList: new SteamAppList(),
-      fetchDetails: async () => undefined,
-      getWindow: () => undefined,
-      onArtworkGap: () => gaps++,
-      envFilePaths: [],
-      relaunch: () => undefined
-    })
+    registerIpcHandlers(harness.context)
 
     const handler = handlers.get(IPC.artworkBroken)!
     invoke = (...args) => handler({}, ...args) as Promise<void>
@@ -73,7 +57,7 @@ describe('artwork:broken', () => {
   it('asks for a new pass once a row is discarded', async () => {
     await invoke(mergeKey('RV There Yet?'), 'hero')
 
-    expect(metadata.artworkFor('steam:3949040')).toEqual([])
+    expect(harness.metadata.artworkFor('steam:3949040')).toEqual([])
     expect(gaps).toBe(1)
   })
 
@@ -86,7 +70,7 @@ describe('artwork:broken', () => {
   it('does not ask when the kind is not one of ours', async () => {
     await invoke(mergeKey('RV There Yet?'), 'screenshot')
 
-    expect(metadata.artworkFor('steam:3949040')).toHaveLength(1)
+    expect(harness.metadata.artworkFor('steam:3949040')).toHaveLength(1)
     expect(gaps).toBe(0)
   })
 })

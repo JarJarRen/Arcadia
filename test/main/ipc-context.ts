@@ -16,6 +16,13 @@ import { SettingsRepository } from '@main/db/settings'
 import { SteamAppList } from '@main/metadata/steamAppList'
 import type { IpcContext } from '@main/ipc'
 
+/**
+ * The shape every test file's own `handlers` map takes. Exported so the type
+ * signature — repeated once per file because the map itself has to live
+ * beside its `vi.mock('electron')` factory — need not be retyped each time.
+ */
+export type IpcHandlers = Map<string, (event: unknown, ...args: unknown[]) => unknown>
+
 export interface Harness {
   db: ReturnType<typeof openDatabase>
   repo: GameRepository
