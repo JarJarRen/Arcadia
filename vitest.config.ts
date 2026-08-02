@@ -14,6 +14,10 @@ const alias = {
 
 export default defineConfig({
   test: {
+    // Every spy and fn mock is restored to its original implementation
+    // after each test, so a stub set up in one test (e.g. `window.confirm`)
+    // can never leak into the next test in the same file.
+    restoreMocks: true,
     /**
      * Two environments, routed by file extension.
      *
@@ -50,7 +54,19 @@ export default defineConfig({
       // provider tries to parse index.html as a module and logs a rollup
       // PARSE_ERROR on every run.
       include: ['src/**/*.{ts,tsx}'],
-      reporter: ['text', 'json-summary']
+      reporter: ['text', 'json-summary'],
+      // A ratchet, not a target: these sit a little below the coverage this
+      // branch actually achieves (statements 87.37%, branches 84.36%,
+      // functions 79.37%, lines 89.3%), so the suite fails if coverage
+      // regresses but doesn't trip on ordinary day-to-day noise. Raise them
+      // as coverage genuinely improves — never lower them to make a change
+      // pass.
+      thresholds: {
+        statements: 86.5,
+        branches: 83.5,
+        functions: 78.5,
+        lines: 88.5
+      }
     }
   },
   resolve: { alias }

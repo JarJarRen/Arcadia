@@ -9,6 +9,7 @@
     "jsx": "react-jsx",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "skipLibCheck": true,
+    "types": [],
     "paths": { "@shared/*": ["./src/shared/*"], "@renderer/*": ["./src/renderer/*"] }
   },
   "include": [
