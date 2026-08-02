@@ -85,6 +85,12 @@ describe('preload bridge', () => {
       call: () => api.install('game-install-id')
     },
     {
+      name: 'cancelInstall',
+      channel: IPC.gameInstallCancel,
+      args: [],
+      call: () => api.cancelInstall()
+    },
+    {
       name: 'setFavorite',
       channel: IPC.gameSetFavorite,
       args: ['merge-favorite', true],
@@ -172,9 +178,9 @@ describe('preload bridge', () => {
     expect(invokeCalls[0]?.args).toEqual(row.args)
   })
 
-  it('covers every invoke-based method exactly once, with sixteen distinct channels', () => {
-    expect(INVOKE_TABLE).toHaveLength(16)
-    expect(new Set(INVOKE_TABLE.map((row) => row.name)).size).toBe(16)
+  it('covers every invoke-based method exactly once, with seventeen distinct channels', () => {
+    expect(INVOKE_TABLE).toHaveLength(17)
+    expect(new Set(INVOKE_TABLE.map((row) => row.name)).size).toBe(17)
   })
 
   it('never sends two methods down the same channel', () => {
@@ -190,7 +196,7 @@ describe('preload bridge', () => {
     ]
 
     expect(new Set(allChannels).size).toBe(allChannels.length)
-    expect(allChannels).toHaveLength(19)
+    expect(allChannels).toHaveLength(20)
   })
 
   /**

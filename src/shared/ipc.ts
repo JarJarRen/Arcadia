@@ -10,6 +10,7 @@ export const IPC = {
   gameSetFavorite: 'game:set-favorite',
   gameOpenFolder: 'game:open-folder',
   gameInstall: 'game:install',
+  gameInstallCancel: 'game:install-cancel',
   mergeSetPreferred: 'merge:set-preferred',
   mergeSetSplit: 'merge:set-split',
   metadataSearch: 'metadata:search',
@@ -44,6 +45,13 @@ export interface ArcadiaApi {
   launch(gameId: string): Promise<LaunchResult>
   /** Opens the store's install dialog; expects the same `id`. */
   install(gameId: string): Promise<LaunchResult>
+  /**
+   * Stops waiting for the store's install dialog.
+   *
+   * Cancels the **assistance**, not the installation: the store already
+   * has the URI and carries on. Only the overlay and the window agent end.
+   */
+  cancelInstall(): Promise<void>
   /**
    * Expects the merge key, not a game ID.
    *

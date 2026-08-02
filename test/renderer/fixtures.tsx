@@ -29,6 +29,7 @@ export function stubArcadia(overrides: Partial<ArcadiaApi> = {}): ArcadiaApi {
       ({ stores: [], totalGames: 0 }) as Awaited<ReturnType<ArcadiaApi['sync']>>,
     launch: async () => ({ ok: true }),
     install: async () => ({ ok: true }),
+    cancelInstall: async () => undefined,
     setFavorite: async () => undefined,
     setPreferredStore: async () => undefined,
     setSplit: async () => undefined,

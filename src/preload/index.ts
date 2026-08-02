@@ -6,6 +6,7 @@ const api: ArcadiaApi = {
   sync: () => ipcRenderer.invoke(IPC.librarySync),
   launch: (gameId) => ipcRenderer.invoke(IPC.gameLaunch, gameId),
   install: (gameId) => ipcRenderer.invoke(IPC.gameInstall, gameId),
+  cancelInstall: () => ipcRenderer.invoke(IPC.gameInstallCancel),
   setFavorite: (mergeKey, value) => ipcRenderer.invoke(IPC.gameSetFavorite, mergeKey, value),
   setPreferredStore: (mergeKey, gameId) =>
     ipcRenderer.invoke(IPC.mergeSetPreferred, mergeKey, gameId),

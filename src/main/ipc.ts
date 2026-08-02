@@ -1,4 +1,4 @@
-import { ipcMain, shell, type BrowserWindow } from 'electron'
+import { ipcMain, screen, shell, type BrowserWindow } from 'electron'
 import { stat } from 'node:fs/promises'
 import { IPC } from '@shared/ipc'
 import { getLanguage, parseLanguage, setLanguage, t } from '@shared/i18n'
@@ -11,7 +11,8 @@ import type { SettingsRepository } from '@main/db/settings'
 import type { StoreAdapter } from '@main/stores/types'
 import { mergeLibrary } from '@main/library/merge'
 import { runSync } from '@main/sync'
-import { installGame, launchGame } from '@main/launch-bridge'
+import { cancelInstall, installGame, launchGame, type InstallFrame } from '@main/launch-bridge'
+import { decodeWindowHandle } from '@main/platform/windows'
 import type { SteamAppList } from '@main/metadata/steamAppList'
 import { applyManualMatch } from '@main/metadata/queue'
 import { readEnvConfig, saveEnvConfig } from '@main/env-config'
@@ -94,6 +95,28 @@ function library(repo: GameRepository, metadata: MetadataRepository): LibraryEnt
   })
 }
 
+/**
+ * Arcadia's window as the agent needs to see it.
+ *
+ * `dipToScreenRect` rather than the raw bounds: `getBounds` is in
+ * device-independent pixels while user32 works in physical ones. On a
+ * monitor at 150 % those differ, and an unconverted rectangle centres the
+ * dialog somewhere else entirely.
+ */
+function installFrame(window: BrowserWindow | undefined): InstallFrame | undefined {
+  if (window === undefined || window.isDestroyed()) return undefined
+
+  const rect = screen.dipToScreenRect(window, window.getBounds())
+
+  return {
+    target: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+    // Decoded by a tested function rather than inline: this whole helper
+    // needs a live BrowserWindow and so cannot be reached from vitest, and
+    // the handle read is the only part of it with anything to get wrong.
+    owner: decodeWindowHandle(window.getNativeWindowHandle())
+  }
+}
+
 export function registerIpcHandlers(context: IpcContext): void {
   const notifyChanged = (): void => {
     context.getWindow()?.webContents.send(IPC.libraryChanged)
@@ -137,11 +160,23 @@ export function registerIpcHandlers(context: IpcContext): void {
       if (game === undefined) {
         return { ok: false, error: t().errors.unknownGame(gameId) }
       }
-      return await installGame(context.adapters, game)
+      return await installGame(context.adapters, game, {
+        frame: () => installFrame(context.getWindow())
+      })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       return { ok: false, error: t().errors.installFailed(message) }
     }
+  })
+
+  /**
+   * Ends the wait for the store's dialog.
+   *
+   * Takes no argument and returns nothing: there is at most one install
+   * being waited on, and the caller is the overlay that was showing it.
+   */
+  ipcMain.handle(IPC.gameInstallCancel, () => {
+    cancelInstall()
   })
 
   ipcMain.handle(IPC.gameSetFavorite, (_event, mergeKey: unknown, value: unknown) => {
