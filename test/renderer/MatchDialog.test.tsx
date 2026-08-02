@@ -149,4 +149,17 @@ describe('MatchDialog', () => {
     expect(props.onClose).toHaveBeenCalledOnce()
     expect(setMatch).not.toHaveBeenCalled()
   })
+
+  it('shows the error when the search itself fails, distinct from a failed applyMatch', async () => {
+    // Covers the .catch inside the debounce effect. The mount itself queues
+    // a search for the entry's own name (see the comment in the first test
+    // above), so settling that search is enough to reach the rejection -
+    // no typing needed.
+    stubArcadia({ searchApps: async () => Promise.reject(new Error('Search unavailable')) })
+    renderMatch()
+
+    await settleSearch()
+
+    expect(screen.getByText('Search unavailable')).toBeDefined()
+  })
 })

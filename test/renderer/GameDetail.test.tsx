@@ -180,6 +180,26 @@ describe('GameDetail', () => {
     await waitFor(() => expect(props.onClose).toHaveBeenCalledOnce())
   })
 
+  it('leaves the game in the library when the removal confirmation is declined', () => {
+    const removeManualGame = vi.fn(async () => ({ ok: true }))
+    stubArcadia({ removeManualGame })
+    // Restored locally at the end of the test: there is no global
+    // restoreMocks (see test/renderer/setup.ts), and a neighbouring test
+    // that spies on window.confirm without checking its own return value
+    // should not inherit this one's `false`.
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const manual = entry('Custom Game', [
+      game('steam', 'manual-1', 'Custom Game', { manual: true })
+    ])
+    const props = renderDetail({ entry: manual })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from library' }))
+
+    expect(removeManualGame).not.toHaveBeenCalled()
+    expect(props.onClose).not.toHaveBeenCalled()
+    confirmSpy.mockRestore()
+  })
+
   it('offers no remove control for a scanned entry', () => {
     stubArcadia()
     renderDetail()

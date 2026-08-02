@@ -104,4 +104,76 @@ describe('AddGameDialog', () => {
     expect(onClose).toHaveBeenCalledOnce()
     expect(addManualGame).not.toHaveBeenCalled()
   })
+
+  it('closes on Escape', () => {
+    stubArcadia()
+    const onClose = vi.fn()
+    render(<AddGameDialog onClose={onClose} onAdded={vi.fn()} />)
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+
+    expect(onClose).toHaveBeenCalledOnce()
+  })
+
+  // The default store is EA, whose identifiers are digits only
+  // (storeGameIdLooksValid in src/shared/manual.ts). Paired with 'sends the
+  // store ID when one was given' above, which exercises a well-formed id,
+  // this pins the predicate itself rather than just the disabled attribute.
+  it('blocks submission when the store ID does not look valid for the selected store', () => {
+    const addManualGame = vi.fn(async () => ({ ok: true, id: 'x' }))
+    stubArcadia({ addManualGame })
+    render(<AddGameDialog onClose={vi.fn()} onAdded={vi.fn()} />)
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'A Game' } })
+    fireEvent.change(screen.getByLabelText(/^Store ID \(optional\)/), {
+      target: { value: 'not-a-number' }
+    })
+
+    expect(screen.getByText('Invalid input.')).toBeDefined()
+
+    fireEvent.click(screen.getByText('Add'))
+
+    expect(addManualGame).not.toHaveBeenCalled()
+  })
+
+  it('submits on Enter in the name field', async () => {
+    const addManualGame = vi.fn(async () => ({ ok: true, id: 'x' }))
+    stubArcadia({ addManualGame })
+    render(<AddGameDialog onClose={vi.fn()} onAdded={vi.fn()} />)
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'A Game' } })
+    fireEvent.keyDown(screen.getByLabelText('Name'), { key: 'Enter' })
+
+    await waitFor(() => expect(addManualGame).toHaveBeenCalledOnce())
+  })
+
+  // A second, independent handler on the store ID field - checked separately
+  // rather than assumed identical to the name field's.
+  it('submits on Enter in the store ID field', async () => {
+    const addManualGame = vi.fn(async () => ({ ok: true, id: 'x' }))
+    stubArcadia({ addManualGame })
+    render(<AddGameDialog onClose={vi.fn()} onAdded={vi.fn()} />)
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'A Game' } })
+    fireEvent.keyDown(screen.getByLabelText(/^Store ID \(optional\)/), { key: 'Enter' })
+
+    await waitFor(() => expect(addManualGame).toHaveBeenCalledOnce())
+  })
+
+  it('shows the thrown error message when adding a game rejects', async () => {
+    // Distinct from 'shows the reason a rejected entry was rejected' above,
+    // which covers addManualGame resolving with { ok: false }. This is the
+    // thrown-error path, caught separately in the component's submit().
+    stubArcadia({
+      addManualGame: async () => {
+        throw new Error('Disk full')
+      }
+    })
+    render(<AddGameDialog onClose={vi.fn()} onAdded={vi.fn()} />)
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'A Game' } })
+    fireEvent.click(screen.getByText('Add'))
+
+    await waitFor(() => expect(screen.getByText('Disk full')).toBeDefined())
+  })
 })
