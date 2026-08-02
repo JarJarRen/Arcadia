@@ -17,7 +17,7 @@
  * to be opened before its "Configuration…" item is reachable at all; the
  * brief's contract list treats the click as a single step.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { App } from '@renderer/App'
 import { entry, game, stubArcadia } from './fixtures'
@@ -258,5 +258,109 @@ describe('App', () => {
 
     await waitFor(() => expect(screen.getByText('Team Fortress 2')).toBeDefined())
     expect(screen.queryByRole('dialog', { name: 'Configure API keys' })).toBeNull()
+  })
+
+  /**
+   * Wiring: App.tsx passes five callbacks straight through to <Library> —
+   * `onLaunch={(entry) => void launch(entry)}` and four siblings alongside
+   * it. Every other test that exercises these — GameCard.test.tsx,
+   * ListRow.test.tsx, GameDetail.test.tsx — hands the child component a
+   * `vi.fn()` stand-in and checks that the child calls whatever prop it was
+   * given. That pins each component in isolation; it proves nothing about
+   * whether App wired the right prop to the right handler. A swap at
+   * App.tsx:353-357 (`onInstall` wired to `launch`, or the wrong argument
+   * handed to `onSelectStore`) would pass all of those and go unnoticed. The
+   * five tests below render the real App, click the real control on the
+   * grid tile, and assert the real `window.arcadia` method was called with
+   * the right argument — the only place such a swap would actually fail.
+   */
+  it('the grid tile launches an installed game via window.arcadia.launch', async () => {
+    const launch = vi.fn(async () => ({ ok: true }))
+    const install = vi.fn(async () => ({ ok: true }))
+    stubArcadia({ getGames: async () => [TF2], launch, install })
+    render(<App />)
+    await waitFor(() => expect(screen.getByText('Team Fortress 2')).toBeDefined())
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Play' }))
+      await Promise.resolve()
+    })
+
+    // Paired with the install test below: a swap between the two wrappers
+    // would leave this button calling install() instead, so both directions
+    // have to be checked for the pair to mean anything.
+    expect(launch).toHaveBeenCalledWith(TF2.active.id)
+    expect(install).not.toHaveBeenCalled()
+  })
+
+  it('the grid tile installs an uninstalled game via window.arcadia.install, not launch', async () => {
+    const launch = vi.fn(async () => ({ ok: true }))
+    const install = vi.fn(async () => ({ ok: true }))
+    stubArcadia({ getGames: async () => [PORTAL], launch, install })
+    render(<App />)
+    await waitFor(() => expect(screen.getByText('Portal')).toBeDefined())
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Install' }))
+      await Promise.resolve()
+    })
+
+    expect(install).toHaveBeenCalledWith(PORTAL.active.id)
+    expect(launch).not.toHaveBeenCalled()
+  })
+
+  it('the grid tile toggles favourite via window.arcadia.setFavorite, keyed by the merge key', async () => {
+    const setFavorite = vi.fn(async () => undefined)
+    stubArcadia({ getGames: async () => [TF2], setFavorite })
+    render(<App />)
+    await waitFor(() => expect(screen.getByText('Team Fortress 2')).toBeDefined())
+
+    await act(async () => {
+      // TF2's merge key ("team fortress 2") and its active source id
+      // ("steam:440") differ, so passing the wrong one here would fail.
+      fireEvent.click(screen.getByLabelText('Mark as favourite'))
+      await Promise.resolve()
+    })
+
+    expect(setFavorite).toHaveBeenCalledWith(TF2.key, true)
+  })
+
+  it("the grid tile's store switch calls window.arcadia.setPreferredStore with the merge key and the chosen source id", async () => {
+    const setPreferredStore = vi.fn(async () => undefined)
+    const merged = entry('Far Cry 4', [
+      game('steam', '298110', 'Far Cry 4'),
+      game('ubisoft', '856', 'Far Cry 4')
+    ])
+    stubArcadia({ getGames: async () => [merged], setPreferredStore })
+    render(<App />)
+    await waitFor(() => expect(screen.getByText('Far Cry 4')).toBeDefined())
+
+    await act(async () => {
+      // The merge key ("far cry 4") and the chosen source id ("ubisoft:856")
+      // differ, so a handler that mixed the two arguments up would fail
+      // this assertion.
+      fireEvent.click(screen.getByRole('button', { name: 'Ubisoft' }))
+      await Promise.resolve()
+    })
+
+    expect(setPreferredStore).toHaveBeenCalledWith(merged.key, 'ubisoft:856')
+  })
+
+  it("the grid tile's split control calls window.arcadia.setSplit with the merge key", async () => {
+    const setSplit = vi.fn(async () => undefined)
+    const merged = entry('Far Cry 4', [
+      game('steam', '298110', 'Far Cry 4'),
+      game('ubisoft', '856', 'Far Cry 4')
+    ])
+    stubArcadia({ getGames: async () => [merged], setSplit })
+    render(<App />)
+    await waitFor(() => expect(screen.getByText('Far Cry 4')).toBeDefined())
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'split' }))
+      await Promise.resolve()
+    })
+
+    expect(setSplit).toHaveBeenCalledWith(merged.key, true)
   })
 })
