@@ -629,7 +629,7 @@ const de: Strings = {
   },
 
   install: {
-    overlayTitle: (store) => `${store}-Installationsdialog wird geöffnet …`,
+    overlayTitle: (store) => `${store}-Installationsdialog wird geöffnet…`,
     overlayBody: 'Das kann einen Moment dauern, während der Store startet.',
     overlayDismiss: 'Zum Weiterstöbern Esc drücken'
   },

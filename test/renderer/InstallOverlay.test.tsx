@@ -157,4 +157,67 @@ describe('App install overlay', () => {
 
     expect(await screen.findByText(/Steam did not open an install dialog/)).toBeTruthy()
   })
+
+  it('does not close a newer overlay when an older install answers first', async () => {
+    const resolvers: Array<(value: LaunchResult) => void> = []
+    stubArcadia({
+      getGames: async () => [uninstalled()],
+      install: () =>
+        new Promise<LaunchResult>((resolve) => {
+          resolvers.push(resolve)
+        })
+    })
+    const button = await renderWithInstallButton()
+
+    vi.useFakeTimers()
+    fireEvent.click(button)
+    act(() => {
+      vi.advanceTimersByTime(OVERLAY_DELAY_MS + 50)
+    })
+    expect(screen.getByRole('status')).toBeTruthy()
+
+    // A second install starts while the first is still waiting. From here
+    // on the overlay belongs to it, not to the first.
+    fireEvent.click(button)
+
+    vi.useRealTimers()
+    await act(async () => {
+      resolvers[0]?.({ ok: true })
+    })
+
+    // The first install's answer must not close the second install's
+    // overlay.
+    expect(screen.getByRole('status')).toBeTruthy()
+  })
+
+  it('still reports an error from a superseded install', async () => {
+    const resolvers: Array<(value: LaunchResult) => void> = []
+    stubArcadia({
+      getGames: async () => [uninstalled()],
+      install: () =>
+        new Promise<LaunchResult>((resolve) => {
+          resolvers.push(resolve)
+        })
+    })
+    const button = await renderWithInstallButton()
+
+    vi.useFakeTimers()
+    fireEvent.click(button)
+    act(() => {
+      vi.advanceTimersByTime(OVERLAY_DELAY_MS + 50)
+    })
+    expect(screen.getByRole('status')).toBeTruthy()
+
+    // A second install starts while the first is still waiting.
+    fireEvent.click(button)
+
+    vi.useRealTimers()
+    await act(async () => {
+      resolvers[0]?.({ ok: false, error: 'Install exploded.' })
+    })
+
+    // The first install's error must still reach the user, even though it
+    // no longer owns the overlay.
+    expect(await screen.findByText('Install exploded.')).toBeTruthy()
+  })
 })
