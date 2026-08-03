@@ -25,7 +25,7 @@ export interface AgentRequest {
 }
 
 export type AgentEvent =
-  | { event: 'started'; ok: boolean; reason?: string }
+  | { event: 'started'; ok: boolean; reason?: string; detail?: string }
   | { event: 'placed'; ok: boolean; reason?: string; hwnd?: number }
   | { event: 'done' }
 
@@ -53,6 +53,12 @@ export type SpawnFn = (env: Record<string, string>, script: string) => AgentProc
 export interface AgentHandle {
   /** Whether the store's executable was launched at all. */
   started: Promise<boolean>
+  /**
+   * The detail behind a failed start — the spawn exception's message, when
+   * the agent reported one. Separate from `started` so that promise can stay
+   * the plain boolean the bridge already branches on.
+   */
+  startedDetail: Promise<string | undefined>
   /** How the placement ended, or undefined if the agent died first. */
   placed: Promise<PlacedEvent | undefined>
   cancel: () => void
@@ -111,10 +117,11 @@ export function parseAgentLine(line: string): AgentEvent | undefined {
   // as a success the agent never claimed.
   const ok = record.ok === true
   const reason = typeof record.reason === 'string' ? record.reason : undefined
+  const detail = typeof record.detail === 'string' ? record.detail : undefined
 
   switch (record.event) {
     case 'started':
-      return { event: 'started', ok, reason }
+      return { event: 'started', ok, reason, detail }
     case 'placed':
       return {
         event: 'placed',
@@ -234,6 +241,7 @@ export function runWindowAgent(
 ): AgentHandle {
   const child = spawn(buildAgentEnv(request), WINDOW_AGENT_SCRIPT)
   const started = deferred<boolean>()
+  const startedDetail = deferred<string | undefined>()
   const placed = deferred<PlacedEvent | undefined>()
 
   // The 30 s wizard timeout and 5 s settle window are the script's own
@@ -246,8 +254,9 @@ export function runWindowAgent(
   const guard = setTimeout(
     () => {
       child.kill()
-      // Both are no-ops once settled, exactly as in onExit below.
+      // All three are no-ops once settled, exactly as in onExit below.
       started.resolve(false)
+      startedDetail.resolve(undefined)
       placed.resolve(undefined)
     },
     request.timeoutMs + request.settleMs + 15_000
@@ -259,24 +268,34 @@ export function runWindowAgent(
   child.onLine((line) => {
     const event = parseAgentLine(line)
     if (event === undefined) return
-    if (event.event === 'started') started.resolve(event.ok)
+    if (event.event === 'started') {
+      started.resolve(event.ok)
+      startedDetail.resolve(event.detail)
+    }
     if (event.event === 'placed') {
       // A placement without a preceding launch cannot happen, but settling
       // both keeps a caller from waiting forever if it ever did.
       started.resolve(true)
+      startedDetail.resolve(undefined)
       placed.resolve({ ok: event.ok, reason: event.reason, hwnd: event.hwnd })
     }
   })
 
   child.onExit(() => {
-    // Both are no-ops once settled. An agent that dies before saying
+    // All three are no-ops once settled. An agent that dies before saying
     // anything therefore reports a launch that never happened — which is
     // exactly the signal the caller needs to run the URI itself.
     started.resolve(false)
+    startedDetail.resolve(undefined)
     placed.resolve(undefined)
     // The run is over one way or another, so the guard must not outlive it.
     clearTimeout(guard)
   })
 
-  return { started: started.promise, placed: placed.promise, cancel: () => child.kill() }
+  return {
+    started: started.promise,
+    startedDetail: startedDetail.promise,
+    placed: placed.promise,
+    cancel: () => child.kill()
+  }
 }

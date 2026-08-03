@@ -125,6 +125,10 @@ async function guided(
     // The agent is what starts the store, so an agent that never got that
     // far has installed nothing. Without this the click does nothing at
     // all — no window, no error, no download.
+    const detail = await handle.startedDetail
+    // Console-only: whoever reads this is debugging, not playing, so it
+    // stays out of the translated strings in shared/i18n.ts.
+    if (detail !== undefined) console.error('Window agent failed to start the store:', detail)
     if (current === handle) current = undefined
     return open(adapters, game, 'install')
   }

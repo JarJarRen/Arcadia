@@ -100,6 +100,20 @@ describe('parseAgentLine', () => {
     })
   })
 
+  it('keeps the detail behind a failed start', () => {
+    // The script's catch block reports the exception message under this
+    // key. Without it, a spawn failure and every other reason: 'spawn' look
+    // identical.
+    expect(
+      parseAgentLine('{"event":"started","ok":false,"reason":"spawn","detail":"boom"}')
+    ).toEqual({
+      event: 'started',
+      ok: false,
+      reason: 'spawn',
+      detail: 'boom'
+    })
+  })
+
   it('ignores anything that is not one of our events', () => {
     // PowerShell warnings, a half-written line, Steam's own noise. None of
     // it should reach the bridge as an event.
@@ -177,6 +191,7 @@ describe('runWindowAgent', () => {
 
     fake.emit('{"event":"started","ok":true}')
     expect(await handle.started).toBe(true)
+    expect(await handle.startedDetail).toBeUndefined()
 
     fake.emit('{"event":"placed","ok":true,"hwnd":77}')
     expect(await handle.placed).toEqual({ ok: true, reason: undefined, hwnd: 77 })
@@ -209,9 +224,12 @@ describe('runWindowAgent', () => {
     const fake = fakeProcess()
     const handle = runWindowAgent(request(), () => fake)
 
-    fake.emit('{"event":"started","ok":false,"reason":"spawn"}')
+    fake.emit('{"event":"started","ok":false,"reason":"spawn","detail":"boom"}')
 
     expect(await handle.started).toBe(false)
+    // The detail is what turns "spawn failed" into something a developer
+    // can actually act on, so it has to survive the trip through the handle.
+    expect(await handle.startedDetail).toBe('boom')
   })
 
   it('kills the process on cancel', () => {
@@ -259,6 +277,44 @@ describe('runWindowAgent', () => {
     expect(seenEnv?.ARCADIA_AGENT_EXE).toBe('C:\\Steam\\steam.exe')
     expect(seenScript).toBe(WINDOW_AGENT_SCRIPT)
   })
+})
+
+describe('runWindowAgent against the real script', () => {
+  // Every test above drives the agent through fakeProcess and never once
+  // runs the actual PowerShell. That is exactly how the @() bug shipped:
+  // the fake always handed over a flat args array, so no unit test ever hit
+  // the nested-array shape ConvertFrom-Json actually produces. These run
+  // the genuine script through the genuine default spawn, against an
+  // executable every Windows machine has, so a regression here throws
+  // inside Start-Process for real instead of inside a mock that cannot.
+  it.skipIf(process.platform !== 'win32')(
+    'starts cmd.exe through the real spawn when there are arguments',
+    async () => {
+      const handle = runWindowAgent(
+        request({ exe: 'cmd.exe', args: ['/c', 'exit'], timeoutMs: 2000, settleMs: 200 })
+      )
+
+      expect(await handle.started).toBe(true)
+      // Only the launch matters here; no window is ever going to appear for
+      // `cmd.exe /c exit`, and waiting for the placement timeout would make
+      // this slow for nothing.
+      handle.cancel()
+    },
+    20_000
+  )
+
+  it.skipIf(process.platform !== 'win32')(
+    'starts cmd.exe through the real spawn when there are no arguments',
+    async () => {
+      const handle = runWindowAgent(
+        request({ exe: 'cmd.exe', args: [], timeoutMs: 2000, settleMs: 200 })
+      )
+
+      expect(await handle.started).toBe(true)
+      handle.cancel()
+    },
+    20_000
+  )
 })
 
 describe('WINDOW_AGENT_SCRIPT', () => {

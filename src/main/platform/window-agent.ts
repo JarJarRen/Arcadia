@@ -84,10 +84,16 @@ public static class U {
 try { [void][U]::SetProcessDpiAwarenessContext([IntPtr](-4)) }
 catch { try { [void][U]::SetProcessDPIAware() } catch { } }
 
-$names   = @($env:ARCADIA_AGENT_PROCESSES | ConvertFrom-Json)
-$ignore  = @($env:ARCADIA_AGENT_IGNORE_TITLES | ConvertFrom-Json)
+# ConvertFrom-Json hands a JSON array to the pipeline as one item, not one
+# item per element, so wrapping the call in @() does not pin down an array —
+# it collects that single item into an array of one, nesting the real array
+# a level deeper instead. This read like a correctness guard; it was the
+# opposite, and the direct assignment below is the form that actually
+# unwraps to a flat array.
+$names   = $env:ARCADIA_AGENT_PROCESSES | ConvertFrom-Json
+$ignore  = $env:ARCADIA_AGENT_IGNORE_TITLES | ConvertFrom-Json
 $target  = $env:ARCADIA_AGENT_TARGET | ConvertFrom-Json
-$argv    = @($env:ARCADIA_AGENT_ARGS | ConvertFrom-Json)
+$argv    = $env:ARCADIA_AGENT_ARGS | ConvertFrom-Json
 $exe     = $env:ARCADIA_AGENT_EXE
 $owner   = [IntPtr][int64]$env:ARCADIA_AGENT_OWNER
 $timeout = [int]$env:ARCADIA_AGENT_TIMEOUT_MS
@@ -203,7 +209,7 @@ try {
   else { Start-Process -FilePath $exe | Out-Null }
   Emit @{ event = 'started'; ok = $true }
 } catch {
-  Emit @{ event = 'started'; ok = $false; reason = 'spawn' }
+  Emit @{ event = 'started'; ok = $false; reason = 'spawn'; detail = $_.Exception.Message }
   Emit @{ event = 'done' }
   exit 0
 }

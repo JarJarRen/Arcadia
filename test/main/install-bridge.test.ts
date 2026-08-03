@@ -130,6 +130,7 @@ function fakeAgent(
       frame: () => FRAME,
       run: () => ({
         started: Promise.resolve(started),
+        startedDetail: Promise.resolve(undefined),
         placed: Promise.resolve(placed),
         cancel: () => {
           cancels += 1
@@ -164,6 +165,26 @@ describe('guided install', () => {
 
     expect(result).toEqual({ ok: true })
     expect(opened).toEqual(['steam://install'])
+  })
+
+  it('logs the spawn detail before falling back to the shell', async () => {
+    // Console-only, and deliberately so — see the note at the top of
+    // shared/i18n.ts. Untested, this line is worth exactly as much as no
+    // detail at all.
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const result = await installGame([guidedAdapter()], game('steam'), {
+      frame: () => FRAME,
+      run: () => ({
+        started: Promise.resolve(false),
+        startedDetail: Promise.resolve('boom'),
+        placed: Promise.resolve(undefined),
+        cancel: () => {}
+      })
+    })
+
+    expect(result).toEqual({ ok: true })
+    expect(opened).toEqual(['steam://install'])
+    expect(spy).toHaveBeenCalledWith('Window agent failed to start the store:', 'boom')
   })
 
   it('explains a dialog that never appeared', async () => {
@@ -239,6 +260,7 @@ describe('guided install', () => {
     let cancelled = 0
     const handle: AgentHandle = {
       started: Promise.resolve(true),
+      startedDetail: Promise.resolve(undefined),
       // Never settles, so the agent is still current when cancel arrives.
       placed: new Promise(() => {}),
       cancel: () => {
