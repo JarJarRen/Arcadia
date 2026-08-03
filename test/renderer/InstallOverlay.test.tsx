@@ -176,8 +176,10 @@ describe('App install overlay', () => {
     })
     expect(screen.getByRole('status')).toBeTruthy()
 
-    // A second install starts while the first is still waiting. From here
-    // on the overlay belongs to it, not to the first.
+    // A second install starts while the first is still waiting. Its own
+    // delay timer never gets a chance to fire — real timers come back
+    // before that — so what stays on screen is still install #1's overlay.
+    // What does change is the sequence number the guard compares against.
     fireEvent.click(button)
 
     vi.useRealTimers()
@@ -185,8 +187,9 @@ describe('App install overlay', () => {
       resolvers[0]?.({ ok: true })
     })
 
-    // The first install's answer must not close the second install's
-    // overlay.
+    // Still install #1's overlay, never having been replaced — but its
+    // answer no longer matches the current sequence, so the guard must
+    // treat the clear as stale and leave what's on screen alone.
     expect(screen.getByRole('status')).toBeTruthy()
   })
 

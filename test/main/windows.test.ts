@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   buildAgentEnv,
   consumeLines,
@@ -220,6 +220,28 @@ describe('runWindowAgent', () => {
 
     handle.cancel()
 
+    expect(fake.killed()).toBe(1)
+  })
+
+  it('resolves both as failed once the guard outlasts a process that never says anything', async () => {
+    // A slow or stuck `Add-Type` compile is the realistic cause: PowerShell
+    // itself never gets far enough to print a line, so there is no agent
+    // output for the bridge to wait on. The script's own 30 s/5 s deadlines
+    // live inside its loops and never run — only a guard with its own clock
+    // can end this.
+    const fake = fakeProcess()
+    const req = request()
+
+    // Fake timers first: the guard's setTimeout is scheduled the moment
+    // runWindowAgent runs, so it has to exist before that call to be seen.
+    vi.useFakeTimers()
+    const handle = runWindowAgent(req, () => fake)
+
+    await vi.advanceTimersByTimeAsync(req.timeoutMs + req.settleMs + 15_000)
+    vi.useRealTimers()
+
+    expect(await handle.started).toBe(false)
+    expect(await handle.placed).toBeUndefined()
     expect(fake.killed()).toBe(1)
   })
 

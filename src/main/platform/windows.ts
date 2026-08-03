@@ -236,6 +236,26 @@ export function runWindowAgent(
   const started = deferred<boolean>()
   const placed = deferred<PlacedEvent | undefined>()
 
+  // The 30 s wizard timeout and 5 s settle window are the script's own
+  // deadlines, enforced inside its loops — they never get a chance to fire
+  // if PowerShell stalls before printing a single line, which a slow or
+  // stuck `Add-Type` compile can do. This is the fallback for exactly that:
+  // comfortably past every deadline the script enforces on itself, so it
+  // only ever catches a genuinely stuck process, never a slow-but-working
+  // one.
+  const guard = setTimeout(
+    () => {
+      child.kill()
+      // Both are no-ops once settled, exactly as in onExit below.
+      started.resolve(false)
+      placed.resolve(undefined)
+    },
+    request.timeoutMs + request.settleMs + 15_000
+  )
+  // A pending guard must never keep the Node process open by itself, and
+  // under vitest fake timers it must not keep the test run alive either.
+  guard.unref?.()
+
   child.onLine((line) => {
     const event = parseAgentLine(line)
     if (event === undefined) return
@@ -254,6 +274,8 @@ export function runWindowAgent(
     // exactly the signal the caller needs to run the URI itself.
     started.resolve(false)
     placed.resolve(undefined)
+    // The run is over one way or another, so the guard must not outlive it.
+    clearTimeout(guard)
   })
 
   return { started: started.promise, placed: placed.promise, cancel: () => child.kill() }

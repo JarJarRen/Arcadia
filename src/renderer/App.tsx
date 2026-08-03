@@ -72,9 +72,7 @@ export function App(): ReactElement {
   const [pendingSelect, setPendingSelect] = useState<string | undefined>()
   /** The page most recently closed, so the forward button can reopen it. */
   const lastClosed = useRef<string | undefined>(undefined)
-  const [installPending, setInstallPending] = useState<
-    { id: number; store: StoreId } | undefined
-  >()
+  const [installPending, setInstallPending] = useState<StoreId | undefined>()
   /**
    * Which install the overlay belongs to.
    *
@@ -148,7 +146,7 @@ export function App(): ReactElement {
     // platform has no window agent, the answer arrives before this fires
     // and the overlay is never shown.
     const timer = setTimeout(() => {
-      if (mine === installSequence.current) setInstallPending({ id: mine, store })
+      if (mine === installSequence.current) setInstallPending(store)
     }, OVERLAY_DELAY_MS)
 
     try {
@@ -380,10 +378,7 @@ export function App(): ReactElement {
       )}
 
       {installPending !== undefined && (
-        <InstallOverlay
-          store={STORE_LABELS[installPending.store]}
-          onDismiss={dismissInstall}
-        />
+        <InstallOverlay store={STORE_LABELS[installPending]} onDismiss={dismissInstall} />
       )}
 
       <Library
