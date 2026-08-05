@@ -22,6 +22,8 @@ export interface AgentRequest {
   owner: string
   timeoutMs: number
   settleMs: number
+  /** Height to grow a too-short dialog to. 0 means do not resize. */
+  minHeight: number
 }
 
 export type AgentEvent =
@@ -93,7 +95,8 @@ export function buildAgentEnv(request: AgentRequest): Record<string, string> {
     ARCADIA_AGENT_TARGET: JSON.stringify(request.target),
     ARCADIA_AGENT_OWNER: request.owner,
     ARCADIA_AGENT_TIMEOUT_MS: String(request.timeoutMs),
-    ARCADIA_AGENT_SETTLE_MS: String(request.settleMs)
+    ARCADIA_AGENT_SETTLE_MS: String(request.settleMs),
+    ARCADIA_AGENT_MIN_HEIGHT: String(request.minHeight)
   }
 }
 

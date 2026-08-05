@@ -15,6 +15,8 @@ export interface GuidedInstall {
   processNames: string[]
   /** Exact window titles that are never the install dialog. */
   ignoreTitles: string[]
+  /** Height to grow the dialog to if it opens shorter than this. 0 means do not resize. */
+  minHeight: number
   /** Shown as a notice when no dialog appears within the timeout. */
   timeoutNotice: string
 }

@@ -105,6 +105,7 @@ function plan(overrides: Partial<GuidedInstall> = {}): GuidedInstall {
     args: ['-silent', 'steam://install/1'],
     processNames: ['steam.exe'],
     ignoreTitles: ['Steam'],
+    minHeight: 0,
     timeoutNotice: 'No dialog appeared.',
     ...overrides
   }

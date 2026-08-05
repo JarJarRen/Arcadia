@@ -24,6 +24,14 @@ describe('steamGuidedInstall', () => {
     expect(plan?.ignoreTitles).toEqual(['Steam'])
   })
 
+  it('grows the wizard tall enough to reach the Install button', () => {
+    // Measured by hand on the owner's machine: the wizard opens at 540x480
+    // when launched via a steam://install/ URI, with the Install button
+    // below the fold. 760 was confirmed reachable.
+    const plan = steamGuidedInstall('C:\\Steam', 'steam://install/440', 'win32')
+    expect(plan?.minHeight).toBe(760)
+  })
+
   it('carries the explanation for a dialog that never appears', () => {
     const plan = steamGuidedInstall('C:\\Steam', 'steam://install/440', 'win32')
     expect(plan?.timeoutNotice).toBeTruthy()

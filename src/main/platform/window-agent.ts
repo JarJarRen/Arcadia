@@ -90,14 +90,15 @@ catch { try { [void][U]::SetProcessDPIAware() } catch { } }
 # a level deeper instead. This read like a correctness guard; it was the
 # opposite, and the direct assignment below is the form that actually
 # unwraps to a flat array.
-$names   = $env:ARCADIA_AGENT_PROCESSES | ConvertFrom-Json
-$ignore  = $env:ARCADIA_AGENT_IGNORE_TITLES | ConvertFrom-Json
-$target  = $env:ARCADIA_AGENT_TARGET | ConvertFrom-Json
-$argv    = $env:ARCADIA_AGENT_ARGS | ConvertFrom-Json
-$exe     = $env:ARCADIA_AGENT_EXE
-$owner   = [IntPtr][int64]$env:ARCADIA_AGENT_OWNER
-$timeout = [int]$env:ARCADIA_AGENT_TIMEOUT_MS
-$settle  = [int]$env:ARCADIA_AGENT_SETTLE_MS
+$names     = $env:ARCADIA_AGENT_PROCESSES | ConvertFrom-Json
+$ignore    = $env:ARCADIA_AGENT_IGNORE_TITLES | ConvertFrom-Json
+$target    = $env:ARCADIA_AGENT_TARGET | ConvertFrom-Json
+$argv      = $env:ARCADIA_AGENT_ARGS | ConvertFrom-Json
+$exe       = $env:ARCADIA_AGENT_EXE
+$owner     = [IntPtr][int64]$env:ARCADIA_AGENT_OWNER
+$timeout   = [int]$env:ARCADIA_AGENT_TIMEOUT_MS
+$settle    = [int]$env:ARCADIA_AGENT_SETTLE_MS
+$minHeight = [int]$env:ARCADIA_AGENT_MIN_HEIGHT
 
 $SWP_NOSIZE     = 0x0001
 $SWP_NOMOVE     = 0x0002
@@ -175,18 +176,34 @@ function Set-Centred($window) {
   $work = $null
   if ([U]::GetMonitorInfo($monitor, [ref]$info)) { $work = $info.rcWork }
 
+  # Steam's install wizard opens too short to reach its own Install button
+  # when started from a URI. Growing it here is the fix, but never past the
+  # work area: a dialog taller than the screen would trade one unreachable
+  # button for another.
+  $targetHeight = [Math]::Max($height, $minHeight)
+  if ($null -ne $work) {
+    $targetHeight = [Math]::Min($targetHeight, $work.Bottom - $work.Top)
+  }
+  $resize = $targetHeight -ne $height
+
   $x = [int]($target.x + ($target.width - $width) / 2)
-  $y = [int]($target.y + ($target.height - $height) / 2)
+  $y = [int]($target.y + ($target.height - $targetHeight) / 2)
 
   # Clamped into the work area so a dialog larger than Arcadia, or an
   # Arcadia half off-screen, cannot push it under the taskbar or past the
   # edge of the monitor.
   if ($null -ne $work) {
     $x = [Math]::Max($work.Left, [Math]::Min($x, $work.Right - $width))
-    $y = [Math]::Max($work.Top, [Math]::Min($y, $work.Bottom - $height))
+    $y = [Math]::Max($work.Top, [Math]::Min($y, $work.Bottom - $targetHeight))
   }
 
-  $moved = [U]::SetWindowPos($window, $HWND_TOP, $x, $y, 0, 0, ($SWP_NOSIZE -bor $SWP_SHOWWINDOW))
+  # SWP_NOSIZE only comes off when the height is actually growing. Width is
+  # never part of that: only the too-short dimension gets fixed.
+  if ($resize) {
+    $moved = [U]::SetWindowPos($window, $HWND_TOP, $x, $y, $width, $targetHeight, $SWP_SHOWWINDOW)
+  } else {
+    $moved = [U]::SetWindowPos($window, $HWND_TOP, $x, $y, 0, 0, ($SWP_NOSIZE -bor $SWP_SHOWWINDOW))
+  }
 
   # Topmost and straight back again. That lifts the window to the front of
   # the z-order without this process needing to own the foreground lock,
@@ -200,6 +217,33 @@ function Set-Centred($window) {
   [void][U]::SetForegroundWindow($window)
 
   return $moved
+}
+
+# Demotes every qualifying store window except one, unconditionally —
+# including a window that was already open before the launch. A pre-existing
+# Steam client is not a "new" window, so the novelty filter in
+# Get-NewStoreWindows never sees it, yet Steam raises that same window the
+# moment it handles the install URI. This is what pushes it back down.
+function Set-BehindArcadia($exclude) {
+  # Nothing to sit behind without a real owner window. Passing IntPtr.Zero
+  # to SetWindowPos means HWND_TOP, which would raise these windows instead
+  # of lowering them — the exact opposite of the intent.
+  if ($owner -eq [IntPtr]::Zero) { return }
+
+  $ids = Get-StorePids
+  foreach ($window in [U]::TopLevel()) {
+    if ($window -eq $exclude) { continue }
+    if (-not [U]::IsWindowVisible($window)) { continue }
+    if (-not $ids.ContainsKey([U]::Pid($window))) { continue }
+    if (([U]::GetWindowLongValue($window, -20) -band 0x00000080) -ne 0) { continue }
+
+    $rect = New-Object RECT
+    if (-not [U]::GetWindowRect($window, [ref]$rect)) { continue }
+    if (($rect.Right - $rect.Left) -lt 200) { continue }
+    if (($rect.Bottom - $rect.Top) -lt 150) { continue }
+
+    [void][U]::SetWindowPos($window, $owner, 0, 0, 0, 0, ($SWP_NOMOVE -bor $SWP_NOSIZE -bor $SWP_NOACTIVATE))
+  }
 }
 
 $seen = Get-AllStoreWindows
@@ -230,16 +274,14 @@ if ($null -eq $wizard) {
 
 if (Set-Centred $wizard) { Emit @{ event = 'placed'; ok = $true; hwnd = [int64]$wizard } }
 else { Emit @{ event = 'placed'; ok = $false; reason = 'denied' } }
-$seen[[int64]$wizard] = $true
 
-# Belt and braces for -silent not being honoured: anything else the store
-# opens from here goes directly below Arcadia instead of over it.
+# Belt and braces for -silent not being honoured, and the fix for a Steam
+# that was already running: every qualifying store window but the wizard
+# goes behind Arcadia, repeatedly, for the length of the settle window —
+# deliberately not limited to windows that appeared after the launch.
 $settleEnd = [DateTime]::UtcNow.AddMilliseconds($settle)
 while ([DateTime]::UtcNow -lt $settleEnd) {
-  foreach ($window in (Get-NewStoreWindows $seen)) {
-    [void][U]::SetWindowPos($window, $owner, 0, 0, 0, 0, ($SWP_NOMOVE -bor $SWP_NOSIZE -bor $SWP_NOACTIVATE))
-    $seen[[int64]$window] = $true
-  }
+  Set-BehindArcadia $wizard
   Start-Sleep -Milliseconds 250
 }
 

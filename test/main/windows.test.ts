@@ -20,6 +20,7 @@ function request(overrides: Partial<AgentRequest> = {}): AgentRequest {
     owner: '65840',
     timeoutMs: 30000,
     settleMs: 5000,
+    minHeight: 760,
     ...overrides
   }
 }
@@ -72,6 +73,7 @@ describe('buildAgentEnv', () => {
     expect(env.ARCADIA_AGENT_OWNER).toBe('65840')
     expect(env.ARCADIA_AGENT_TIMEOUT_MS).toBe('30000')
     expect(env.ARCADIA_AGENT_SETTLE_MS).toBe('5000')
+    expect(env.ARCADIA_AGENT_MIN_HEIGHT).toBe('760')
   })
 })
 

@@ -117,7 +117,8 @@ async function guided(
     target: frame.target,
     owner: frame.owner,
     timeoutMs: TIMEOUT_MS,
-    settleMs: SETTLE_MS
+    settleMs: SETTLE_MS,
+    minHeight: plan.minHeight
   })
   current = handle
 

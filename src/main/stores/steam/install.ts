@@ -19,6 +19,16 @@ const MAIN_WINDOW_TITLE = 'Steam'
 const PROCESS_NAMES = ['steam.exe', 'steamwebhelper.exe']
 
 /**
+ * Height the install wizard is grown to when it opens shorter than this.
+ *
+ * Measured on the owner's machine: launched via a `steam://install/` URI
+ * the wizard opens at 540x480, natural size, with the Install button below
+ * the fold — it needs scrolling to reach. Resized by hand to 540x760, the
+ * button was on screen without scrolling. 760 is that verified height.
+ */
+const WIZARD_MIN_HEIGHT = 760
+
+/**
  * Builds the guided route, or nothing where there is none.
  *
  * `win32.join` rather than the ambient `join` for the same reason as in
@@ -41,6 +51,7 @@ export function steamGuidedInstall(
     args: ['-silent', installUri],
     processNames: PROCESS_NAMES,
     ignoreTitles: [MAIN_WINDOW_TITLE],
+    minHeight: WIZARD_MIN_HEIGHT,
     timeoutNotice: t().stores.steam.noInstallDialog
   }
 }
