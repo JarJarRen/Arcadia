@@ -124,8 +124,18 @@ const FRAME = {
 function fakeAgent(
   started: boolean,
   placed: PlacedEvent | undefined
-): { assist: { frame: () => typeof FRAME; run: () => AgentHandle }; cancels: () => number } {
+): {
+  assist: {
+    frame: () => typeof FRAME
+    run: () => AgentHandle
+    setAlwaysOnTop: (value: boolean) => void
+  }
+  cancels: () => number
+  /** Every setAlwaysOnTop call, in order — true/false as it was invoked. */
+  onTopCalls: () => boolean[]
+} {
   let cancels = 0
+  const onTop: boolean[] = []
   return {
     assist: {
       frame: () => FRAME,
@@ -137,9 +147,13 @@ function fakeAgent(
         cancel: () => {
           cancels += 1
         }
-      })
+      }),
+      setAlwaysOnTop: (value) => {
+        onTop.push(value)
+      }
     },
-    cancels: () => cancels
+    cancels: () => cancels,
+    onTopCalls: () => onTop
   }
 }
 
@@ -182,7 +196,8 @@ describe('guided install', () => {
         placed: Promise.resolve(undefined),
         finished: Promise.resolve(),
         cancel: () => {}
-      })
+      }),
+      setAlwaysOnTop: () => {}
     })
 
     expect(result).toEqual({ ok: true })
@@ -218,6 +233,9 @@ describe('guided install', () => {
       frame: () => undefined,
       run: () => {
         throw new Error('must not run the agent without a frame')
+      },
+      setAlwaysOnTop: () => {
+        throw new Error('must not touch always-on-top without a frame')
       }
     })
 
@@ -238,6 +256,9 @@ describe('guided install', () => {
 
     expect(result).toEqual({ ok: true })
     expect(opened).toEqual(['epic://install'])
+    // The plain shell.openExternal route must not touch always-on-top at
+    // all — only the guided path, which this adapter never enters, does.
+    expect(agent.onTopCalls()).toEqual([])
   })
 
   it('reports a bad game ID without starting an agent', async () => {
@@ -251,6 +272,9 @@ describe('guided install', () => {
       frame: () => FRAME,
       run: () => {
         throw new Error('must not run the agent for an invalid ID')
+      },
+      setAlwaysOnTop: () => {
+        throw new Error('must not touch always-on-top for an invalid ID')
       }
     })
 
@@ -273,7 +297,8 @@ describe('guided install', () => {
     }
     void installGame([guidedAdapter()], game('steam'), {
       frame: agent.assist.frame,
-      run: () => handle
+      run: () => handle,
+      setAlwaysOnTop: agent.assist.setAlwaysOnTop
     })
     // Let the bridge get as far as awaiting the placement.
     await Promise.resolve()
@@ -304,7 +329,8 @@ describe('guided install', () => {
     let settled = false
     const install = installGame([guidedAdapter()], game('steam'), {
       frame: () => FRAME,
-      run: () => handle
+      run: () => handle,
+      setAlwaysOnTop: () => {}
     })
     void install.then(() => {
       settled = true
@@ -343,7 +369,8 @@ describe('guided install', () => {
 
     void installGame([guidedAdapter()], game('steam'), {
       frame: () => FRAME,
-      run: () => handle
+      run: () => handle,
+      setAlwaysOnTop: () => {}
     })
 
     // Let the bridge get past `placed` and into awaiting `finished`.
@@ -356,5 +383,82 @@ describe('guided install', () => {
 
   it('cancelling with no install running does nothing', () => {
     expect(() => cancelInstall()).not.toThrow()
+  })
+})
+
+describe('always-on-top', () => {
+  beforeEach(() => {
+    opened.length = 0
+    cancelInstall()
+  })
+
+  it('is set before the agent runs and cleared once it finishes, in that order', async () => {
+    const events: string[] = []
+    let resolveFinished: (() => void) | undefined
+    const handle: AgentHandle = {
+      started: Promise.resolve(true),
+      startedDetail: Promise.resolve(undefined),
+      placed: Promise.resolve({ ok: true, hwnd: 9 }),
+      finished: new Promise((resolve) => {
+        resolveFinished = resolve
+      }),
+      cancel: () => {}
+    }
+
+    const install = installGame([guidedAdapter()], game('steam'), {
+      frame: () => FRAME,
+      run: () => {
+        events.push('run')
+        return handle
+      },
+      setAlwaysOnTop: (value: boolean) => {
+        events.push(value ? 'on' : 'off')
+      }
+    })
+
+    // Let the bridge get as far as awaiting `finished` — everything up to
+    // and including starting the agent must have already happened by now.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(events).toEqual(['on', 'run'])
+
+    resolveFinished?.()
+    await install
+
+    expect(events).toEqual(['on', 'run', 'off'])
+  })
+
+  it('is cleared on the started:false fallback path', async () => {
+    const agent = fakeAgent(false, undefined)
+    await installGame([guidedAdapter()], game('steam'), agent.assist)
+
+    expect(agent.onTopCalls()).toEqual([true, false])
+  })
+
+  it('is cleared when the agent reports a timeout', async () => {
+    const agent = fakeAgent(true, { ok: false, reason: 'timeout' })
+    await installGame([guidedAdapter()], game('steam'), agent.assist)
+
+    expect(agent.onTopCalls()).toEqual([true, false])
+  })
+
+  it('is cleared even when the agent throws', async () => {
+    // Proves the finally actually holds: a plain call on the success path
+    // only would miss this entirely, and Arcadia would be stuck
+    // always-on-top for good.
+    const onTop: boolean[] = []
+
+    await expect(
+      installGame([guidedAdapter()], game('steam'), {
+        frame: () => FRAME,
+        run: () => {
+          throw new Error('boom')
+        },
+        setAlwaysOnTop: (value: boolean) => {
+          onTop.push(value)
+        }
+      })
+    ).rejects.toThrow('boom')
+
+    expect(onTop).toEqual([true, false])
   })
 })

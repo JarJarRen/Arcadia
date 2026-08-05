@@ -33,6 +33,14 @@ export interface InstallAssist {
   frame: () => InstallFrame | undefined
   /** Injection point for tests. In production the real agent runs. */
   run?: typeof runWindowAgent
+  /**
+   * Holds Arcadia above Steam's windows, or releases it.
+   *
+   * Replaces pushing Steam's windows down every guard tick — a fight Steam
+   * kept winning by raising itself again. Holding the z-order from Arcadia's
+   * side instead leaves nothing to fight.
+   */
+  setAlwaysOnTop: (value: boolean) => void
 }
 
 /** How long to wait for the store's dialog before giving up on it. */
@@ -116,52 +124,62 @@ async function guided(
   // Before starting the next one, so the two never overlap.
   cancelInstall()
 
-  const run = assist.run ?? runWindowAgent
-  const handle = run({
-    exe: plan.exe,
-    args: plan.args,
-    processNames: plan.processNames,
-    ignoreTitles: plan.ignoreTitles,
-    target: frame.target,
-    owner: frame.owner,
-    timeoutMs: TIMEOUT_MS,
-    guardMs: GUARD_MS,
-    minHeight: plan.minHeight
-  })
-  current = handle
+  // Cleared in the finally below on every exit path — success, timeout,
+  // denied placement, a cancelled agent, the started:false fallback, or
+  // something throwing. Leaving Arcadia stuck always-on-top would be a far
+  // worse bug than the one this guards against, so the finally is the point
+  // of this, not an afterthought.
+  assist.setAlwaysOnTop(true)
+  try {
+    const run = assist.run ?? runWindowAgent
+    const handle = run({
+      exe: plan.exe,
+      args: plan.args,
+      processNames: plan.processNames,
+      ignoreTitles: plan.ignoreTitles,
+      target: frame.target,
+      owner: frame.owner,
+      timeoutMs: TIMEOUT_MS,
+      guardMs: GUARD_MS,
+      minHeight: plan.minHeight
+    })
+    current = handle
 
-  if (!(await handle.started)) {
-    // The agent is what starts the store, so an agent that never got that
-    // far has installed nothing. Without this the click does nothing at
-    // all — no window, no error, no download.
-    const detail = await handle.startedDetail
-    // Console-only: whoever reads this is debugging, not playing, so it
-    // stays out of the translated strings in shared/i18n.ts.
-    if (detail !== undefined) console.error('Window agent failed to start the store:', detail)
+    if (!(await handle.started)) {
+      // The agent is what starts the store, so an agent that never got that
+      // far has installed nothing. Without this the click does nothing at
+      // all — no window, no error, no download.
+      const detail = await handle.startedDetail
+      // Console-only: whoever reads this is debugging, not playing, so it
+      // stays out of the translated strings in shared/i18n.ts.
+      if (detail !== undefined) console.error('Window agent failed to start the store:', detail)
+      if (current === handle) current = undefined
+      return open(adapters, game, 'install')
+    }
+
+    const placed = await handle.placed
+
+    // A timeout is the only outcome worth a word. A refused placement means
+    // the install is running and only the window could not be moved, and a
+    // cancelled agent means the user asked for the waiting to stop.
+    const outcome: LaunchResult =
+      placed?.ok === false && placed.reason === 'timeout'
+        ? { ok: true, notice: plan.timeoutNotice }
+        : { ok: true }
+
+    // Deliberately outlives the placement: the renderer's overlay is up for
+    // exactly as long as this promise is pending, and it is meant to cover
+    // the store's dialog for as long as the dialog is open, not clear the
+    // instant it appears. `current` has to stay set for the same span, or
+    // cancelInstall() — Escape or a backdrop press on the overlay — would
+    // have no agent left to cancel while the wizard is still up.
+    await handle.finished
     if (current === handle) current = undefined
-    return open(adapters, game, 'install')
+
+    return outcome
+  } finally {
+    assist.setAlwaysOnTop(false)
   }
-
-  const placed = await handle.placed
-
-  // A timeout is the only outcome worth a word. A refused placement means
-  // the install is running and only the window could not be moved, and a
-  // cancelled agent means the user asked for the waiting to stop.
-  const outcome: LaunchResult =
-    placed?.ok === false && placed.reason === 'timeout'
-      ? { ok: true, notice: plan.timeoutNotice }
-      : { ok: true }
-
-  // Deliberately outlives the placement: the renderer's overlay is up for
-  // exactly as long as this promise is pending, and it is meant to cover
-  // the store's dialog for as long as the dialog is open, not clear the
-  // instant it appears. `current` has to stay set for the same span, or
-  // cancelInstall() — Escape or a backdrop press on the overlay — would
-  // have no agent left to cancel while the wizard is still up.
-  await handle.finished
-  if (current === handle) current = undefined
-
-  return outcome
 }
 
 async function open(

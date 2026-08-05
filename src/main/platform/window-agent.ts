@@ -56,6 +56,7 @@ public static class U {
   [DllImport("user32.dll")] public static extern bool GetMonitorInfo(IntPtr monitor, ref MONITORINFO info);
   [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr context);
   [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr window, int command);
 
   public static IntPtr[] TopLevel() {
     List<IntPtr> found = new List<IntPtr>();
@@ -108,6 +109,7 @@ $SWP_SHOWWINDOW = 0x0040
 $HWND_TOP       = [IntPtr]0
 $HWND_TOPMOST   = [IntPtr](-1)
 $HWND_NOTOPMOST = [IntPtr](-2)
+$SW_MINIMIZE    = 6
 
 # Written straight to the console rather than down the pipeline: the parent
 # acts on 'started' before anything else happens, so it must not sit in a
@@ -206,12 +208,23 @@ function Set-Centred($window) {
     $moved = [U]::SetWindowPos($window, $HWND_TOP, $x, $y, 0, 0, ($SWP_NOSIZE -bor $SWP_SHOWWINDOW))
   }
 
-  # Topmost and straight back again. That lifts the window to the front of
-  # the z-order without this process needing to own the foreground lock,
-  # which as a background process it does not.
   $flags = ($SWP_NOMOVE -bor $SWP_NOSIZE -bor $SWP_NOACTIVATE)
-  [void][U]::SetWindowPos($window, $HWND_TOPMOST, 0, 0, 0, 0, $flags)
-  [void][U]::SetWindowPos($window, $HWND_NOTOPMOST, 0, 0, 0, 0, $flags)
+  if ($owner -eq [IntPtr]::Zero) {
+    # No Arcadia window to end up behind, so the old trick is enough here:
+    # topmost and straight back again lifts the wizard to the front of the
+    # z-order without this process needing to own the foreground lock, which
+    # as a background process it does not.
+    [void][U]::SetWindowPos($window, $HWND_TOPMOST, 0, 0, 0, 0, $flags)
+    [void][U]::SetWindowPos($window, $HWND_NOTOPMOST, 0, 0, 0, 0, $flags)
+  } else {
+    # Pinned topmost and left there, rather than bounced straight back down.
+    # Arcadia now holds itself always-on-top for as long as the agent runs
+    # (setAlwaysOnTop, called from ipc.ts around this whole run), so a
+    # wizard that only touched the front of the ordinary z-order would land
+    # right back behind it. The guard loop below puts this back to
+    # HWND_NOTOPMOST once the wizard is no longer its concern.
+    [void][U]::SetWindowPos($window, $HWND_TOPMOST, 0, 0, 0, 0, $flags)
+  }
 
   # Focus on top of that where Windows allows it. A refusal costs nothing:
   # the window is already visible and the first click will focus it.
@@ -225,6 +238,12 @@ function Set-Centred($window) {
 # Steam client is not a "new" window, so the novelty filter in
 # Get-NewStoreWindows never sees it, yet Steam raises that same window the
 # moment it handles the install URI. This is what pushes it back down.
+#
+# Kept even though Arcadia now holds its own always-on-top from the Electron
+# side (see setAlwaysOnTop in ipc.ts): that makes this mostly redundant, but
+# "mostly" is doing real work in that sentence — it still covers the case
+# where always-on-top does not take effect, and a demotion that costs one
+# SetWindowPos call per tick is cheap insurance against that.
 function Set-BehindArcadia($exclude) {
   # Nothing to sit behind without a real owner window. Passing IntPtr.Zero
   # to SetWindowPos means HWND_TOP, which would raise these windows instead
@@ -247,7 +266,44 @@ function Set-BehindArcadia($exclude) {
   }
 }
 
+# A store Arcadia had to start itself should never show its client window at
+# all — that is the original design, and -silent does not reliably deliver
+# it on a cold start. Demoting that window with Set-BehindArcadia leaves it
+# sitting behind Arcadia instead of gone, which still reads as wrong, so a
+# window whose title is exactly one of $ignore gets minimised instead.
+#
+# A store that was already running before Arcadia launched it is a different
+# case entirely: that window is the user's, not something Arcadia opened on
+# their behalf, so $startedStore being false leaves it alone — demoted like
+# any other store window, but never minimised out from under them.
+function Set-ClientMinimised($minimised) {
+  if (-not $startedStore) { return }
+
+  $ids = Get-StorePids
+  foreach ($window in [U]::TopLevel()) {
+    $key = [int64]$window
+    # Minimised at most once: re-minimising every tick would fight a user
+    # who deliberately restored the window, which would be worse than the
+    # problem this exists to fix. The hashtable remembers that choice for
+    # good, regardless of what the window does afterwards.
+    if ($minimised.ContainsKey($key)) { continue }
+    if (-not [U]::IsWindowVisible($window)) { continue }
+    if (-not $ids.ContainsKey([U]::Pid($window))) { continue }
+    if ($ignore -notcontains ([U]::Title($window))) { continue }
+
+    [void][U]::ShowWindow($window, $SW_MINIMIZE)
+    $minimised[$key] = $true
+  }
+}
+
 $seen = Get-AllStoreWindows
+
+# Whether Arcadia is the one starting the store, taken before Start-Process
+# so the answer reflects the world as it was before this process changed it.
+# Empty means Arcadia started it from nothing; anything else means the user
+# already had it running, and Set-ClientMinimised uses exactly this to tell
+# the two cases apart.
+$startedStore = ((Get-StorePids).Count -eq 0)
 
 try {
   if ($argv.Count -gt 0) { Start-Process -FilePath $exe -ArgumentList $argv | Out-Null }
@@ -280,11 +336,25 @@ else { Emit @{ event = 'placed'; ok = $false; reason = 'denied' } }
 # done with the wizard, so the demotion has to last as long as the wizard
 # does. Stopping when Arcadia itself is gone keeps this process from
 # outliving the app that started it.
+$minimised = @{}
 $guardEnd = [DateTime]::UtcNow.AddMilliseconds($guard)
 while ([DateTime]::UtcNow -lt $guardEnd -and [U]::IsWindow($wizard)) {
   if ($owner -ne [IntPtr]::Zero -and -not [U]::IsWindow($owner)) { break }
   Set-BehindArcadia $wizard
+  Set-ClientMinimised $minimised
   Start-Sleep -Milliseconds 250
+}
+
+# The wizard was pinned topmost in Set-Centred so it would not fall behind
+# Arcadia's own always-on-top. Left there past this point it would outlive
+# its reason to be there — a lingering dialog stuck above every other window
+# on the desktop for good. A no-op when the wizard was never pinned in the
+# first place (no owner), since HWND_NOTOPMOST is documented as doing
+# nothing to a window that is already not topmost.
+if ([U]::IsWindow($wizard)) {
+  [void][U]::SetWindowPos(
+    $wizard, $HWND_NOTOPMOST, 0, 0, 0, 0, ($SWP_NOMOVE -bor $SWP_NOSIZE -bor $SWP_NOACTIVATE)
+  )
 }
 
 # Steam focuses its own client when the wizard closes, which drops the user

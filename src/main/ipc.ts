@@ -123,6 +123,19 @@ function installFrame(window: BrowserWindow | undefined): InstallFrame | undefin
   }
 }
 
+/**
+ * Toggles Arcadia holding itself above Steam's windows.
+ *
+ * Same destroyed-window guard as `installFrame`: the agent's `finally` can
+ * still be clearing this after the window it targets is already gone, and a
+ * destroyed `BrowserWindow` throws on any method call rather than reporting
+ * itself unusable.
+ */
+function setInstallAlwaysOnTop(window: BrowserWindow | undefined, value: boolean): void {
+  if (window === undefined || window.isDestroyed()) return
+  window.setAlwaysOnTop(value)
+}
+
 export function registerIpcHandlers(context: IpcContext): void {
   const notifyChanged = (): void => {
     context.getWindow()?.webContents.send(IPC.libraryChanged)
@@ -167,7 +180,8 @@ export function registerIpcHandlers(context: IpcContext): void {
         return { ok: false, error: t().errors.unknownGame(gameId) }
       }
       return await installGame(context.adapters, game, {
-        frame: () => installFrame(context.getWindow())
+        frame: () => installFrame(context.getWindow()),
+        setAlwaysOnTop: (value) => setInstallAlwaysOnTop(context.getWindow(), value)
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
