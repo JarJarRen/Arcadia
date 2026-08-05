@@ -37,7 +37,7 @@ export function InstallOverlay({ store, onDismiss }: Props): ReactElement {
       <div className="modal__box modal__box--install" ref={box} role="status" aria-live="polite">
         <span className="install__spinner" aria-hidden="true" />
         <h2 className="modal__title">{t().install.overlayTitle(store)}</h2>
-        <p className="modal__hint">{t().install.overlayBody}</p>
+        <p className="modal__hint">{t().install.overlayBody(store)}</p>
         <p className="modal__hint">{t().install.overlayDismiss}</p>
       </div>
     </div>

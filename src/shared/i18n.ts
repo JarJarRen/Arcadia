@@ -124,9 +124,9 @@ export interface Strings {
   }
 
   install: {
-    /** e.g. "Opening Steam's install dialog…" */
+    /** e.g. "Installing through Steam" */
     overlayTitle: (store: string) => string
-    overlayBody: string
+    overlayBody: (store: string) => string
     overlayDismiss: string
   }
 
@@ -361,8 +361,8 @@ const en: Strings = {
   },
 
   install: {
-    overlayTitle: (store) => `Opening ${store}'s install dialog…`,
-    overlayBody: 'This can take a moment while the store starts.',
+    overlayTitle: (store) => `Installing through ${store}`,
+    overlayBody: (store) => `The ${store} dialog handles this step. Arcadia is waiting for it.`,
     overlayDismiss: 'Press Esc to keep browsing'
   },
 
@@ -629,8 +629,8 @@ const de: Strings = {
   },
 
   install: {
-    overlayTitle: (store) => `${store}-Installationsdialog wird geöffnet…`,
-    overlayBody: 'Das kann einen Moment dauern, während der Store startet.',
+    overlayTitle: (store) => `Installation über ${store}`,
+    overlayBody: (store) => `Diesen Schritt übernimmt der ${store}-Dialog. Arcadia wartet darauf.`,
     overlayDismiss: 'Zum Weiterstöbern Esc drücken'
   },
 

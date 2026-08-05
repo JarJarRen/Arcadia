@@ -133,6 +133,7 @@ function fakeAgent(
         started: Promise.resolve(started),
         startedDetail: Promise.resolve(undefined),
         placed: Promise.resolve(placed),
+        finished: Promise.resolve(),
         cancel: () => {
           cancels += 1
         }
@@ -179,6 +180,7 @@ describe('guided install', () => {
         started: Promise.resolve(false),
         startedDetail: Promise.resolve('boom'),
         placed: Promise.resolve(undefined),
+        finished: Promise.resolve(),
         cancel: () => {}
       })
     })
@@ -264,6 +266,7 @@ describe('guided install', () => {
       startedDetail: Promise.resolve(undefined),
       // Never settles, so the agent is still current when cancel arrives.
       placed: new Promise(() => {}),
+      finished: new Promise(() => {}),
       cancel: () => {
         cancelled += 1
       }
@@ -275,6 +278,76 @@ describe('guided install', () => {
     // Let the bridge get as far as awaiting the placement.
     await Promise.resolve()
     await Promise.resolve()
+
+    cancelInstall()
+
+    expect(cancelled).toBe(1)
+  })
+
+  it('does not resolve while the agent is still finishing, only once it does', async () => {
+    // The important regression test: without `await handle.finished` in
+    // guided(), this would resolve the instant `placed` does — exactly the
+    // bug being fixed. The overlay's lifetime is this promise's lifetime, so
+    // it has to stay pending for as long as the agent — and therefore the
+    // wizard — is still open.
+    let resolveFinished: (() => void) | undefined
+    const handle: AgentHandle = {
+      started: Promise.resolve(true),
+      startedDetail: Promise.resolve(undefined),
+      placed: Promise.resolve({ ok: true, hwnd: 9 }),
+      finished: new Promise((resolve) => {
+        resolveFinished = resolve
+      }),
+      cancel: () => {}
+    }
+
+    let settled = false
+    const install = installGame([guidedAdapter()], game('steam'), {
+      frame: () => FRAME,
+      run: () => handle
+    })
+    void install.then(() => {
+      settled = true
+    })
+
+    // A real timer rather than another microtask: it only fires once every
+    // microtask already queued between here and `handle.finished` has
+    // drained, however many that is. Nothing else can move this promise
+    // forward, so if it has settled by the time this fires, the await on
+    // `finished` is missing.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(settled).toBe(false)
+
+    resolveFinished?.()
+
+    expect(await install).toEqual({ ok: true })
+    expect(settled).toBe(true)
+  })
+
+  it('can still be cancelled while only waiting on the agent to finish', async () => {
+    // The regression the `current` bookkeeping move could cause: if
+    // `current` were cleared as soon as `placed` resolves rather than after
+    // `finished` does, cancelInstall() — which Escape and a backdrop press
+    // on the overlay both call — would find no agent left to cancel while
+    // the wizard is still open.
+    let cancelled = 0
+    const handle: AgentHandle = {
+      started: Promise.resolve(true),
+      startedDetail: Promise.resolve(undefined),
+      placed: Promise.resolve({ ok: true, hwnd: 9 }),
+      finished: new Promise(() => {}),
+      cancel: () => {
+        cancelled += 1
+      }
+    }
+
+    void installGame([guidedAdapter()], game('steam'), {
+      frame: () => FRAME,
+      run: () => handle
+    })
+
+    // Let the bridge get past `placed` and into awaiting `finished`.
+    await new Promise((resolve) => setTimeout(resolve, 0))
 
     cancelInstall()
 

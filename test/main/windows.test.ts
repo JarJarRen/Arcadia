@@ -197,6 +197,21 @@ describe('runWindowAgent', () => {
 
     fake.emit('{"event":"placed","ok":true,"hwnd":77}')
     expect(await handle.placed).toEqual({ ok: true, reason: undefined, hwnd: 77 })
+
+    fake.emit('{"event":"done"}')
+    await expect(handle.finished).resolves.toBeUndefined()
+  })
+
+  it('settles finished on exit even when the agent never sends done', async () => {
+    // A killed or crashed agent has to settle this too — otherwise a caller
+    // awaiting it, namely the install bridge, would wait forever.
+    const fake = fakeProcess()
+    const handle = runWindowAgent(request(), () => fake)
+
+    fake.emit('{"event":"started","ok":true}')
+    fake.exit()
+
+    await expect(handle.finished).resolves.toBeUndefined()
   })
 
   it('reports a launch that never happened when the agent dies silently', async () => {

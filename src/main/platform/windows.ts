@@ -63,6 +63,13 @@ export interface AgentHandle {
   startedDetail: Promise<string | undefined>
   /** How the placement ended, or undefined if the agent died first. */
   placed: Promise<PlacedEvent | undefined>
+  /**
+   * Settles once the agent has nothing further to report — a `done` event,
+   * or the process exiting without ever sending one. Both have to settle
+   * it, or a killed or crashed agent would leave a caller awaiting this
+   * forever.
+   */
+  finished: Promise<void>
   cancel: () => void
 }
 
@@ -246,6 +253,7 @@ export function runWindowAgent(
   const started = deferred<boolean>()
   const startedDetail = deferred<string | undefined>()
   const placed = deferred<PlacedEvent | undefined>()
+  const finished = deferred<void>()
 
   // The wizard timeout and the guard ceiling are the script's own deadlines,
   // enforced inside its loops — they never get a chance to fire if
@@ -286,15 +294,22 @@ export function runWindowAgent(
       // what remains is the script's own bounded wait, not a stall.
       clearTimeout(guard)
     }
+    if (event.event === 'done') {
+      finished.resolve()
+    }
   })
 
   child.onExit(() => {
-    // All three are no-ops once settled. An agent that dies before saying
+    // All four are no-ops once settled. An agent that dies before saying
     // anything therefore reports a launch that never happened — which is
     // exactly the signal the caller needs to run the URI itself.
     started.resolve(false)
     startedDetail.resolve(undefined)
     placed.resolve(undefined)
+    // A killed or crashed agent never gets to emit its own `done`, so exit
+    // has to settle this the same way — otherwise a caller waiting on it
+    // would wait forever.
+    finished.resolve()
     // The run is over one way or another, so the guard must not outlive it.
     clearTimeout(guard)
   })
@@ -303,6 +318,7 @@ export function runWindowAgent(
     started: started.promise,
     startedDetail: startedDetail.promise,
     placed: placed.promise,
+    finished: finished.promise,
     cancel: () => child.kill()
   }
 }

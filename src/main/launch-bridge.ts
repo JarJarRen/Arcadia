@@ -143,15 +143,25 @@ async function guided(
   }
 
   const placed = await handle.placed
-  if (current === handle) current = undefined
 
   // A timeout is the only outcome worth a word. A refused placement means
   // the install is running and only the window could not be moved, and a
   // cancelled agent means the user asked for the waiting to stop.
-  if (placed?.ok === false && placed.reason === 'timeout') {
-    return { ok: true, notice: plan.timeoutNotice }
-  }
-  return { ok: true }
+  const outcome: LaunchResult =
+    placed?.ok === false && placed.reason === 'timeout'
+      ? { ok: true, notice: plan.timeoutNotice }
+      : { ok: true }
+
+  // Deliberately outlives the placement: the renderer's overlay is up for
+  // exactly as long as this promise is pending, and it is meant to cover
+  // the store's dialog for as long as the dialog is open, not clear the
+  // instant it appears. `current` has to stay set for the same span, or
+  // cancelInstall() — Escape or a backdrop press on the overlay — would
+  // have no agent left to cancel while the wizard is still up.
+  await handle.finished
+  if (current === handle) current = undefined
+
+  return outcome
 }
 
 async function open(
