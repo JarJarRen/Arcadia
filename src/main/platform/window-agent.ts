@@ -44,6 +44,7 @@ public static class U {
 
   [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc callback, IntPtr param);
   [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr window);
+  [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr window);
   [DllImport("user32.dll")] public static extern int GetWindowTextLengthW(IntPtr window);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowTextW(IntPtr window, StringBuilder text, int max);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
@@ -97,7 +98,7 @@ $argv      = $env:ARCADIA_AGENT_ARGS | ConvertFrom-Json
 $exe       = $env:ARCADIA_AGENT_EXE
 $owner     = [IntPtr][int64]$env:ARCADIA_AGENT_OWNER
 $timeout   = [int]$env:ARCADIA_AGENT_TIMEOUT_MS
-$settle    = [int]$env:ARCADIA_AGENT_SETTLE_MS
+$guard     = [int]$env:ARCADIA_AGENT_GUARD_MS
 $minHeight = [int]$env:ARCADIA_AGENT_MIN_HEIGHT
 
 $SWP_NOSIZE     = 0x0001
@@ -275,14 +276,32 @@ if ($null -eq $wizard) {
 if (Set-Centred $wizard) { Emit @{ event = 'placed'; ok = $true; hwnd = [int64]$wizard } }
 else { Emit @{ event = 'placed'; ok = $false; reason = 'denied' } }
 
-# Belt and braces for -silent not being honoured, and the fix for a Steam
-# that was already running: every qualifying store window but the wizard
-# goes behind Arcadia, repeatedly, for the length of the settle window —
-# deliberately not limited to windows that appeared after the launch.
-$settleEnd = [DateTime]::UtcNow.AddMilliseconds($settle)
-while ([DateTime]::UtcNow -lt $settleEnd) {
+# Not a fixed pause: Steam raises its client again the moment the user is
+# done with the wizard, so the demotion has to last as long as the wizard
+# does. Stopping when Arcadia itself is gone keeps this process from
+# outliving the app that started it.
+$guardEnd = [DateTime]::UtcNow.AddMilliseconds($guard)
+while ([DateTime]::UtcNow -lt $guardEnd -and [U]::IsWindow($wizard)) {
+  if ($owner -ne [IntPtr]::Zero -and -not [U]::IsWindow($owner)) { break }
   Set-BehindArcadia $wizard
   Start-Sleep -Milliseconds 250
+}
+
+# Steam focuses its own client when the wizard closes, which drops the user
+# out of Arcadia — the one thing this feature exists to prevent. Raising by
+# the topmost bounce works without owning the foreground lock; the
+# SetForegroundWindow attempt on top of it is best effort and its failure
+# costs nothing. Repeated a few times because Steam does not always raise
+# its client immediately.
+if ($owner -ne [IntPtr]::Zero -and [U]::IsWindow($owner) -and -not [U]::IsWindow($wizard)) {
+  $flags = ($SWP_NOMOVE -bor $SWP_NOSIZE -bor $SWP_NOACTIVATE)
+  for ($i = 0; $i -lt 4; $i++) {
+    Set-BehindArcadia ([IntPtr]::Zero)
+    [void][U]::SetWindowPos($owner, $HWND_TOPMOST, 0, 0, 0, 0, $flags)
+    [void][U]::SetWindowPos($owner, $HWND_NOTOPMOST, 0, 0, 0, 0, $flags)
+    [void][U]::SetForegroundWindow($owner)
+    Start-Sleep -Milliseconds 200
+  }
 }
 
 Emit @{ event = 'done' }

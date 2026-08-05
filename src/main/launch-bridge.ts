@@ -38,8 +38,16 @@ export interface InstallAssist {
 /** How long to wait for the store's dialog before giving up on it. */
 const TIMEOUT_MS = 30_000
 
-/** How long to keep pushing further store windows out of the way after. */
-const SETTLE_MS = 5_000
+/**
+ * How long to keep Steam's other windows below Arcadia after placing the
+ * wizard.
+ *
+ * A ceiling, not a duration: the agent stops as soon as the wizard closes.
+ * It is generous because the user decides how long the wizard stays up, and
+ * a guard that expires while they are still choosing a drive is what let
+ * Steam's client climb back over Arcadia.
+ */
+const GUARD_MS = 600_000
 
 /**
  * The agent of the install currently being waited on.
@@ -117,7 +125,7 @@ async function guided(
     target: frame.target,
     owner: frame.owner,
     timeoutMs: TIMEOUT_MS,
-    settleMs: SETTLE_MS,
+    guardMs: GUARD_MS,
     minHeight: plan.minHeight
   })
   current = handle

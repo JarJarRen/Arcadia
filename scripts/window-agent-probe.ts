@@ -28,7 +28,7 @@ async function main(): Promise<void> {
     // which is what the probe wants anyway.
     owner: '0',
     timeoutMs: 15_000,
-    settleMs: 2_000,
+    guardMs: 2_000,
     // The probe's whole job is proving placement works unmodified, so
     // Notepad must come out of it the size it went in.
     minHeight: 0

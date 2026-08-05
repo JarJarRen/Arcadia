@@ -21,7 +21,7 @@ export interface AgentRequest {
   /** Arcadia's window handle, decimal. */
   owner: string
   timeoutMs: number
-  settleMs: number
+  guardMs: number
   /** Height to grow a too-short dialog to. 0 means do not resize. */
   minHeight: number
 }
@@ -95,7 +95,7 @@ export function buildAgentEnv(request: AgentRequest): Record<string, string> {
     ARCADIA_AGENT_TARGET: JSON.stringify(request.target),
     ARCADIA_AGENT_OWNER: request.owner,
     ARCADIA_AGENT_TIMEOUT_MS: String(request.timeoutMs),
-    ARCADIA_AGENT_SETTLE_MS: String(request.settleMs),
+    ARCADIA_AGENT_GUARD_MS: String(request.guardMs),
     ARCADIA_AGENT_MIN_HEIGHT: String(request.minHeight)
   }
 }
@@ -247,13 +247,14 @@ export function runWindowAgent(
   const startedDetail = deferred<string | undefined>()
   const placed = deferred<PlacedEvent | undefined>()
 
-  // The 30 s wizard timeout and 5 s settle window are the script's own
-  // deadlines, enforced inside its loops — they never get a chance to fire
-  // if PowerShell stalls before printing a single line, which a slow or
-  // stuck `Add-Type` compile can do. This is the fallback for exactly that:
-  // comfortably past every deadline the script enforces on itself, so it
-  // only ever catches a genuinely stuck process, never a slow-but-working
-  // one.
+  // The wizard timeout and the guard ceiling are the script's own deadlines,
+  // enforced inside its loops — they never get a chance to fire if
+  // PowerShell stalls before printing a single line, which a slow or stuck
+  // `Add-Type` compile can do. This is the fallback for exactly that. It is
+  // not cleared on `started`, because the script can still wedge while
+  // polling for the wizard, but it is cleared the moment `placed` arrives:
+  // from there the process has demonstrably spoken and may legitimately run
+  // for as long as the guard ceiling allows, which this timer must not race.
   const guard = setTimeout(
     () => {
       child.kill()
@@ -262,7 +263,7 @@ export function runWindowAgent(
       startedDetail.resolve(undefined)
       placed.resolve(undefined)
     },
-    request.timeoutMs + request.settleMs + 15_000
+    request.timeoutMs + request.guardMs + 15_000
   )
   // A pending guard must never keep the Node process open by itself, and
   // under vitest fake timers it must not keep the test run alive either.
@@ -281,6 +282,9 @@ export function runWindowAgent(
       started.resolve(true)
       startedDetail.resolve(undefined)
       placed.resolve({ ok: event.ok, reason: event.reason, hwnd: event.hwnd })
+      // The process has proven it is alive, so the guard's job is done —
+      // what remains is the script's own bounded wait, not a stall.
+      clearTimeout(guard)
     }
   })
 

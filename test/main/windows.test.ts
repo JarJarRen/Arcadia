@@ -19,7 +19,7 @@ function request(overrides: Partial<AgentRequest> = {}): AgentRequest {
     target: { x: 100, y: 50, width: 1200, height: 800 },
     owner: '65840',
     timeoutMs: 30000,
-    settleMs: 5000,
+    guardMs: 5000,
     minHeight: 760,
     ...overrides
   }
@@ -72,7 +72,7 @@ describe('buildAgentEnv', () => {
     })
     expect(env.ARCADIA_AGENT_OWNER).toBe('65840')
     expect(env.ARCADIA_AGENT_TIMEOUT_MS).toBe('30000')
-    expect(env.ARCADIA_AGENT_SETTLE_MS).toBe('5000')
+    expect(env.ARCADIA_AGENT_GUARD_MS).toBe('5000')
     expect(env.ARCADIA_AGENT_MIN_HEIGHT).toBe('760')
   })
 })
@@ -257,12 +257,34 @@ describe('runWindowAgent', () => {
     vi.useFakeTimers()
     const handle = runWindowAgent(req, () => fake)
 
-    await vi.advanceTimersByTimeAsync(req.timeoutMs + req.settleMs + 15_000)
+    await vi.advanceTimersByTimeAsync(req.timeoutMs + req.guardMs + 15_000)
     vi.useRealTimers()
 
     expect(await handle.started).toBe(false)
     expect(await handle.placed).toBeUndefined()
     expect(fake.killed()).toBe(1)
+  })
+
+  it('does not kill the agent long after placed, once it has proven it is alive', async () => {
+    // Before the guard was cleared on `placed`, this was the exact bug: a
+    // wizard the user was still using got killed out from under them once
+    // the clock the guard was started with ran out, even though the process
+    // had already shown it was not stuck.
+    const fake = fakeProcess()
+    const req = request()
+
+    vi.useFakeTimers()
+    const handle = runWindowAgent(req, () => fake)
+
+    fake.emit('{"event":"started","ok":true}')
+    fake.emit('{"event":"placed","ok":true,"hwnd":77}')
+
+    await vi.advanceTimersByTimeAsync(req.timeoutMs + req.guardMs + 15_000)
+    vi.useRealTimers()
+
+    expect(await handle.started).toBe(true)
+    expect(await handle.placed).toEqual({ ok: true, reason: undefined, hwnd: 77 })
+    expect(fake.killed()).toBe(0)
   })
 
   it('hands the built environment and the script to the spawn function', () => {
@@ -293,7 +315,7 @@ describe('runWindowAgent against the real script', () => {
     'starts cmd.exe through the real spawn when there are arguments',
     async () => {
       const handle = runWindowAgent(
-        request({ exe: 'cmd.exe', args: ['/c', 'exit'], timeoutMs: 2000, settleMs: 200 })
+        request({ exe: 'cmd.exe', args: ['/c', 'exit'], timeoutMs: 2000, guardMs: 200 })
       )
 
       expect(await handle.started).toBe(true)
@@ -309,7 +331,7 @@ describe('runWindowAgent against the real script', () => {
     'starts cmd.exe through the real spawn when there are no arguments',
     async () => {
       const handle = runWindowAgent(
-        request({ exe: 'cmd.exe', args: [], timeoutMs: 2000, settleMs: 200 })
+        request({ exe: 'cmd.exe', args: [], timeoutMs: 2000, guardMs: 200 })
       )
 
       expect(await handle.started).toBe(true)
