@@ -233,39 +233,6 @@ function Set-Centred($window) {
   return $moved
 }
 
-# Demotes every qualifying store window except one, unconditionally —
-# including a window that was already open before the launch. A pre-existing
-# Steam client is not a "new" window, so the novelty filter in
-# Get-NewStoreWindows never sees it, yet Steam raises that same window the
-# moment it handles the install URI. This is what pushes it back down.
-#
-# Kept even though Arcadia now holds its own always-on-top from the Electron
-# side (see setAlwaysOnTop in ipc.ts): that makes this mostly redundant, but
-# "mostly" is doing real work in that sentence — it still covers the case
-# where always-on-top does not take effect, and a demotion that costs one
-# SetWindowPos call per tick is cheap insurance against that.
-function Set-BehindArcadia($exclude) {
-  # Nothing to sit behind without a real owner window. Passing IntPtr.Zero
-  # to SetWindowPos means HWND_TOP, which would raise these windows instead
-  # of lowering them — the exact opposite of the intent.
-  if ($owner -eq [IntPtr]::Zero) { return }
-
-  $ids = Get-StorePids
-  foreach ($window in [U]::TopLevel()) {
-    if ($window -eq $exclude) { continue }
-    if (-not [U]::IsWindowVisible($window)) { continue }
-    if (-not $ids.ContainsKey([U]::Pid($window))) { continue }
-    if (([U]::GetWindowLongValue($window, -20) -band 0x00000080) -ne 0) { continue }
-
-    $rect = New-Object RECT
-    if (-not [U]::GetWindowRect($window, [ref]$rect)) { continue }
-    if (($rect.Right - $rect.Left) -lt 200) { continue }
-    if (($rect.Bottom - $rect.Top) -lt 150) { continue }
-
-    [void][U]::SetWindowPos($window, $owner, 0, 0, 0, 0, ($SWP_NOMOVE -bor $SWP_NOSIZE -bor $SWP_NOACTIVATE))
-  }
-}
-
 # A store Arcadia had to start itself should never show its client window at
 # all — that is the original design, and -silent does not reliably deliver
 # it on a cold start. Demoting that window with Set-BehindArcadia leaves it
@@ -338,11 +305,36 @@ else { Emit @{ event = 'placed'; ok = $false; reason = 'denied' } }
 # outliving the app that started it.
 $minimised = @{}
 $guardEnd = [DateTime]::UtcNow.AddMilliseconds($guard)
+# Roughly two seconds of re-centring at 250 ms per pass, then hands off —
+# past this point a user who moves the dialog themselves should not have it
+# yanked back.
+$reassertPasses = 8
+$tick = 0
 while ([DateTime]::UtcNow -lt $guardEnd -and [U]::IsWindow($wizard)) {
   if ($owner -ne [IntPtr]::Zero -and -not [U]::IsWindow($owner)) { break }
-  Set-BehindArcadia $wizard
+
+  # Set-BehindArcadia used to run here, pushing Steam's other windows just
+  # below Arcadia every tick. SetWindowPos promotes whatever it inserts
+  # after a topmost window into the topmost band too, and Arcadia now holds
+  # always-on-top for this whole install — so that "just below" push was
+  # promoting every Steam window into the topmost band instead of keeping
+  # it out, the old mechanism doing the opposite of its purpose.
+
+  if ($owner -ne [IntPtr]::Zero) {
+    # Both windows are already topmost, so this only reorders within the
+    # band rather than promoting anything into it, unlike the call this
+    # replaced.
+    [void][U]::SetWindowPos($owner, $wizard, 0, 0, 0, 0, ($SWP_NOMOVE -bor $SWP_NOSIZE -bor $SWP_NOACTIVATE))
+  }
+
+  # Steam can reposition its own dialog shortly after Set-Centred first
+  # placed it, which would quietly leave a correctly-placed wizard back on
+  # the wrong monitor.
+  if ($tick -lt $reassertPasses) { [void](Set-Centred $wizard) }
+
   Set-ClientMinimised $minimised
   Start-Sleep -Milliseconds 250
+  $tick += 1
 }
 
 # The wizard was pinned topmost in Set-Centred so it would not fall behind
@@ -366,7 +358,6 @@ if ([U]::IsWindow($wizard)) {
 if ($owner -ne [IntPtr]::Zero -and [U]::IsWindow($owner) -and -not [U]::IsWindow($wizard)) {
   $flags = ($SWP_NOMOVE -bor $SWP_NOSIZE -bor $SWP_NOACTIVATE)
   for ($i = 0; $i -lt 4; $i++) {
-    Set-BehindArcadia ([IntPtr]::Zero)
     [void][U]::SetWindowPos($owner, $HWND_TOPMOST, 0, 0, 0, 0, $flags)
     [void][U]::SetWindowPos($owner, $HWND_NOTOPMOST, 0, 0, 0, 0, $flags)
     [void][U]::SetForegroundWindow($owner)

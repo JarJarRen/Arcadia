@@ -159,6 +159,15 @@ async function guided(
 
     const placed = await handle.placed
 
+    if (placed?.ok === false) {
+      // Console-only: see the note at the top of shared/i18n.ts. A denied
+      // placement is silent to the user — the same outcome as a wizard
+      // Steam quietly moved back after a placement that had succeeded — so
+      // without this there was no way to tell the two apart from outside
+      // the process.
+      console.error('Window agent failed to place the install wizard:', placed.reason)
+    }
+
     // A timeout is the only outcome worth a word. A refused placement means
     // the install is running and only the window could not be moved, and a
     // cancelled agent means the user asked for the waiting to stop.

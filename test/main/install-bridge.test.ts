@@ -221,6 +221,35 @@ describe('guided install', () => {
     expect(result).toEqual({ ok: true })
   })
 
+  it('logs a failed placement with its reason', async () => {
+    // Console-only, same as the started:false case above — see the note at
+    // the top of shared/i18n.ts. A denied placement and a wizard Steam
+    // quietly moved back after a good one look identical from the outside,
+    // so untested this line is worth exactly as much as no reason at all.
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    // restoreMocks only clears this between tests within the 'node' project
+    // when it is set there directly — set at the config's top level, above
+    // `projects`, it does not reach in, the same gap the config's own alias
+    // comment already flags. Clearing by hand keeps this test honest either
+    // way rather than depending on that being fixed.
+    spy.mockClear()
+    const agent = fakeAgent(true, { ok: false, reason: 'denied' })
+
+    await installGame([guidedAdapter()], game('steam'), agent.assist)
+
+    expect(spy).toHaveBeenCalledWith('Window agent failed to place the install wizard:', 'denied')
+  })
+
+  it('logs nothing when the placement succeeds', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    spy.mockClear()
+    const agent = fakeAgent(true, { ok: true, hwnd: 9 })
+
+    await installGame([guidedAdapter()], game('steam'), agent.assist)
+
+    expect(spy).not.toHaveBeenCalled()
+  })
+
   it('says nothing when the agent died after starting the store', async () => {
     const agent = fakeAgent(true, undefined)
     expect(await installGame([guidedAdapter()], game('steam'), agent.assist)).toEqual({ ok: true })
