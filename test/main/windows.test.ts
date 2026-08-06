@@ -371,4 +371,23 @@ describe('WINDOW_AGENT_SCRIPT', () => {
       expect(WINDOW_AGENT_SCRIPT).toContain(`$env:${name}`)
     }
   })
+
+  it('declares the pointer-sized P/Invokes ownership needs', () => {
+    // GWLP_HWNDPARENT holds a handle. The plain GetWindowLongW the script
+    // already uses for GWL_EXSTYLE returns a 32-bit LONG and would truncate
+    // one, which is why taking ownership needs its own entry points rather
+    // than reusing that pair.
+    expect(WINDOW_AGENT_SCRIPT).toContain('GetWindowLongPtrW')
+    expect(WINDOW_AGENT_SCRIPT).toContain('SetWindowLongPtrW')
+    expect(WINDOW_AGENT_SCRIPT).toContain('GWLP_HWNDPARENT')
+  })
+
+  it('does not poll the wizard above Arcadia any more', () => {
+    // Four attempts at holding the wizard above Arcadia by repositioning it
+    // every guard tick each produced a new symptom, the last one losing to
+    // Chromium re-asserting its own always-on-top on every position change.
+    // Ownership replaced the poll entirely; its reappearance here would
+    // mean someone put it back.
+    expect(WINDOW_AGENT_SCRIPT).not.toContain('SetWindowPos($owner, $wizard')
+  })
 })

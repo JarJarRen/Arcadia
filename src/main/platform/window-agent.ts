@@ -50,6 +50,13 @@ public static class U {
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr window, out RECT rect);
   [DllImport("user32.dll", EntryPoint = "GetWindowLongW")] public static extern int GetWindowLongValue(IntPtr window, int index);
+  // GWLP_HWNDPARENT holds a handle, which is pointer-sized. GetWindowLongW
+  // above returns a 32-bit LONG and would truncate one; the *Ptr entry
+  // points are the pair that carry it correctly. The app ships x64 only,
+  // so these are the only entry points that are ever correct here — there
+  // is no 32-bit build for the narrower pair to be the right call for.
+  [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] public static extern IntPtr GetOwner(IntPtr window, int index);
+  [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")] public static extern IntPtr SetOwner(IntPtr window, int index, IntPtr value);
   [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr window, IntPtr after, int x, int y, int cx, int cy, uint flags);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
   [DllImport("user32.dll")] public static extern IntPtr MonitorFromWindow(IntPtr window, uint flags);
@@ -102,14 +109,17 @@ $timeout   = [int]$env:ARCADIA_AGENT_TIMEOUT_MS
 $guard     = [int]$env:ARCADIA_AGENT_GUARD_MS
 $minHeight = [int]$env:ARCADIA_AGENT_MIN_HEIGHT
 
-$SWP_NOSIZE     = 0x0001
-$SWP_NOMOVE     = 0x0002
-$SWP_NOACTIVATE = 0x0010
-$SWP_SHOWWINDOW = 0x0040
-$HWND_TOP       = [IntPtr]0
-$HWND_TOPMOST   = [IntPtr](-1)
-$HWND_NOTOPMOST = [IntPtr](-2)
-$SW_MINIMIZE    = 6
+$SWP_NOSIZE      = 0x0001
+$SWP_NOMOVE      = 0x0002
+$SWP_NOACTIVATE  = 0x0010
+$SWP_SHOWWINDOW  = 0x0040
+$HWND_TOP        = [IntPtr]0
+$HWND_TOPMOST    = [IntPtr](-1)
+$HWND_NOTOPMOST  = [IntPtr](-2)
+$SW_MINIMIZE     = 6
+# The index GetOwner/SetOwner read and write to inspect or change a
+# window's owner.
+$GWLP_HWNDPARENT = -8
 
 # Written straight to the console rather than down the pipeline: the parent
 # acts on 'started' before anything else happens, so it must not sit in a
@@ -296,8 +306,33 @@ if ($null -eq $wizard) {
   exit 0
 }
 
-if (Set-Centred $wizard) { Emit @{ event = 'placed'; ok = $true; hwnd = [int64]$wizard } }
-else { Emit @{ event = 'placed'; ok = $false; reason = 'denied' } }
+# Both stay at their zero value on every path that never takes ownership —
+# a denied placement, or no Arcadia window to own the wizard in the first
+# place — so the restore calls further down are safe no-ops on those paths
+# too, rather than needing their own separate guard.
+$previousOwner = [IntPtr]::Zero
+$ownerTaken = $false
+
+if (Set-Centred $wizard) {
+  Emit @{ event = 'placed'; ok = $true; hwnd = [int64]$wizard }
+
+  if ($owner -ne [IntPtr]::Zero) {
+    # Windows guarantees an owned window is always drawn above its owner,
+    # enforced by the window manager itself rather than by anything this
+    # script keeps doing every tick — which is what makes it survive
+    # Arcadia where repositioning did not: Chromium's window handler
+    # re-asserts its own always-on-top the instant a SetWindowPos call
+    # changes the window's position, so a fix built on repositioning it
+    # from outside can only ever trigger the thing it is trying to undo.
+    # Ownership never repositions anything, so there is nothing left for
+    # that handler to react to.
+    $previousOwner = [U]::GetOwner($wizard, $GWLP_HWNDPARENT)
+    [void][U]::SetOwner($wizard, $GWLP_HWNDPARENT, $owner)
+    $ownerTaken = $true
+  }
+} else {
+  Emit @{ event = 'placed'; ok = $false; reason = 'denied' }
+}
 
 # Not a fixed pause: Steam raises its client again the moment the user is
 # done with the wizard, so the demotion has to last as long as the wizard
@@ -311,7 +346,21 @@ $guardEnd = [DateTime]::UtcNow.AddMilliseconds($guard)
 $reassertPasses = 8
 $tick = 0
 while ([DateTime]::UtcNow -lt $guardEnd -and [U]::IsWindow($wizard)) {
-  if ($owner -ne [IntPtr]::Zero -and -not [U]::IsWindow($owner)) { break }
+  if ($owner -ne [IntPtr]::Zero -and -not [U]::IsWindow($owner)) {
+    # Arcadia is gone, so the wizard must not stay owned by a window that no
+    # longer exists a moment longer than this loop can help. Best effort,
+    # not a fix: destroying a window destroys the windows it owns, so if
+    # Arcadia closes in the up-to-250ms gap between polls while it still
+    # owns the wizard, Steam's dialog can be torn down right along with it.
+    # The install has not started at that point — the wizard is still up —
+    # so the cost is a dialog the user has to reopen, not an interrupted
+    # download. This check narrows that gap; it does not close it.
+    if ($ownerTaken) {
+      [void][U]::SetOwner($wizard, $GWLP_HWNDPARENT, $previousOwner)
+      $ownerTaken = $false
+    }
+    break
+  }
 
   # Set-BehindArcadia used to run here, pushing Steam's other windows just
   # below Arcadia every tick. SetWindowPos promotes whatever it inserts
@@ -320,12 +369,14 @@ while ([DateTime]::UtcNow -lt $guardEnd -and [U]::IsWindow($wizard)) {
   # promoting every Steam window into the topmost band instead of keeping
   # it out, the old mechanism doing the opposite of its purpose.
 
-  if ($owner -ne [IntPtr]::Zero) {
-    # Both windows are already topmost, so this only reorders within the
-    # band rather than promoting anything into it, unlike the call this
-    # replaced.
-    [void][U]::SetWindowPos($owner, $wizard, 0, 0, 0, 0, ($SWP_NOMOVE -bor $SWP_NOSIZE -bor $SWP_NOACTIVATE))
-  }
+  # A second poll used to live here too: a SetWindowPos call every tick,
+  # reordering the owner handle just behind the wizard handle in the
+  # z-order. On its own, against a plain always-on-top test window, it held
+  # for 16 ticks straight. Against Arcadia it lost for the reason in the
+  # comment above the ownership call this replaced — Chromium re-asserting
+  # always-on-top on every position change, which a reposition-based fix
+  # can only ever trigger again. Ownership (taken once, above) needs no
+  # per-tick call at all. Do not bring this poll back.
 
   # Steam can reposition its own dialog shortly after Set-Centred first
   # placed it, which would quietly leave a correctly-placed wizard back on
@@ -347,6 +398,10 @@ if ([U]::IsWindow($wizard)) {
   [void][U]::SetWindowPos(
     $wizard, $HWND_NOTOPMOST, 0, 0, 0, 0, ($SWP_NOMOVE -bor $SWP_NOSIZE -bor $SWP_NOACTIVATE)
   )
+  # Same reasoning as the topmost pin just above: ownership was only ever
+  # this agent's to hold on Arcadia's behalf for as long as it was watching
+  # the wizard, and that watch just ended.
+  if ($ownerTaken) { [void][U]::SetOwner($wizard, $GWLP_HWNDPARENT, $previousOwner) }
 }
 
 # Steam focuses its own client when the wizard closes, which drops the user
