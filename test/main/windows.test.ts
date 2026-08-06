@@ -372,14 +372,17 @@ describe('WINDOW_AGENT_SCRIPT', () => {
     }
   })
 
-  it('declares the pointer-sized P/Invokes ownership needs', () => {
-    // GWLP_HWNDPARENT holds a handle. The plain GetWindowLongW the script
-    // already uses for GWL_EXSTYLE returns a 32-bit LONG and would truncate
-    // one, which is why taking ownership needs its own entry points rather
-    // than reusing that pair.
-    expect(WINDOW_AGENT_SCRIPT).toContain('GetWindowLongPtrW')
-    expect(WINDOW_AGENT_SCRIPT).toContain('SetWindowLongPtrW')
-    expect(WINDOW_AGENT_SCRIPT).toContain('GWLP_HWNDPARENT')
+  it('does not take ownership of the wizard any more', () => {
+    // A live capture of a real install, sampled every 200ms, showed the
+    // wizard's owner staying zero for its entire life: this agent is a
+    // third process, owning neither the wizard nor Arcadia, and the
+    // SetWindowLongPtr assignment failed silently rather than holding as it
+    // did in an isolated test where the calling process owned both windows.
+    // The same capture showed the topmost pin already produces the correct
+    // z-order without it. Its reappearance here would mean someone put it
+    // back without that measurement.
+    expect(WINDOW_AGENT_SCRIPT).not.toContain('[U]::SetOwner(')
+    expect(WINDOW_AGENT_SCRIPT).not.toContain('[U]::GetOwner(')
   })
 
   it('does not poll the wizard above Arcadia any more', () => {

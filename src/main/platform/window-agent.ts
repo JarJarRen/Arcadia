@@ -50,13 +50,6 @@ public static class U {
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr window, out RECT rect);
   [DllImport("user32.dll", EntryPoint = "GetWindowLongW")] public static extern int GetWindowLongValue(IntPtr window, int index);
-  // GWLP_HWNDPARENT holds a handle, which is pointer-sized. GetWindowLongW
-  // above returns a 32-bit LONG and would truncate one; the *Ptr entry
-  // points are the pair that carry it correctly. The app ships x64 only,
-  // so these are the only entry points that are ever correct here — there
-  // is no 32-bit build for the narrower pair to be the right call for.
-  [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] public static extern IntPtr GetOwner(IntPtr window, int index);
-  [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")] public static extern IntPtr SetOwner(IntPtr window, int index, IntPtr value);
   [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr window, IntPtr after, int x, int y, int cx, int cy, uint flags);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
   [DllImport("user32.dll")] public static extern IntPtr MonitorFromWindow(IntPtr window, uint flags);
@@ -117,9 +110,6 @@ $HWND_TOP        = [IntPtr]0
 $HWND_TOPMOST    = [IntPtr](-1)
 $HWND_NOTOPMOST  = [IntPtr](-2)
 $SW_MINIMIZE     = 6
-# The index GetOwner/SetOwner read and write to inspect or change a
-# window's owner.
-$GWLP_HWNDPARENT = -8
 
 # Written straight to the console rather than down the pipeline: the parent
 # acts on 'started' before anything else happens, so it must not sit in a
@@ -306,30 +296,19 @@ if ($null -eq $wizard) {
   exit 0
 }
 
-# Both stay at their zero value on every path that never takes ownership —
-# a denied placement, or no Arcadia window to own the wizard in the first
-# place — so the restore calls further down are safe no-ops on those paths
-# too, rather than needing their own separate guard.
-$previousOwner = [IntPtr]::Zero
-$ownerTaken = $false
-
 if (Set-Centred $wizard) {
   Emit @{ event = 'placed'; ok = $true; hwnd = [int64]$wizard }
 
-  if ($owner -ne [IntPtr]::Zero) {
-    # Windows guarantees an owned window is always drawn above its owner,
-    # enforced by the window manager itself rather than by anything this
-    # script keeps doing every tick — which is what makes it survive
-    # Arcadia where repositioning did not: Chromium's window handler
-    # re-asserts its own always-on-top the instant a SetWindowPos call
-    # changes the window's position, so a fix built on repositioning it
-    # from outside can only ever trigger the thing it is trying to undo.
-    # Ownership never repositions anything, so there is nothing left for
-    # that handler to react to.
-    $previousOwner = [U]::GetOwner($wizard, $GWLP_HWNDPARENT)
-    [void][U]::SetOwner($wizard, $GWLP_HWNDPARENT, $owner)
-    $ownerTaken = $true
-  }
+  # This used to take ownership of the wizard here, via SetWindowLongPtr on
+  # GWLP_HWNDPARENT, so Windows would hold it above Arcadia without any
+  # per-tick reordering. A live capture of a real install, sampled every
+  # 200ms, showed the wizard's owner staying zero for its entire life — the
+  # assignment held in an isolated test where the calling process owned
+  # both windows, but this agent owns neither the wizard nor Arcadia, and
+  # SetWindowLongPtr failed silently here. The same capture showed it was
+  # never needed either: the topmost pin above already puts the wizard
+  # above Arcadia above Steam on its own. Do not bring this back: had it
+  # worked, destroying Arcadia would have torn down Steam's dialog with it.
 } else {
   Emit @{ event = 'placed'; ok = $false; reason = 'denied' }
 }
@@ -347,18 +326,6 @@ $reassertPasses = 8
 $tick = 0
 while ([DateTime]::UtcNow -lt $guardEnd -and [U]::IsWindow($wizard)) {
   if ($owner -ne [IntPtr]::Zero -and -not [U]::IsWindow($owner)) {
-    # Arcadia is gone, so the wizard must not stay owned by a window that no
-    # longer exists a moment longer than this loop can help. Best effort,
-    # not a fix: destroying a window destroys the windows it owns, so if
-    # Arcadia closes in the up-to-250ms gap between polls while it still
-    # owns the wizard, Steam's dialog can be torn down right along with it.
-    # The install has not started at that point — the wizard is still up —
-    # so the cost is a dialog the user has to reopen, not an interrupted
-    # download. This check narrows that gap; it does not close it.
-    if ($ownerTaken) {
-      [void][U]::SetOwner($wizard, $GWLP_HWNDPARENT, $previousOwner)
-      $ownerTaken = $false
-    }
     break
   }
 
@@ -398,10 +365,6 @@ if ([U]::IsWindow($wizard)) {
   [void][U]::SetWindowPos(
     $wizard, $HWND_NOTOPMOST, 0, 0, 0, 0, ($SWP_NOMOVE -bor $SWP_NOSIZE -bor $SWP_NOACTIVATE)
   )
-  # Same reasoning as the topmost pin just above: ownership was only ever
-  # this agent's to hold on Arcadia's behalf for as long as it was watching
-  # the wizard, and that watch just ended.
-  if ($ownerTaken) { [void][U]::SetOwner($wizard, $GWLP_HWNDPARENT, $previousOwner) }
 }
 
 # Steam focuses its own client when the wizard closes, which drops the user
