@@ -240,12 +240,18 @@ describe('guided install', () => {
     // The command is part of the line, not decoration: a timeout means no
     // window ever appeared, and the first question is then whether the store
     // was asked for the right thing at all.
+    // Both halves are in the line on purpose. What the bridge asked for and
+    // what the agent reports having run travel through a JSON round trip and
+    // an environment variable, and a store that never reacts looks identical
+    // whether the URI arrived intact or was lost on the way.
     expect(spy).toHaveBeenCalledWith(
       'Window agent failed to place the install wizard:',
       'denied',
-      '- ran:',
+      '- asked for:',
       'C:\\Steam\\steam.exe',
-      '-silent steam://install/1'
+      '-silent steam://install/1',
+      '- agent ran:',
+      '(not reported)'
     )
   })
 

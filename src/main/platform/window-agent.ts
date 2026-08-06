@@ -275,7 +275,12 @@ $startedStore = ((Get-StorePids).Count -eq 0)
 try {
   if ($argv.Count -gt 0) { Start-Process -FilePath $exe -ArgumentList $argv | Out-Null }
   else { Start-Process -FilePath $exe | Out-Null }
-  Emit @{ event = 'started'; ok = $true }
+  # What this side actually parsed, not what the caller meant to send. The
+  # two travel through a JSON round trip and an environment variable, and a
+  # store that never reacts to an install looks identical whether the URI
+  # arrived intact or was lost on the way — which cost a long diagnosis
+  # once already.
+  Emit @{ event = 'started'; ok = $true; detail = ($exe + ' ' + ($argv -join ' ')) }
 } catch {
   Emit @{ event = 'started'; ok = $false; reason = 'spawn'; detail = $_.Exception.Message }
   Emit @{ event = 'done' }

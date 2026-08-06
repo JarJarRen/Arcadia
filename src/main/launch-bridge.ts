@@ -175,9 +175,11 @@ async function guided(
       console.error(
         'Window agent failed to place the install wizard:',
         placed.reason,
-        '- ran:',
+        '- asked for:',
         plan.exe,
-        plan.args.join(' ')
+        plan.args.join(' '),
+        '- agent ran:',
+        (await handle.startedDetail) ?? '(not reported)'
       )
     }
 
