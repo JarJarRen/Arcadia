@@ -237,7 +237,16 @@ describe('guided install', () => {
 
     await installGame([guidedAdapter()], game('steam'), agent.assist)
 
-    expect(spy).toHaveBeenCalledWith('Window agent failed to place the install wizard:', 'denied')
+    // The command is part of the line, not decoration: a timeout means no
+    // window ever appeared, and the first question is then whether the store
+    // was asked for the right thing at all.
+    expect(spy).toHaveBeenCalledWith(
+      'Window agent failed to place the install wizard:',
+      'denied',
+      '- ran:',
+      'C:\\Steam\\steam.exe',
+      '-silent steam://install/1'
+    )
   })
 
   it('logs nothing when the placement succeeds', async () => {

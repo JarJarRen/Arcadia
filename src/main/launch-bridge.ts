@@ -165,7 +165,20 @@ async function guided(
       // Steam quietly moved back after a placement that had succeeded — so
       // without this there was no way to tell the two apart from outside
       // the process.
-      console.error('Window agent failed to place the install wizard:', placed.reason)
+      //
+      // The command goes in the line too. A timeout means no window ever
+      // appeared, and the first thing worth checking is then whether the
+      // store was asked for the right thing at all: the same URI run by
+      // hand opened a dialog immediately while the app timed out on it,
+      // and without the command in the log there was no way to compare the
+      // two.
+      console.error(
+        'Window agent failed to place the install wizard:',
+        placed.reason,
+        '- ran:',
+        plan.exe,
+        plan.args.join(' ')
+      )
     }
 
     // A timeout is the only outcome worth a word. A refused placement means
