@@ -36,6 +36,7 @@ export function stubArcadia(overrides: Partial<ArcadiaApi> = {}): ArcadiaApi {
     openFolder: async () => ({ ok: true }),
     searchApps: async () => [],
     setMatch: async () => ({ ok: true }),
+    getLanguage: async () => 'en',
     setLanguage: async () => undefined,
     getEnvConfig: async () =>
       ({

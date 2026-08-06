@@ -385,6 +385,17 @@ export function registerIpcHandlers(context: IpcContext): void {
   })
 
   /**
+   * The interface language the renderer should start in.
+   *
+   * Answered from `@shared/i18n`'s own `getLanguage()` rather than a fresh
+   * `context.settings.get('language')`: startup (`main/index.ts`) already
+   * parses the stored value and applies it to this process's copy of the
+   * module before any handler is registered, which makes that copy the
+   * authoritative answer and spares a second read of the same row.
+   */
+  ipcMain.handle(IPC.settingsGetLanguage, () => getLanguage())
+
+  /**
    * Records the interface language.
    *
    * Validated rather than trusted: the value crosses a process boundary, and

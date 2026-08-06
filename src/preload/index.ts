@@ -15,6 +15,7 @@ const api: ArcadiaApi = {
   searchApps: (query) => ipcRenderer.invoke(IPC.metadataSearch, query),
   setMatch: (mergeKey, steamAppId) =>
     ipcRenderer.invoke(IPC.metadataSetMatch, mergeKey, steamAppId),
+  getLanguage: () => ipcRenderer.invoke(IPC.settingsGetLanguage),
   setLanguage: (language) => ipcRenderer.invoke(IPC.settingsSetLanguage, language),
   getEnvConfig: () => ipcRenderer.invoke(IPC.envConfigGet),
   saveEnvConfig: (values) => ipcRenderer.invoke(IPC.envConfigSave, values),

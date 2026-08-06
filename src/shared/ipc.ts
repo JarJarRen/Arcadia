@@ -15,6 +15,7 @@ export const IPC = {
   mergeSetSplit: 'merge:set-split',
   metadataSearch: 'metadata:search',
   metadataSetMatch: 'metadata:set-match',
+  settingsGetLanguage: 'settings:get-language',
   settingsSetLanguage: 'settings:set-language',
   envConfigGet: 'env-config:get',
   envConfigSave: 'env-config:save',
@@ -76,6 +77,16 @@ export interface ArcadiaApi {
   searchApps(query: string): Promise<AppSuggestion[]>
   /** Matches a game to a Steam AppID by hand and fetches it immediately. */
   setMatch(mergeKey: string, steamAppId: number): Promise<LaunchResult>
+  /**
+   * The persisted interface language, so the renderer can start in it.
+   *
+   * Main applies the stored setting to its own copy of the i18n module at
+   * startup; the renderer's copy is a separate module in a separate
+   * process and always begins at `DEFAULT_LANGUAGE` regardless. Without
+   * this call, a German setting would only ever show up in main's own
+   * messages, never in the rendered UI.
+   */
+  getLanguage(): Promise<string>
   /**
    * Records the chosen interface language.
    *

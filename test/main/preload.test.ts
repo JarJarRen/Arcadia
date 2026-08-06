@@ -127,6 +127,12 @@ describe('preload bridge', () => {
       call: () => api.setMatch('merge-set-match', 440)
     },
     {
+      name: 'getLanguage',
+      channel: IPC.settingsGetLanguage,
+      args: [],
+      call: () => api.getLanguage()
+    },
+    {
       name: 'setLanguage',
       channel: IPC.settingsSetLanguage,
       args: ['de'],
@@ -178,9 +184,9 @@ describe('preload bridge', () => {
     expect(invokeCalls[0]?.args).toEqual(row.args)
   })
 
-  it('covers every invoke-based method exactly once, with seventeen distinct channels', () => {
-    expect(INVOKE_TABLE).toHaveLength(17)
-    expect(new Set(INVOKE_TABLE.map((row) => row.name)).size).toBe(17)
+  it('covers every invoke-based method exactly once, with eighteen distinct channels', () => {
+    expect(INVOKE_TABLE).toHaveLength(18)
+    expect(new Set(INVOKE_TABLE.map((row) => row.name)).size).toBe(18)
   })
 
   it('never sends two methods down the same channel', () => {
@@ -196,7 +202,7 @@ describe('preload bridge', () => {
     ]
 
     expect(new Set(allChannels).size).toBe(allChannels.length)
-    expect(allChannels).toHaveLength(20)
+    expect(allChannels).toHaveLength(21)
   })
 
   /**

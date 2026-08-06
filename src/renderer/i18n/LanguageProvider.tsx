@@ -2,11 +2,18 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useState,
   type ReactElement,
   type ReactNode
 } from 'react'
-import { DEFAULT_LANGUAGE, getLanguage, setLanguage, type Language } from '@shared/i18n'
+import {
+  DEFAULT_LANGUAGE,
+  getLanguage,
+  parseLanguage,
+  setLanguage,
+  type Language
+} from '@shared/i18n'
 
 interface LanguageContextValue {
   language: Language
@@ -32,6 +39,33 @@ const LanguageContext = createContext<LanguageContextValue>({
  */
 export function LanguageProvider({ children }: { children: ReactNode }): ReactElement {
   const [language, setState] = useState<Language>(getLanguage())
+
+  useEffect(() => {
+    // Main and renderer are separate processes, each holding its own copy
+    // of the i18n module's current language. `useState` above only ever
+    // reads this process's copy, which starts at DEFAULT_LANGUAGE no matter
+    // what was chosen last time — so without this fetch, a persisted German
+    // setting left the renderer silently stuck in English while main's own
+    // messages spoke German. `window.arcadia.getLanguage` answers with
+    // main's already-applied value, i.e. the persisted one.
+    let cancelled = false
+
+    void window.arcadia.getLanguage().then((value) => {
+      // The component may have unmounted while the round trip was in
+      // flight; setting state on it then would be a no-op React warns about.
+      if (cancelled) return
+      const persisted = parseLanguage(value)
+      if (persisted === undefined) return
+      // Same order as `change` below, and for the same reason: t() is read
+      // during render, so the module has to switch before the state does.
+      setLanguage(persisted)
+      setState(persisted)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const change = useCallback((next: Language): void => {
     // Module first, state second: the re-render triggered by setState reads
