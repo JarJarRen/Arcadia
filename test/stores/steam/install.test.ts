@@ -38,15 +38,18 @@ describe('steamGuidedInstall', () => {
     expect(plan?.timeoutNotice).toContain('Steam')
   })
 
-  it('names the game being unavailable, not only a missing sign-in', () => {
-    // The first version of this notice blamed a missing sign-in and nothing
-    // else. Observed on the development machine: the far more common cause
-    // is Steam declining to offer the game at all — it opens its store page
-    // instead of a dialog — which is what happens to a family-shared title
-    // while its owner is playing. A notice that sends the user hunting for a
-    // login prompt that was never there is worse than no notice.
+  it('names the repeat-request refusal, which is the measured common cause', () => {
+    // Measured on the development machine, and it accounted for nearly every
+    // reported failure: once an install dialog has been opened and closed for
+    // a game, Steam silently ignores further steam://install requests for
+    // that same game for well over forty seconds. A different game works
+    // instantly in the same second, so the refusal is per-game rather than a
+    // global rate limit.
+    //
+    // Earlier wordings blamed a missing sign-in, then an unavailable game.
+    // Both sent the user looking for something that was not wrong.
     const plan = steamGuidedInstall('C:\\Steam', 'steam://install/440', 'win32')
-    expect(plan?.timeoutNotice).toMatch(/family-shared/i)
+    expect(plan?.timeoutNotice).toMatch(/repeat request/i)
   })
 
   it('has no plan on Linux', () => {
