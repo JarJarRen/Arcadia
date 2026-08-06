@@ -469,8 +469,9 @@ const en: Strings = {
       libraryFailed: 'The Steam library could not be loaded.',
       invalidAppId: (id) => `Invalid Steam AppID: ${id}`,
       noInstallDialog:
-        'Steam did not open an install dialog. It may be asking you to sign in — ' +
-        'check the Steam window.'
+        'Steam did not open an install dialog. It may not be offering this game — ' +
+        'family-shared titles are unavailable while their owner is playing — or it ' +
+        'may be waiting for you to sign in. Check the Steam window.'
     },
     epic: {
       notFound:
@@ -738,8 +739,10 @@ const de: Strings = {
       libraryFailed: 'Die Steam-Bibliothek konnte nicht geladen werden.',
       invalidAppId: (id) => `Ungültige Steam-AppID: ${id}`,
       noInstallDialog:
-        'Steam hat keinen Installationsdialog geöffnet. Möglicherweise ist eine ' +
-        'Anmeldung nötig — bitte im Steam-Fenster nachsehen.'
+        'Steam hat keinen Installationsdialog geöffnet. Vielleicht bietet Steam ' +
+        'dieses Spiel gerade nicht an — Familienfreigaben sind gesperrt, während ' +
+        'der Besitzer spielt — oder es wartet auf eine Anmeldung. Bitte im ' +
+        'Steam-Fenster nachsehen.'
     },
     epic: {
       notFound:

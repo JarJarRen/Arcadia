@@ -38,6 +38,17 @@ describe('steamGuidedInstall', () => {
     expect(plan?.timeoutNotice).toContain('Steam')
   })
 
+  it('names the game being unavailable, not only a missing sign-in', () => {
+    // The first version of this notice blamed a missing sign-in and nothing
+    // else. Observed on the development machine: the far more common cause
+    // is Steam declining to offer the game at all — it opens its store page
+    // instead of a dialog — which is what happens to a family-shared title
+    // while its owner is playing. A notice that sends the user hunting for a
+    // login prompt that was never there is worse than no notice.
+    const plan = steamGuidedInstall('C:\\Steam', 'steam://install/440', 'win32')
+    expect(plan?.timeoutNotice).toMatch(/family-shared/i)
+  })
+
   it('has no plan on Linux', () => {
     // There is no window agent there, and the plain URI is the whole of
     // the supported behaviour.
