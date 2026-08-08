@@ -115,8 +115,25 @@ function check(result) {
  * the script that drove it kept reaching for `.value` on `undefined` — ten
  * minutes of silence for a one-line error.
  */
+/**
+ * What the renderer itself complained about.
+ *
+ * At module scope rather than beside the window, because the handler below
+ * is where it is needed most: a rejected script exits immediately and never
+ * reaches the summary at the end, so this was the one path where the real
+ * message had nowhere to be printed.
+ */
+const rendererErrors = []
+
 process.on('unhandledRejection', (reason) => {
   console.log('PROBLEM: a smoke-test script threw:', reason)
+  // Electron's own message for this says only "an error was thrown, check
+  // the renderer console" — and the console it means is discarded when the
+  // process exits. Whatever the renderer logged is almost always the actual
+  // cause, so it goes out here rather than being left to be rediscovered.
+  for (const message of rendererErrors) {
+    console.log('PROBLEM: the renderer logged an error:', message)
+  }
   console.log('RESULT: FAILED')
   app.exit(1)
 })
@@ -132,6 +149,25 @@ app.whenReady().then(async () => {
       nodeIntegration: false,
       sandbox: true
     }
+  })
+
+  /**
+   * Why the renderer's own errors are worth collecting at all: the failure
+   * they explain arrives somewhere else entirely. A throw inside a
+   * `useEffect` has no error boundary above it, so React tears the whole
+   * root down; every script after that point then measures an empty
+   * document, and the first one to reach for a real element rejects with
+   * Electron's "Script failed to execute". That is what `getLanguage`
+   * missing from preload.cjs looked like — a null `.click()` target six
+   * hundred lines below the actual cause.
+   */
+  win.webContents.on('console-message', (event) => {
+    if (event.level === 'error') rendererErrors.push(event.message)
+  })
+  // A preload that throws leaves `window.arcadia` undefined altogether, and
+  // then every single measurement fails at once for one reason.
+  win.webContents.on('preload-error', (_event, path, error) => {
+    rendererErrors.push(`preload ${path} threw: ${String(error)}`)
   })
 
   await win.loadFile(join(__dirname, '../../out/renderer/index.html'))
@@ -880,6 +916,9 @@ app.whenReady().then(async () => {
   }
 
   const problems = [
+    // First in the list, because when the renderer has thrown, everything
+    // below is a consequence of it rather than a finding of its own.
+    ...rendererErrors.map((message) => `The renderer logged an error: ${message}`),
     ...check(result),
     ...hintProblems,
     ...detailProblems,
