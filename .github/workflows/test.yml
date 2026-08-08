@@ -7,12 +7,21 @@ on:
       - develop
   pull_request:
     branches:
-      -main
-      -develop
+      - main
+      - develop
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Both platforms are shipped — electron-builder produces nsis/portable
+    # for Windows and AppImage/deb for Linux — so both are tested. What
+    # differs between them is only the coverage gate, for the reason on that
+    # step.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # One platform failing should not hide the other's result.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
 
     steps:
       - name: Repository auschecken
@@ -21,16 +30,35 @@ jobs:
       - name: Node.js einrichten
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # package.json requires >=24, and the main process imports
+          # node:sqlite, which does not exist on 20 — the whole suite fails
+          # at the first import there.
+          node-version: 24
           cache: npm
 
       - name: Abhängigkeiten installieren
         run: npm ci
 
+      - name: Typen prüfen
+        run: npm run typecheck
+
+      - name: Tests ausführen
+        # Linux only: on Windows the coverage run below executes the same
+        # suite, and running it twice buys nothing.
+        if: matrix.os == 'ubuntu-latest'
+        run: npm test
+
       - name: Tests mit Coverage ausführen
+        # Windows only. The thresholds in vitest.config.ts are pinned to
+        # figures measured on Windows, and the window-agent integration tests
+        # skip on every other platform — so a perfectly healthy branch would
+        # miss the gate on Linux for reasons that have nothing to do with the
+        # change being tested.
+        if: matrix.os == 'windows-latest'
         run: npm run test:coverage
-        
+
       - name: Coverage hochladen
+        if: matrix.os == 'windows-latest'
         uses: actions/upload-artifact@v4
         with:
           name: coverage
