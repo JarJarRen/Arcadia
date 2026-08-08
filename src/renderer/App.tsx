@@ -386,6 +386,7 @@ export function App(): ReactElement {
         visible={visible}
         view={view}
         loading={loading}
+        scanning={syncing}
         selected={opened}
         onSelect={(entry) => setOpenKey(entry.key)}
         onLaunch={(entry) => void launch(entry)}

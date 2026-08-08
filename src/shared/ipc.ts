@@ -6,6 +6,17 @@ export const IPC = {
   libraryGet: 'library:get',
   librarySync: 'library:sync',
   libraryChanged: 'library:changed',
+  /**
+   * Whether a scan is running right now, asked once when the renderer mounts.
+   *
+   * A pull as well as the event below, because the startup scan begins while
+   * the renderer is still compiling its bundle: by the time it subscribes,
+   * `libraryScanning` has already been sent and missed. Asking on mount is
+   * what closes that window.
+   */
+  libraryScanState: 'library:scan-state',
+  /** Sent with `true` when a scan starts and `false` when it ends. */
+  libraryScanning: 'library:scanning',
   gameLaunch: 'game:launch',
   gameSetFavorite: 'game:set-favorite',
   gameOpenFolder: 'game:open-folder',
@@ -140,6 +151,17 @@ export interface ArcadiaApi {
    * names a library entry.
    */
   reportBrokenArtwork(mergeKey: string, kind: string): Promise<void>
+  /**
+   * Whether a scan is in flight at this moment.
+   *
+   * Needed because the scan that runs at startup is begun by the main
+   * process, not by the button: without asking, the renderer has no way to
+   * know one is under way and reports an empty library as "nothing found"
+   * while it is still being filled.
+   */
+  isScanning(): Promise<boolean>
+  /** Fires whenever a scan starts or ends, from whichever source. */
+  onScanningChanged(callback: (scanning: boolean) => void): () => void
   onLibraryChanged(callback: () => void): () => void
   /**
    * The mouse's back button, as reported by Windows.

@@ -295,7 +295,39 @@ describe('IPC library channels', () => {
     const result = await invoke(IPC.librarySync)
 
     expect(result).toEqual({ stores: [], totalGames: 0 })
-    expect(harness.sent).toEqual([IPC.libraryChanged])
+    // The scan brackets the change, and in that order: the renderer has to
+    // learn a scan is running before it ends, or the indicator never appears
+    // at all. `library:changed` comes last, once there is something new to
+    // fetch.
+    expect(harness.sent).toEqual([
+      `${IPC.libraryScanning}:true`,
+      `${IPC.libraryScanning}:false`,
+      IPC.libraryChanged
+    ])
+  })
+
+  it('reports a scan as running only while it is running', async () => {
+    expect(await invoke(IPC.libraryScanState)).toBe(false)
+
+    // Captured mid-flight rather than after the fact: the whole point of the
+    // channel is what it answers *during* a scan, and a check afterwards
+    // would pass just as well against a handler that never set it.
+    let duringScan: unknown
+    harness.context.adapters = [
+      {
+        id: 'steam',
+        isAvailable: async () => {
+          duringScan = await invoke(IPC.libraryScanState)
+          return { available: false }
+        },
+        scanInstalled: async () => []
+      } as unknown as (typeof harness.context.adapters)[number]
+    ]
+
+    await invoke(IPC.librarySync)
+
+    expect(duringScan).toBe(true)
+    expect(await invoke(IPC.libraryScanState)).toBe(false)
   })
 
   it('applies a manual match and announces the change', async () => {

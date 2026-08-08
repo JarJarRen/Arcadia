@@ -11,6 +11,8 @@ interface Props {
   visible: LibraryEntry[]
   view: ViewMode
   loading: boolean
+  /** A scan is running — at startup this is the only thing happening. */
+  scanning: boolean
   selected: LibraryEntry | undefined
   onSelect: (entry: LibraryEntry) => void
   onLaunch: (entry: LibraryEntry) => void
@@ -21,23 +23,40 @@ interface Props {
 }
 
 /**
- * The three states a library can be in, in the order they have to be
+ * The four states a library can be in, in the order they have to be
  * checked.
  *
- * Kept apart deliberately: "still loading", "nothing found at all" and
- * "the filters exclude everything" call for different reactions. One shared
- * "no games" would make a too-narrow filter look like a broken library.
+ * Kept apart deliberately: "still loading", "being scanned", "nothing found
+ * at all" and "the filters exclude everything" call for different reactions.
+ * One shared "no games" would make a too-narrow filter look like a broken
+ * library.
+ *
+ * `scanning` sits ahead of `empty` because of the first start, where it is
+ * the whole story: the database is empty and stays empty until the scan
+ * finishes, so the honest message is that Arcadia is looking, not that there
+ * is nothing to find. Announcing "no games found — press Refresh" while the
+ * scan it names is already running was what made a first start read as a
+ * broken app.
  */
-function emptyState(loading: boolean, total: number, shown: number): string | undefined {
+function emptyState(
+  loading: boolean,
+  scanning: boolean,
+  total: number,
+  shown: number
+): string | undefined {
   if (loading) return t().library.loading
+  // Only when there is nothing on screen yet. A scan that refreshes an
+  // already-filled library must not blank it out and replace two hundred
+  // tiles with a sentence — the toolbar's own indicator covers that case.
+  if (total === 0 && scanning) return t().library.scanning
   if (total === 0) return t().library.empty
   if (shown === 0) return t().library.noMatches
   return undefined
 }
 
 export function Library(props: Props): ReactElement {
-  const { entries, visible, view, loading, selected } = props
-  const hint = emptyState(loading, entries.length, visible.length)
+  const { entries, visible, view, loading, scanning, selected } = props
+  const hint = emptyState(loading, scanning, entries.length, visible.length)
 
   if (view === 'list') {
     return (

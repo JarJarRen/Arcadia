@@ -117,6 +117,11 @@ export interface Strings {
 
   library: {
     loading: string
+    /**
+     * Shown while a scan is filling a library that is still empty — which on
+     * a first start is the entire wait.
+     */
+    scanning: string
     empty: string
     noMatches: string
     /** Right-hand pane in list view with nothing selected. */
@@ -355,6 +360,7 @@ const en: Strings = {
 
   library: {
     loading: 'Loading library…',
+    scanning: 'Searching Steam, Epic, EA and Ubisoft for your games…',
     empty: 'No games found yet. “Refresh” starts the scan.',
     noMatches: 'No game matches the current filters.',
     nothingSelected: 'Pick a game from the list.'
@@ -625,6 +631,7 @@ const de: Strings = {
 
   library: {
     loading: 'Bibliothek wird geladen…',
+    scanning: 'Steam, Epic, EA und Ubisoft werden nach deinen Spielen durchsucht…',
     empty: 'Noch keine Spiele gefunden. „Aktualisieren“ startet die Suche.',
     noMatches: 'Kein Spiel passt zu den aktuellen Filtern.',
     nothingSelected: 'Wähle ein Spiel aus der Liste.'

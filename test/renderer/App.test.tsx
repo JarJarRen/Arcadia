@@ -35,6 +35,41 @@ describe('App', () => {
     expect(screen.getByText('Portal')).toBeDefined()
   })
 
+  /**
+   * The first start. The database is empty and stays empty until the scan
+   * the main process began returns, so this is the screen someone sees for
+   * the several seconds that takes — and it used to tell them there were no
+   * games and to press Refresh, while the scan it named was already running.
+   */
+  it('says a scan is running rather than that nothing was found', async () => {
+    stubArcadia({ getGames: async () => [], isScanning: async () => true })
+    render(<App />)
+
+    await waitFor(() => expect(screen.getByText(t().library.scanning)).toBeDefined())
+    expect(screen.queryByText(t().library.empty)).toBeNull()
+  })
+
+  it('reports an empty library once the scan has finished', async () => {
+    stubArcadia({ getGames: async () => [], isScanning: async () => false })
+    render(<App />)
+
+    await waitFor(() => expect(screen.getByText(t().library.empty)).toBeDefined())
+    expect(screen.queryByText(t().library.scanning)).toBeNull()
+  })
+
+  /**
+   * A rescan of a library that already has games must not blank it: replacing
+   * two hundred tiles with a sentence would be a worse answer than leaving
+   * them alone while the fresh ones arrive.
+   */
+  it('keeps showing the games while a scan refreshes them', async () => {
+    stubArcadia({ getGames: async () => [TF2], isScanning: async () => true })
+    render(<App />)
+
+    await waitFor(() => expect(screen.getByText('Team Fortress 2')).toBeDefined())
+    expect(screen.queryByText(t().library.scanning)).toBeNull()
+  })
+
   it('the search box filters the visible list', async () => {
     stubArcadia({ getGames: async () => [TF2, PORTAL] })
     render(<App />)

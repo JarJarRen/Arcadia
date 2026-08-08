@@ -16,6 +16,7 @@ import { SECURE_WEB_PREFERENCES } from '@main/window-options'
 import { IPC } from '@shared/ipc'
 import { parseLanguage, setLanguage } from '@shared/i18n'
 import { envFileCandidates } from '@main/env-file'
+import { createScanState } from '@main/scan-state'
 
 let mainWindow: BrowserWindow | undefined
 
@@ -51,14 +52,29 @@ function createWindow(): BrowserWindow {
     minWidth: 940,
     minHeight: 600,
     backgroundColor: '#14161b',
-    show: false,
+    // Shown at once, not on `ready-to-show`.
+    //
+    // Waiting for that event is the usual advice, and it is meant to avoid a
+    // white flash: the window would otherwise appear before the page had
+    // painted anything. `backgroundColor` above already removes the flash —
+    // the frame is drawn in Arcadia's own colour — and index.html paints a
+    // named placeholder before the bundle runs, so there is nothing left for
+    // the wait to protect against.
+    //
+    // What the wait cost was the whole reason to open the app at all.
+    // `ready-to-show` fires only after the renderer process has started, the
+    // 636 kB bundle has been fetched and compiled and React has painted a
+    // frame. Measured here at 659 ms on a first start against 343 ms on a
+    // later one — the difference is V8 compiling the bundle with no code
+    // cache yet — and on a cold machine it is far longer. For all of it there
+    // was no window and no taskbar button: clicking the icon appeared to do
+    // nothing, which is exactly the complaint.
+    show: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       ...SECURE_WEB_PREFERENCES
     }
   })
-
-  win.once('ready-to-show', () => win.show())
 
   /**
    * The mouse's back button.
@@ -95,6 +111,24 @@ function createWindow(): BrowserWindow {
 }
 
 app.whenReady().then(() => {
+  // The window before the setup, not after it.
+  //
+  // None of what follows needs a window, and the renderer runs in a process
+  // of its own: while this one opens the database and builds the adapters,
+  // Chromium is already starting up and fetching the bundle. The two now
+  // overlap instead of running one after the other, and the window is on
+  // screen for the whole of it rather than appearing at the end.
+  //
+  // EVERYTHING FROM HERE TO registerIpcHandlers MUST STAY SYNCHRONOUS.
+  // The renderer asks for the library and the configuration as soon as its
+  // bundle runs, and `ipcMain.handle` has to be in place before the first
+  // `invoke` arrives. As long as no `await` interrupts this run, the event
+  // loop cannot deliver one in between and the order is guaranteed. Insert
+  // an await above the registration and the first start breaks with "No
+  // handler registered" — a failure that would only ever show up on a
+  // machine slow enough to matter.
+  mainWindow = createWindow()
+
   // The same list twice over: dotenv loads from it now, and the
   // configuration screen writes back to it later. Computed once so the two
   // can never disagree about which file is in force.
@@ -111,10 +145,11 @@ app.whenReady().then(() => {
   const metadata = new MetadataRepository(db)
   const settings = new SettingsRepository(db)
 
-  // Before the window exists, so the interface opens in the chosen language
-  // instead of rendering English first and swapping a frame later. It also
-  // has to happen before the first metadata pass, which asks Steam for
-  // whichever language is set right now.
+  // Still before the renderer can ask, which is what actually matters: the
+  // window is created above, but the language reaches the interface through
+  // `settings:get-language`, and that handler is registered further down in
+  // this same synchronous run. It also has to happen before the first
+  // metadata pass, which asks Steam for whichever language is set right now.
   const stored = parseLanguage(settings.get('language'))
   if (stored !== undefined) setLanguage(stored)
 
@@ -155,11 +190,19 @@ app.whenReady().then(() => {
       })
   })
 
+  // Tells the window whenever a scan starts or stops, from either source.
+  // `send` on a window that has since been closed is a no-op, so the
+  // optional chaining is the whole guard needed.
+  const scan = createScanState((scanning) => {
+    mainWindow?.webContents.send(IPC.libraryScanning, scanning)
+  })
+
   registerIpcHandlers({
     repo,
     metadata,
     settings,
     adapters,
+    scan,
     appList,
     fetchDetails: fetchAppDetails,
     getWindow: () => mainWindow,
@@ -172,7 +215,6 @@ app.whenReady().then(() => {
       app.exit(0)
     }
   })
-  mainWindow = createWindow()
 
   // First scan in the background: the UI shows the cache immediately and
   // refreshes once the scan is through.
@@ -181,9 +223,16 @@ app.whenReady().then(() => {
   // afterwards: the Steam adapter needs it during the scan to resolve the
   // names of shared games. It is a local file; on the very first start it
   // does not exist yet, and those games then arrive with the next scan.
-  void appList
-    .loadCache(join(app.getPath('userData'), 'steam-apps.json'))
-    .then(() => runSync(adapters, repo, Math.floor(Date.now() / 1000)))
+  //
+  // Tracked through `scan` so the renderer can say so. On a first start this
+  // is the only scan there is and the library is empty until it returns —
+  // untracked, the window reported "No games found yet" for the whole of it
+  // and invited a Refresh that was already running.
+  void scan
+    .track(async () => {
+      await appList.loadCache(join(app.getPath('userData'), 'steam-apps.json'))
+      return runSync(adapters, repo, Math.floor(Date.now() / 1000))
+    })
     .then((result) => {
       console.log(`Scan finished: ${result.totalGames} games`)
       for (const store of result.stores) {

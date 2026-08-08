@@ -14,6 +14,8 @@ import { GameRepository } from '@main/db/repository'
 import { MetadataRepository } from '@main/db/metadata'
 import { SettingsRepository } from '@main/db/settings'
 import { SteamAppList } from '@main/metadata/steamAppList'
+import { createScanState } from '@main/scan-state'
+import { IPC } from '@shared/ipc'
 import type { IpcContext } from '@main/ipc'
 
 /**
@@ -45,6 +47,13 @@ export function makeHarness(overrides: Partial<IpcContext> = {}): Harness {
     metadata,
     settings,
     adapters: [],
+    // A real one, not a stub: it is a counter and a callback with no
+    // dependencies, and the genuine article keeps the handlers' scan
+    // bookkeeping under test. Its transitions land in `sent` beside the
+    // library:changed notifications, in the order they happened.
+    scan: createScanState((scanning) => {
+      sent.push(`${IPC.libraryScanning}:${String(scanning)}`)
+    }),
     appList: new SteamAppList(),
     fetchDetails: async () => undefined,
     // A fake window, so notifyChanged is observable. The handlers only ever

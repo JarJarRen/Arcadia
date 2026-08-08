@@ -50,8 +50,48 @@ export function useLibrary(): Library {
     return window.arcadia.onLibraryChanged(() => void reload())
   }, [reload])
 
+  /**
+   * Picks up a scan that was already running before this mounted.
+   *
+   * The main process starts one as the app opens, well before the bundle has
+   * finished compiling — so the `true` it sends arrives with nobody
+   * listening. Subscribing alone would therefore show nothing at all on a
+   * first start, which is the case that needs it most. Asking once on mount
+   * covers the gap; the subscription covers everything after.
+   *
+   * A failure is swallowed: not knowing whether a scan is running is no
+   * reason to keep the library off the screen.
+   */
+  useEffect(() => {
+    let cancelled = false
+
+    window.arcadia
+      .isScanning()
+      .then((scanning) => {
+        if (!cancelled) setSyncing(scanning)
+      })
+      .catch(() => undefined)
+
+    const stop = window.arcadia.onScanningChanged((scanning) => {
+      if (!cancelled) setSyncing(scanning)
+    })
+
+    return () => {
+      cancelled = true
+      stop()
+    }
+  }, [])
+
+  /**
+   * `syncing` is deliberately not set here.
+   *
+   * The main process reports it, for this scan and the one it starts itself
+   * alike, and one source of truth is the point. Setting it here as well
+   * would clear the indicator when *this* scan returned even though the
+   * startup scan was still running behind it — the exact overlap the depth
+   * counter in scan-state.ts exists to get right.
+   */
   const sync = useCallback(async () => {
-    setSyncing(true)
     try {
       const result = await window.arcadia.sync()
       // Surface partially failed scans: otherwise they would only land in
@@ -65,8 +105,6 @@ export function useLibrary(): Library {
       )
     } catch (caught) {
       setError(t().errors.refreshFailed(describeError(caught)))
-    } finally {
-      setSyncing(false)
     }
   }, [])
 

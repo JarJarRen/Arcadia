@@ -182,6 +182,80 @@ describe('useLibrary', () => {
     expect(setFavorite).toHaveBeenCalledWith('tf2', false)
   })
 
+  /**
+   * The first start, where the scan is begun by the main process long before
+   * this hook exists. Subscribing alone would miss the `true` that was sent
+   * while the bundle was still compiling, and the library would report
+   * itself idle and empty for the whole scan.
+   */
+  it('picks up a scan that was already running when it mounted', async () => {
+    stubArcadia({ isScanning: async () => true })
+
+    const { result } = renderHook(() => useLibrary())
+
+    await waitFor(() => expect(result.current.syncing).toBe(true))
+  })
+
+  it('follows the scan state the main process reports', async () => {
+    let announce: ((scanning: boolean) => void) | undefined
+    stubArcadia({
+      isScanning: async () => false,
+      onScanningChanged: (callback) => {
+        announce = callback
+        return () => undefined
+      }
+    })
+
+    const { result } = renderHook(() => useLibrary())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.syncing).toBe(false)
+
+    act(() => announce?.(true))
+    expect(result.current.syncing).toBe(true)
+
+    act(() => announce?.(false))
+    expect(result.current.syncing).toBe(false)
+  })
+
+  /**
+   * The hook must not clear the flag itself when its own scan returns: the
+   * startup scan can still be running behind it, and main is the one keeping
+   * count.
+   */
+  it('leaves the scan state to the main process while a sync of its own runs', async () => {
+    let announce: ((scanning: boolean) => void) | undefined
+    stubArcadia({
+      isScanning: async () => true,
+      onScanningChanged: (callback) => {
+        announce = callback
+        return () => undefined
+      }
+    })
+
+    const { result } = renderHook(() => useLibrary())
+    await waitFor(() => expect(result.current.syncing).toBe(true))
+
+    await act(async () => {
+      await result.current.sync()
+    })
+
+    // The startup scan has not been reported as finished, so neither is this.
+    expect(result.current.syncing).toBe(true)
+
+    act(() => announce?.(false))
+    expect(result.current.syncing).toBe(false)
+  })
+
+  it('removes its scanning listener on unmount', async () => {
+    const dispose = vi.fn()
+    stubArcadia({ onScanningChanged: () => dispose })
+
+    const { unmount } = renderHook(() => useLibrary())
+    unmount()
+
+    expect(dispose).toHaveBeenCalledOnce()
+  })
+
   it('removes its library listener on unmount', async () => {
     // Without the returned disposer the listeners pile up on every React
     // remount and each change triggers as many reloads as there have been

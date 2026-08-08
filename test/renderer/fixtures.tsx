@@ -48,6 +48,8 @@ export function stubArcadia(overrides: Partial<ArcadiaApi> = {}): ArcadiaApi {
     addManualGame: async () => ({ ok: true, id: 'steam:manual-1' }),
     removeManualGame: async () => ({ ok: true }),
     reportBrokenArtwork: async () => undefined,
+    isScanning: async () => false,
+    onScanningChanged: () => () => undefined,
     onLibraryChanged: () => () => undefined,
     onNavigateBack: () => () => undefined,
     onNavigateForward: () => () => undefined,

@@ -11,6 +11,7 @@ import type { SettingsRepository } from '@main/db/settings'
 import type { StoreAdapter } from '@main/stores/types'
 import { mergeLibrary } from '@main/library/merge'
 import { runSync } from '@main/sync'
+import type { ScanState } from '@main/scan-state'
 import { cancelInstall, installGame, launchGame, type InstallFrame } from '@main/launch-bridge'
 import { decodeWindowHandle } from '@main/platform/windows'
 import type { SteamAppList } from '@main/metadata/steamAppList'
@@ -25,6 +26,14 @@ export interface IpcContext {
   settings: SettingsRepository
   adapters: StoreAdapter[]
   getWindow: () => BrowserWindow | undefined
+  /**
+   * The shared record of whether a scan is running.
+   *
+   * Shared with the startup scan rather than owned here, so the toolbar
+   * reports both the same way — the renderer cannot tell which process
+   * started a scan, and should not have to.
+   */
+  scan: ScanState
   /**
    * The loaded Steam app list, shared with the background service.
    *
@@ -143,8 +152,12 @@ export function registerIpcHandlers(context: IpcContext): void {
 
   ipcMain.handle(IPC.libraryGet, () => library(context.repo, context.metadata))
 
+  ipcMain.handle(IPC.libraryScanState, () => context.scan.isScanning())
+
   ipcMain.handle(IPC.librarySync, async () => {
-    const result = await runSync(context.adapters, context.repo, Math.floor(Date.now() / 1000))
+    const result = await context.scan.track(() =>
+      runSync(context.adapters, context.repo, Math.floor(Date.now() / 1000))
+    )
     notifyChanged()
     return result
   })
