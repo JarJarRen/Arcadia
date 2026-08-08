@@ -17,6 +17,7 @@ import { IPC } from '@shared/ipc'
 import { parseLanguage, setLanguage } from '@shared/i18n'
 import { envFileCandidates } from '@main/env-file'
 import { createScanState } from '@main/scan-state'
+import { enabledAdapters } from '@main/stores/enabled'
 
 let mainWindow: BrowserWindow | undefined
 
@@ -231,7 +232,11 @@ app.whenReady().then(() => {
   void scan
     .track(async () => {
       await appList.loadCache(join(app.getPath('userData'), 'steam-apps.json'))
-      return runSync(adapters, repo, Math.floor(Date.now() / 1000))
+      return runSync(
+        enabledAdapters(adapters, settings.get('enabled-stores')),
+        repo,
+        Math.floor(Date.now() / 1000)
+      )
     })
     .then((result) => {
       console.log(`Scan finished: ${result.totalGames} games`)

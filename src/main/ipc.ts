@@ -18,6 +18,7 @@ import type { SteamAppList } from '@main/metadata/steamAppList'
 import { applyManualMatch } from '@main/metadata/queue'
 import { readEnvConfig, saveEnvConfig } from '@main/env-config'
 import { parseEnabledStores, serializeEnabledStores } from '@shared/stores'
+import { enabledAdapters } from '@main/stores/enabled'
 import { envValueIsWritable } from '@main/env-file'
 import { ENV_CONFIG_KEYS, type EnvConfigValues } from '@shared/env-config'
 
@@ -75,12 +76,23 @@ export interface IpcContext {
  * Artwork and metadata are attached here, not in `mergeLibrary` — that way
  * the merge stays free of database access and testable without a database.
  *
+ * The rows are filtered by `enabled` BEFORE the merge, not after. That is
+ * what makes a game owned on two stores behave: the switched-off source
+ * drops away and the entry stays, under the store that is still on. Filtered
+ * afterwards, the whole entry would vanish whenever its active source
+ * happened to be the disabled one.
+ *
  * The active store entry is consulted first, then the remaining sources:
  * for a merged game the image can hang off the Epic row while Steam is the
  * active store.
  */
-function library(repo: GameRepository, metadata: MetadataRepository): LibraryEntry[] {
-  return mergeLibrary(repo.all(), repo.readMergeOverrides()).map((entry) => {
+function library(
+  repo: GameRepository,
+  metadata: MetadataRepository,
+  enabled: StoreId[]
+): LibraryEntry[] {
+  const rows = repo.all().filter((game) => enabled.includes(game.storeId))
+  return mergeLibrary(rows, repo.readMergeOverrides()).map((entry) => {
     const order = [entry.active, ...entry.sources.filter((s) => s.id !== entry.active.id)]
 
     let artwork: ArtworkRef[] = []
@@ -151,13 +163,28 @@ export function registerIpcHandlers(context: IpcContext): void {
     context.getWindow()?.webContents.send(IPC.libraryChanged)
   }
 
-  ipcMain.handle(IPC.libraryGet, () => library(context.repo, context.metadata))
+  /**
+   * The library as the user has asked to see it.
+   *
+   * Read fresh each time rather than captured: the setting can change while
+   * the app runs, and a captured list would keep a switched-off store on
+   * screen until the next restart.
+   */
+  const visibleLibrary = (): LibraryEntry[] =>
+    library(
+      context.repo,
+      context.metadata,
+      parseEnabledStores(context.settings.get('enabled-stores'))
+    )
+
+  ipcMain.handle(IPC.libraryGet, () => visibleLibrary())
 
   ipcMain.handle(IPC.libraryScanState, () => context.scan.isScanning())
 
   ipcMain.handle(IPC.librarySync, async () => {
+    const adapters = enabledAdapters(context.adapters, context.settings.get('enabled-stores'))
     const result = await context.scan.track(() =>
-      runSync(context.adapters, context.repo, Math.floor(Date.now() / 1000))
+      runSync(adapters, context.repo, Math.floor(Date.now() / 1000))
     )
     notifyChanged()
     return result
@@ -219,7 +246,7 @@ export function registerIpcHandlers(context: IpcContext): void {
       // Set it on every source: a merged entry counts as a favourite as
       // soon as one source is. Toggling only the active one would make it
       // impossible to clear while another source still had it set.
-      const entry = library(context.repo, context.metadata).find((e) => e.key === mergeKey)
+      const entry = visibleLibrary().find((e) => e.key === mergeKey)
       if (entry === undefined) return
       for (const source of entry.sources) {
         context.repo.setFavorite(source.id, value)
@@ -251,7 +278,7 @@ export function registerIpcHandlers(context: IpcContext): void {
   ipcMain.handle(IPC.gameOpenFolder, async (_event, mergeKey: unknown) => {
     if (typeof mergeKey !== 'string') return { ok: false, error: t().errors.invalidKey }
     try {
-      const entry = library(context.repo, context.metadata).find((e) => e.key === mergeKey)
+      const entry = visibleLibrary().find((e) => e.key === mergeKey)
       const path = entry?.installPath
       if (path === undefined || path === '') {
         return { ok: false, error: t().errors.noFolderKnown }
@@ -284,7 +311,7 @@ export function registerIpcHandlers(context: IpcContext): void {
       return { ok: false, error: t().errors.invalidInput }
     }
     try {
-      const entry = library(context.repo, context.metadata).find((e) => e.key === mergeKey)
+      const entry = visibleLibrary().find((e) => e.key === mergeKey)
       if (entry === undefined) return { ok: false, error: t().errors.unknownGameShort }
 
       // Applied to the active source: that is where the library reads
@@ -381,7 +408,7 @@ export function registerIpcHandlers(context: IpcContext): void {
     if (typeof mergeKey !== 'string') return
     if (kind !== 'grid' && kind !== 'hero' && kind !== 'logo') return
     try {
-      const entry = library(context.repo, context.metadata).find((e) => e.key === mergeKey)
+      const entry = visibleLibrary().find((e) => e.key === mergeKey)
       if (entry === undefined) return
       // The artwork hangs off one of the sources, and which one is not
       // knowable from the renderer — `library()` takes the first source
