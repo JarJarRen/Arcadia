@@ -57,6 +57,7 @@ public static class U {
   [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr context);
   [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr window, int command);
+  [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr window);
 
   public static IntPtr[] TopLevel() {
     List<IntPtr> found = new List<IntPtr>();
@@ -233,19 +234,17 @@ function Set-Centred($window) {
   return $moved
 }
 
-# A store Arcadia had to start itself should never show its client window at
-# all — that is the original design, and -silent does not reliably deliver
-# it on a cold start. Demoting that window with Set-BehindArcadia leaves it
-# sitting behind Arcadia instead of gone, which still reads as wrong, so a
-# window whose title is exactly one of $ignore gets minimised instead.
+# Minimised rather than demoted like every other store window: demoting
+# only pushes a window behind Arcadia, which still reads as wrong on
+# screen, so the client specifically gets minimised instead.
 #
-# A store that was already running before Arcadia launched it is a different
-# case entirely: that window is the user's, not something Arcadia opened on
-# their behalf, so $startedStore being false leaves it alone — demoted like
-# any other store window, but never minimised out from under them.
+# $minimised is the one record of what has been handled, shared by every
+# caller of this function: once a window is minimised through here it is
+# never touched again, so a user who deliberately restores it afterwards
+# does not get fought on the next tick. Two callers share it for two
+# different reasons, each gating this call differently at its own call
+# site rather than in here — see the comments there.
 function Set-ClientMinimised($minimised) {
-  if (-not $startedStore) { return }
-
   $ids = Get-StorePids
   foreach ($window in [U]::TopLevel()) {
     $key = [int64]$window
@@ -255,6 +254,7 @@ function Set-ClientMinimised($minimised) {
     # good, regardless of what the window does afterwards.
     if ($minimised.ContainsKey($key)) { continue }
     if (-not [U]::IsWindowVisible($window)) { continue }
+    if ([U]::IsIconic($window)) { continue }
     if (-not $ids.ContainsKey([U]::Pid($window))) { continue }
     if ($ignore -notcontains ([U]::Title($window))) { continue }
 
@@ -268,9 +268,35 @@ $seen = Get-AllStoreWindows
 # Whether Arcadia is the one starting the store, taken before Start-Process
 # so the answer reflects the world as it was before this process changed it.
 # Empty means Arcadia started it from nothing; anything else means the user
-# already had it running, and Set-ClientMinimised uses exactly this to tell
-# the two cases apart.
+# already had it running, and the guard loop's call to Set-ClientMinimised
+# below uses exactly this to tell the two cases apart.
 $startedStore = ((Get-StorePids).Count -eq 0)
+
+# Steam only opens a standalone install-wizard window when its own client
+# window is off screen. When the client is visible, Steam instead handles
+# steam://install/ inside that window and creates no separate window at
+# all, so the poll loop below used to wait out the full timeout for a
+# window that would never exist. Measured directly on the development
+# machine, two fresh games, same session, seconds apart:
+#   TEST A: client VISIBLE   -> NO DIALOG within 20s
+#   TEST B: client MINIMISED -> DIALOG APPEARED - 'Install' 540x480
+# A high-resolution capture of the failing case also shows Steam raising
+# its own client window about 0.6s after the launch, confirming it
+# received the URI and chose to render the prompt in-client rather than
+# never seeing it at all. Minimising the client first is what makes Steam
+# open the standalone window instead.
+#
+# Unconditional, unlike the $startedStore-gated call in the guard loop
+# below: the scenario above only happens when a store is already running
+# with a visible client, which is exactly the case that gate excludes, so
+# this fix has to sit outside it and run every time.
+#
+# Not restored afterwards, on purpose: keeping the client out of the way
+# for the rest of the install is the point of the feature, so there is no
+# restore call anywhere in this script.
+$minimised = @{}
+Set-ClientMinimised $minimised
+if ($minimised.Count -gt 0) { Start-Sleep -Milliseconds 400 }
 
 try {
   if ($argv.Count -gt 0) { Start-Process -FilePath $exe -ArgumentList $argv | Out-Null }
@@ -322,7 +348,6 @@ if (Set-Centred $wizard) {
 # done with the wizard, so the demotion has to last as long as the wizard
 # does. Stopping when Arcadia itself is gone keeps this process from
 # outliving the app that started it.
-$minimised = @{}
 $guardEnd = [DateTime]::UtcNow.AddMilliseconds($guard)
 # Roughly two seconds of re-centring at 250 ms per pass, then hands off —
 # past this point a user who moves the dialog themselves should not have it
@@ -355,7 +380,16 @@ while ([DateTime]::UtcNow -lt $guardEnd -and [U]::IsWindow($wizard)) {
   # the wrong monitor.
   if ($tick -lt $reassertPasses) { [void](Set-Centred $wizard) }
 
-  Set-ClientMinimised $minimised
+  # A store Arcadia had to start itself should never show its client
+  # window at all — that is the original design, and -silent does not
+  # reliably deliver it on a cold start, so this mops up here for as long
+  # as the guard loop runs. A store that was already running before
+  # Arcadia launched it is a different case entirely: that window is the
+  # user's, not something Arcadia opened on their behalf, so
+  # $startedStore being false leaves it alone here — the pre-launch call
+  # above already covered it once, unconditionally, and this per-tick
+  # upkeep only needs to cover the store Arcadia is responsible for.
+  if ($startedStore) { Set-ClientMinimised $minimised }
   Start-Sleep -Milliseconds 250
   $tick += 1
 }

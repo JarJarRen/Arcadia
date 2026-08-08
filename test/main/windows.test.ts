@@ -393,4 +393,28 @@ describe('WINDOW_AGENT_SCRIPT', () => {
     // mean someone put it back.
     expect(WINDOW_AGENT_SCRIPT).not.toContain('SetWindowPos($owner, $wizard')
   })
+
+  it('minimises a visible client window before launching, not just after placement', () => {
+    // Measured: Steam only opens a standalone install dialog when its own
+    // client window is off screen. With the client visible, Steam handles
+    // steam://install/ inside that window instead, so the dialog this agent
+    // waits for is never created. Minimising after placement (the older,
+    // $startedStore-gated call further down) is too late to fix that — the
+    // pre-launch call has to run first, before Start-Process.
+    const preLaunchIndex = WINDOW_AGENT_SCRIPT.indexOf('Set-ClientMinimised $minimised')
+    const launchIndex = WINDOW_AGENT_SCRIPT.indexOf('Start-Process -FilePath $exe')
+    expect(preLaunchIndex).toBeGreaterThan(-1)
+    expect(launchIndex).toBeGreaterThan(-1)
+    expect(preLaunchIndex).toBeLessThan(launchIndex)
+
+    // Steam needs a moment to settle after being minimised before it can
+    // receive the URI.
+    expect(WINDOW_AGENT_SCRIPT).toContain('Start-Sleep -Milliseconds 400')
+  })
+
+  it('does not treat an already-minimised window as eligible to minimise', () => {
+    // Without this check, a client window the user (or an earlier tick)
+    // already minimised would look untouched and get re-processed.
+    expect(WINDOW_AGENT_SCRIPT).toContain('IsIconic')
+  })
 })
