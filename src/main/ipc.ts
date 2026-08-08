@@ -1,4 +1,4 @@
-import { ipcMain, shell, type BrowserWindow } from 'electron'
+import { ipcMain, screen, shell, type BrowserWindow } from 'electron'
 import { stat } from 'node:fs/promises'
 import { IPC } from '@shared/ipc'
 import { getLanguage, parseLanguage, setLanguage, t } from '@shared/i18n'
@@ -11,7 +11,9 @@ import type { SettingsRepository } from '@main/db/settings'
 import type { StoreAdapter } from '@main/stores/types'
 import { mergeLibrary } from '@main/library/merge'
 import { runSync } from '@main/sync'
-import { installGame, launchGame } from '@main/launch-bridge'
+import type { ScanState } from '@main/scan-state'
+import { cancelInstall, installGame, launchGame, type InstallFrame } from '@main/launch-bridge'
+import { decodeWindowHandle } from '@main/platform/windows'
 import type { SteamAppList } from '@main/metadata/steamAppList'
 import { applyManualMatch } from '@main/metadata/queue'
 import { readEnvConfig, saveEnvConfig } from '@main/env-config'
@@ -24,6 +26,14 @@ export interface IpcContext {
   settings: SettingsRepository
   adapters: StoreAdapter[]
   getWindow: () => BrowserWindow | undefined
+  /**
+   * The shared record of whether a scan is running.
+   *
+   * Shared with the startup scan rather than owned here, so the toolbar
+   * reports both the same way — the renderer cannot tell which process
+   * started a scan, and should not have to.
+   */
+  scan: ScanState
   /**
    * The loaded Steam app list, shared with the background service.
    *
@@ -94,6 +104,47 @@ function library(repo: GameRepository, metadata: MetadataRepository): LibraryEnt
   })
 }
 
+/**
+ * Arcadia's window as the agent needs to see it.
+ *
+ * `dipToScreenRect` rather than the raw bounds: `getBounds` is in
+ * device-independent pixels while user32 works in physical ones. On a
+ * monitor at 150 % those differ, and an unconverted rectangle centres the
+ * dialog somewhere else entirely.
+ */
+function installFrame(window: BrowserWindow | undefined): InstallFrame | undefined {
+  // All three cases InstallAssist.frame promises. Minimised belongs here
+  // because Windows reports degenerate bounds for it — centring on that
+  // rectangle would put the dialog somewhere off-screen, which is worse
+  // than not centring it at all.
+  if (window === undefined || window.isDestroyed() || window.isMinimized()) {
+    return undefined
+  }
+
+  const rect = screen.dipToScreenRect(window, window.getBounds())
+
+  return {
+    target: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+    // Decoded by a tested function rather than inline: this whole helper
+    // needs a live BrowserWindow and so cannot be reached from vitest, and
+    // the handle read is the only part of it with anything to get wrong.
+    owner: decodeWindowHandle(window.getNativeWindowHandle())
+  }
+}
+
+/**
+ * Toggles Arcadia holding itself above Steam's windows.
+ *
+ * Same destroyed-window guard as `installFrame`: the agent's `finally` can
+ * still be clearing this after the window it targets is already gone, and a
+ * destroyed `BrowserWindow` throws on any method call rather than reporting
+ * itself unusable.
+ */
+function setInstallAlwaysOnTop(window: BrowserWindow | undefined, value: boolean): void {
+  if (window === undefined || window.isDestroyed()) return
+  window.setAlwaysOnTop(value)
+}
+
 export function registerIpcHandlers(context: IpcContext): void {
   const notifyChanged = (): void => {
     context.getWindow()?.webContents.send(IPC.libraryChanged)
@@ -101,8 +152,12 @@ export function registerIpcHandlers(context: IpcContext): void {
 
   ipcMain.handle(IPC.libraryGet, () => library(context.repo, context.metadata))
 
+  ipcMain.handle(IPC.libraryScanState, () => context.scan.isScanning())
+
   ipcMain.handle(IPC.librarySync, async () => {
-    const result = await runSync(context.adapters, context.repo, Math.floor(Date.now() / 1000))
+    const result = await context.scan.track(() =>
+      runSync(context.adapters, context.repo, Math.floor(Date.now() / 1000))
+    )
     notifyChanged()
     return result
   })
@@ -137,11 +192,24 @@ export function registerIpcHandlers(context: IpcContext): void {
       if (game === undefined) {
         return { ok: false, error: t().errors.unknownGame(gameId) }
       }
-      return await installGame(context.adapters, game)
+      return await installGame(context.adapters, game, {
+        frame: () => installFrame(context.getWindow()),
+        setAlwaysOnTop: (value) => setInstallAlwaysOnTop(context.getWindow(), value)
+      })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       return { ok: false, error: t().errors.installFailed(message) }
     }
+  })
+
+  /**
+   * Ends the wait for the store's dialog.
+   *
+   * Takes no argument and returns nothing: there is at most one install
+   * being waited on, and the caller is the overlay that was showing it.
+   */
+  ipcMain.handle(IPC.gameInstallCancel, () => {
+    cancelInstall()
   })
 
   ipcMain.handle(IPC.gameSetFavorite, (_event, mergeKey: unknown, value: unknown) => {
@@ -244,18 +312,6 @@ export function registerIpcHandlers(context: IpcContext): void {
   })
 
   /**
-   * Records the interface language.
-   *
-   * Validated rather than trusted: the value crosses a process boundary, and
-   * an unrecognised one would leave `BUNDLES[value]` undefined and blank the
-   * whole interface.
-   *
-   * `notifyChanged` at the end is not decoration. The library carries the
-   * metadata for one language; after a switch the renderer has to fetch it
-   * again, or descriptions would stay in the previous language until the
-   * next scan.
-   */
-  /**
    * Adds a game by hand.
    *
    * Every field is validated in the repository rather than here, because
@@ -341,6 +397,29 @@ export function registerIpcHandlers(context: IpcContext): void {
     }
   })
 
+  /**
+   * The interface language the renderer should start in.
+   *
+   * Answered from `@shared/i18n`'s own `getLanguage()` rather than a fresh
+   * `context.settings.get('language')`: startup (`main/index.ts`) already
+   * parses the stored value and applies it to this process's copy of the
+   * module before any handler is registered, which makes that copy the
+   * authoritative answer and spares a second read of the same row.
+   */
+  ipcMain.handle(IPC.settingsGetLanguage, () => getLanguage())
+
+  /**
+   * Records the interface language.
+   *
+   * Validated rather than trusted: the value crosses a process boundary, and
+   * an unrecognised one would leave `BUNDLES[value]` undefined and blank the
+   * whole interface.
+   *
+   * `notifyChanged` at the end is not decoration. The library carries the
+   * metadata for one language; after a switch the renderer has to fetch it
+   * again, or descriptions would stay in the previous language until the
+   * next scan.
+   */
   ipcMain.handle(IPC.settingsSetLanguage, (_event, language: unknown) => {
     const parsed = parseLanguage(language)
     if (parsed === undefined) return

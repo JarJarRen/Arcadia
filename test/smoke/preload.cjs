@@ -164,14 +164,28 @@ contextBridge.exposeInMainWorld('arcadia', {
     { appId: 298111, name: 'Far Cry 4 Gold Edition' }
   ],
   setMatch: async () => ({ ok: true }),
+  // Asked for by LanguageProvider on mount, before anything is rendered.
+  // Missing, the throw escapes a useEffect with no error boundary above it,
+  // React tears the whole root down and every measurement below fails
+  // against an empty document — which is how this file's absence presented:
+  // not as "getLanguage is undefined" but as a null `.click()` target
+  // several hundred lines later.
+  getLanguage: async () => 'en',
   // The language menu calls this on every switch. Missing, the click would
   // throw inside the handler and the popover would simply not close.
   setLanguage: async () => undefined,
+  // Sent when the install overlay is dismissed.
+  cancelInstall: async () => undefined,
   // Adding does not really change the stub's list; the smoke test only
   // checks that the dialog opens, validates and submits.
   addManualGame: async () => ({ ok: true, id: 'ea:manual-added-by-hand' }),
   removeManualGame: async () => ({ ok: true }),
   reportBrokenArtwork: async () => undefined,
+  // No scan is running: the stub's library is already complete, and a true
+  // here would put the "searching…" hint on screen in place of the tiles
+  // every measurement below depends on.
+  isScanning: async () => false,
+  onScanningChanged: () => () => undefined,
   onLibraryChanged: () => () => undefined,
   onNavigateBack: () => () => undefined,
   onNavigateForward: () => () => undefined

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } 
 import type { LibraryEntry } from '@shared/library'
 import { t } from '@shared/i18n'
 import type { EnvConfigState } from '@shared/env-config'
+import type { StoreId } from '@shared/types'
 import { useLibrary } from './hooks/useLibrary'
 import {
   filterGames,
@@ -14,6 +15,8 @@ import {
 import { Library } from './Library'
 import { AddGameDialog } from './components/AddGameDialog'
 import { SetupDialog } from './components/SetupDialog'
+import { InstallOverlay, OVERLAY_DELAY_MS } from './components/InstallOverlay'
+import { STORE_LABELS } from './components/storeLabels'
 import { isMouseBackButton, isMouseForwardButton } from './navigation'
 import { LibraryToolbar } from './components/LibraryToolbar'
 import { GameDetail } from './pages/GameDetail'
@@ -69,6 +72,14 @@ export function App(): ReactElement {
   const [pendingSelect, setPendingSelect] = useState<string | undefined>()
   /** The page most recently closed, so the forward button can reopen it. */
   const lastClosed = useRef<string | undefined>(undefined)
+  const [installPending, setInstallPending] = useState<StoreId | undefined>()
+  /**
+   * Which install the overlay belongs to.
+   *
+   * A second install while the first is still waiting would otherwise let
+   * the older answer close the newer overlay.
+   */
+  const installSequence = useRef(0)
 
   const visible = useMemo(
     () => sortGames(filterGames(entries, filter), sort, sortDirection),
@@ -128,17 +139,40 @@ export function App(): ReactElement {
   }, [])
 
   const install = useCallback(async (entry: LibraryEntry): Promise<void> => {
+    const mine = ++installSequence.current
+    const store = entry.active.storeId
+
+    // Only after a pause: where the store is already running, or the
+    // platform has no window agent, the answer arrives before this fires
+    // and the overlay is never shown.
+    const timer = setTimeout(() => {
+      if (mine === installSequence.current) setInstallPending(store)
+    }, OVERLAY_DELAY_MS)
+
     try {
       const result = await window.arcadia.install(entry.active.id)
       setLaunchError(result.ok ? undefined : result.error)
       // Not every store can install from outside. EA merely opens its
       // library — without this hint the click would look as though it had
-      // done nothing at all.
+      // done nothing at all. Steam uses it to explain a dialog that never
+      // appeared.
       setNotice(result.notice)
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : String(caught)
       setLaunchError(t().errors.installFailed(message))
+    } finally {
+      clearTimeout(timer)
+      // Errors and notices are set either way — a dismissed overlay must
+      // not swallow a real failure — but only the current install may
+      // close the overlay.
+      if (mine === installSequence.current) setInstallPending(undefined)
     }
+  }, [])
+
+  const dismissInstall = useCallback((): void => {
+    setInstallPending(undefined)
+    // Ends the waiting, not the download: the store already has the URI.
+    void window.arcadia.cancelInstall()
   }, [])
 
   const visibleError = launchError ?? error
@@ -343,11 +377,16 @@ export function App(): ReactElement {
         />
       )}
 
+      {installPending !== undefined && (
+        <InstallOverlay store={STORE_LABELS[installPending]} onDismiss={dismissInstall} />
+      )}
+
       <Library
         entries={entries}
         visible={visible}
         view={view}
         loading={loading}
+        scanning={syncing}
         selected={opened}
         onSelect={(entry) => setOpenKey(entry.key)}
         onLaunch={(entry) => void launch(entry)}

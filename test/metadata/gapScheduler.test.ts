@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createGapScheduler } from '@main/metadata/gapScheduler'
 
 /**
@@ -171,5 +171,92 @@ describe('the artwork gap scheduler', () => {
     scheduler.request()
 
     expect(clock.delays()).toEqual([2000])
+  })
+
+  it('uses a real timer when no schedule is injected', async () => {
+    vi.useFakeTimers()
+    try {
+      let runs = 0
+      const scheduler = createGapScheduler({
+        run: async () => {
+          runs++
+        },
+        delayMs: 50
+      })
+
+      scheduler.request()
+      expect(runs).toBe(0)
+
+      await vi.advanceTimersByTimeAsync(50)
+      await scheduler.idle()
+
+      expect(runs).toBe(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('reports a failed pass to the console when no onError is injected', async () => {
+    const clock = timers()
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const failure = new Error('SteamGridDB unreachable')
+    const scheduler = createGapScheduler({
+      run: async () => {
+        throw failure
+      },
+      delayMs: 2000,
+      schedule: clock.schedule
+    })
+
+    scheduler.request()
+    clock.fire()
+    await scheduler.idle()
+
+    expect(consoleError).toHaveBeenCalledWith('Artwork pass failed:', failure)
+    consoleError.mockRestore()
+  })
+
+  it('re-arms instead of starting a second pass when a request arrives while the run it triggered is still in flight', async () => {
+    // The window this closes: arm() schedules a callback while `running` is
+    // still undefined, but by the time that callback actually fires,
+    // `running` has since become defined — because the pass it started
+    // itself made a fresh request before awaiting anything. Without the
+    // running-check inside arm()'s own callback, this would start a second,
+    // overlapping pass instead of folding into requestedDuringRun.
+    const clock = timers()
+    const gate = deferred()
+    let runs = 0
+    const scheduler: ReturnType<typeof createGapScheduler> = createGapScheduler({
+      run: async () => {
+        runs++
+        if (runs === 1) {
+          // Fires synchronously, before `running` itself is assigned by the
+          // caller — see the comment above.
+          scheduler.request()
+        }
+        await gate.promise
+      },
+      delayMs: 2000,
+      schedule: clock.schedule
+    })
+
+    scheduler.request()
+    clock.fire()
+    // The nested request(), issued while running was still undefined, went
+    // through arm() and queued a second callback rather than merely setting
+    // requestedDuringRun.
+    expect(clock.pending()).toBe(1)
+
+    clock.fire()
+    // That second callback now sees `running` defined and must re-arm
+    // rather than starting a second pass immediately.
+    expect(runs).toBe(1)
+
+    gate.resolve()
+    await scheduler.idle()
+    clock.fire()
+    await scheduler.idle()
+
+    expect(runs).toBe(2)
   })
 })

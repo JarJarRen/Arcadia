@@ -6,14 +6,27 @@ export const IPC = {
   libraryGet: 'library:get',
   librarySync: 'library:sync',
   libraryChanged: 'library:changed',
+  /**
+   * Whether a scan is running right now, asked once when the renderer mounts.
+   *
+   * A pull as well as the event below, because the startup scan begins while
+   * the renderer is still compiling its bundle: by the time it subscribes,
+   * `libraryScanning` has already been sent and missed. Asking on mount is
+   * what closes that window.
+   */
+  libraryScanState: 'library:scan-state',
+  /** Sent with `true` when a scan starts and `false` when it ends. */
+  libraryScanning: 'library:scanning',
   gameLaunch: 'game:launch',
   gameSetFavorite: 'game:set-favorite',
   gameOpenFolder: 'game:open-folder',
   gameInstall: 'game:install',
+  gameInstallCancel: 'game:install-cancel',
   mergeSetPreferred: 'merge:set-preferred',
   mergeSetSplit: 'merge:set-split',
   metadataSearch: 'metadata:search',
   metadataSetMatch: 'metadata:set-match',
+  settingsGetLanguage: 'settings:get-language',
   settingsSetLanguage: 'settings:set-language',
   envConfigGet: 'env-config:get',
   envConfigSave: 'env-config:save',
@@ -45,6 +58,13 @@ export interface ArcadiaApi {
   /** Opens the store's install dialog; expects the same `id`. */
   install(gameId: string): Promise<LaunchResult>
   /**
+   * Stops waiting for the store's install dialog.
+   *
+   * Cancels the **assistance**, not the installation: the store already
+   * has the URI and carries on. Only the overlay and the window agent end.
+   */
+  cancelInstall(): Promise<void>
+  /**
    * Expects the merge key, not a game ID.
    *
    * A merged entry counts as a favourite as soon as one of its sources is.
@@ -68,6 +88,16 @@ export interface ArcadiaApi {
   searchApps(query: string): Promise<AppSuggestion[]>
   /** Matches a game to a Steam AppID by hand and fetches it immediately. */
   setMatch(mergeKey: string, steamAppId: number): Promise<LaunchResult>
+  /**
+   * The persisted interface language, so the renderer can start in it.
+   *
+   * Main applies the stored setting to its own copy of the i18n module at
+   * startup; the renderer's copy is a separate module in a separate
+   * process and always begins at `DEFAULT_LANGUAGE` regardless. Without
+   * this call, a German setting would only ever show up in main's own
+   * messages, never in the rendered UI.
+   */
+  getLanguage(): Promise<string>
   /**
    * Records the chosen interface language.
    *
@@ -121,6 +151,17 @@ export interface ArcadiaApi {
    * names a library entry.
    */
   reportBrokenArtwork(mergeKey: string, kind: string): Promise<void>
+  /**
+   * Whether a scan is in flight at this moment.
+   *
+   * Needed because the scan that runs at startup is begun by the main
+   * process, not by the button: without asking, the renderer has no way to
+   * know one is under way and reports an empty library as "nothing found"
+   * while it is still being filled.
+   */
+  isScanning(): Promise<boolean>
+  /** Fires whenever a scan starts or ends, from whichever source. */
+  onScanningChanged(callback: (scanning: boolean) => void): () => void
   onLibraryChanged(callback: () => void): () => void
   /**
    * The mouse's back button, as reported by Windows.

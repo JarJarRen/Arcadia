@@ -187,4 +187,35 @@ describe('readRegistryTree', () => {
     expect(command_).toMatch(/\/s\b/)
     expect(command_).toContain('chcp 65001')
   })
+
+  it('returns an empty list when the key is missing', async () => {
+    const blocks = await readRegistryTree('HKLM\\Fehlt', async () => {
+      throw new Error('nicht gefunden')
+    })
+    expect(blocks).toEqual([])
+  })
+})
+
+describe('the default runner', () => {
+  // The only tests in this file that exercise `defaultExec` rather than an
+  // injected fake. This module only ever runs on Windows, so a real
+  // `reg.exe` call against a key that is guaranteed to exist on any Windows
+  // installation is the honest way to pin it — a mock here would just
+  // re-assert that `promisify` wires up the way the Node docs say it does.
+  it('reads a real, always-present registry value through reg.exe', async () => {
+    const value = await readRegistryValue(
+      'HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion',
+      'ProductName'
+    )
+    expect(value).toBeDefined()
+    expect(value).toMatch(/windows/i)
+  })
+
+  it('returns undefined for a registry key that does not exist', async () => {
+    const value = await readRegistryValue(
+      'HKCU\\SOFTWARE\\Arcadia\\DoesNotExist12345',
+      'Nothing'
+    )
+    expect(value).toBeUndefined()
+  })
 })

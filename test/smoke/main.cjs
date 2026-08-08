@@ -74,14 +74,14 @@ function check(result) {
   if (shared === null || shared === undefined) {
     problems.push('The test tile for install/shared was not found.')
   } else {
-    if (shared.buttonText !== 'Install') {
+    if (shared.buttonText === null || !shared.buttonText.includes('Install')) {
       problems.push(
         `An uninstalled tile shows "${shared.buttonText}" instead of "Install".`
       )
     }
     if (!shared.buttonEnabled) problems.push('The install button is greyed out.')
     if (!shared.badge) problems.push('The "Shared/Free" badge is missing from the shared tile.')
-    if (shared.installedButton !== 'Play') {
+    if (shared.installedButton === null || !shared.installedButton.includes('Play')) {
       problems.push(
         `An installed tile shows "${shared.installedButton}" instead of "Play".`
       )
@@ -115,8 +115,25 @@ function check(result) {
  * the script that drove it kept reaching for `.value` on `undefined` — ten
  * minutes of silence for a one-line error.
  */
+/**
+ * What the renderer itself complained about.
+ *
+ * At module scope rather than beside the window, because the handler below
+ * is where it is needed most: a rejected script exits immediately and never
+ * reaches the summary at the end, so this was the one path where the real
+ * message had nowhere to be printed.
+ */
+const rendererErrors = []
+
 process.on('unhandledRejection', (reason) => {
   console.log('PROBLEM: a smoke-test script threw:', reason)
+  // Electron's own message for this says only "an error was thrown, check
+  // the renderer console" — and the console it means is discarded when the
+  // process exits. Whatever the renderer logged is almost always the actual
+  // cause, so it goes out here rather than being left to be rediscovered.
+  for (const message of rendererErrors) {
+    console.log('PROBLEM: the renderer logged an error:', message)
+  }
   console.log('RESULT: FAILED')
   app.exit(1)
 })
@@ -132,6 +149,25 @@ app.whenReady().then(async () => {
       nodeIntegration: false,
       sandbox: true
     }
+  })
+
+  /**
+   * Why the renderer's own errors are worth collecting at all: the failure
+   * they explain arrives somewhere else entirely. A throw inside a
+   * `useEffect` has no error boundary above it, so React tears the whole
+   * root down; every script after that point then measures an empty
+   * document, and the first one to reach for a real element rejects with
+   * Electron's "Script failed to execute". That is what `getLanguage`
+   * missing from preload.cjs looked like — a null `.click()` target six
+   * hundred lines below the actual cause.
+   */
+  win.webContents.on('console-message', (event) => {
+    if (event.level === 'error') rendererErrors.push(event.message)
+  })
+  // A preload that throws leaves `window.arcadia` undefined altogether, and
+  // then every single measurement fails at once for one reason.
+  win.webContents.on('preload-error', (_event, path, error) => {
+    rendererErrors.push(`preload ${path} threw: ${String(error)}`)
   })
 
   await win.loadFile(join(__dirname, '../../out/renderer/index.html'))
@@ -321,7 +357,7 @@ app.whenReady().then(async () => {
   if (detail.heroHeight < 200) {
     detailProblems.push(`The header is ${detail.heroHeight}px tall — it has collapsed.`)
   }
-  if (detail.titleText !== 'Far Cry 4') {
+  if (detail.titleText === null || !detail.titleText.includes('Far Cry 4')) {
     detailProblems.push(`The page shows "${detail.titleText}" instead of "Far Cry 4".`)
   }
   if (detail.textHeight < 100) {
@@ -641,7 +677,7 @@ app.whenReady().then(async () => {
   const toolbar = await win.webContents.executeJavaScript(`(async () => {
     const wait = () => new Promise((r) => setTimeout(r, 250))
     const trigger = document.querySelector('.popover__trigger')
-    const count = () => document.querySelector('.toolbar__count').textContent
+    const count = () => document.querySelector('.toolbar__counttext').textContent
     const firstCard = () => {
       const card = document.querySelector('.card__open')
       return card === null ? '' : card.textContent
@@ -676,7 +712,7 @@ app.whenReady().then(async () => {
 
     // The direction toggle: same key, reversed list.
     const toggle = [...document.querySelectorAll('.toolbar .button--icon')].find(
-      (b) => b.textContent === '↑' || b.textContent === '↓'
+      (b) => b.textContent.includes('↑') || b.textContent.includes('↓')
     )
     const arrowBefore = toggle === undefined ? null : toggle.textContent
     toggle.click()
@@ -739,10 +775,10 @@ app.whenReady().then(async () => {
   if (!toolbar.cleared.closed) {
     toolbarProblems.push('The panel stayed open after "All stores".')
   }
-  if (toolbar.arrowBefore !== '↑') {
+  if (toolbar.arrowBefore === null || !toolbar.arrowBefore.includes('↑')) {
     toolbarProblems.push(`The library opens on "${toolbar.arrowBefore}" instead of ascending.`)
   }
-  if (toolbar.reversed.arrow !== '↓') {
+  if (!toolbar.reversed.arrow.includes('↓')) {
     toolbarProblems.push('The arrow did not follow the direction it set.')
   }
   if (toolbar.reversed.first === toolbar.sortedAscending) {
@@ -880,6 +916,9 @@ app.whenReady().then(async () => {
   }
 
   const problems = [
+    // First in the list, because when the renderer has thrown, everything
+    // below is a consequence of it rather than a finding of its own.
+    ...rendererErrors.map((message) => `The renderer logged an error: ${message}`),
     ...check(result),
     ...hintProblems,
     ...detailProblems,

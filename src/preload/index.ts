@@ -6,6 +6,7 @@ const api: ArcadiaApi = {
   sync: () => ipcRenderer.invoke(IPC.librarySync),
   launch: (gameId) => ipcRenderer.invoke(IPC.gameLaunch, gameId),
   install: (gameId) => ipcRenderer.invoke(IPC.gameInstall, gameId),
+  cancelInstall: () => ipcRenderer.invoke(IPC.gameInstallCancel),
   setFavorite: (mergeKey, value) => ipcRenderer.invoke(IPC.gameSetFavorite, mergeKey, value),
   setPreferredStore: (mergeKey, gameId) =>
     ipcRenderer.invoke(IPC.mergeSetPreferred, mergeKey, gameId),
@@ -14,12 +15,19 @@ const api: ArcadiaApi = {
   searchApps: (query) => ipcRenderer.invoke(IPC.metadataSearch, query),
   setMatch: (mergeKey, steamAppId) =>
     ipcRenderer.invoke(IPC.metadataSetMatch, mergeKey, steamAppId),
+  getLanguage: () => ipcRenderer.invoke(IPC.settingsGetLanguage),
   setLanguage: (language) => ipcRenderer.invoke(IPC.settingsSetLanguage, language),
   getEnvConfig: () => ipcRenderer.invoke(IPC.envConfigGet),
   saveEnvConfig: (values) => ipcRenderer.invoke(IPC.envConfigSave, values),
   addManualGame: (game) => ipcRenderer.invoke(IPC.libraryAddManual, game),
   removeManualGame: (gameId) => ipcRenderer.invoke(IPC.libraryRemoveManual, gameId),
   reportBrokenArtwork: (mergeKey, kind) => ipcRenderer.invoke(IPC.artworkBroken, mergeKey, kind),
+  isScanning: () => ipcRenderer.invoke(IPC.libraryScanState),
+  onScanningChanged: (callback) => {
+    const listener = (_event: unknown, scanning: boolean): void => callback(scanning)
+    ipcRenderer.on(IPC.libraryScanning, listener)
+    return () => ipcRenderer.removeListener(IPC.libraryScanning, listener)
+  },
   onLibraryChanged: (callback) => {
     const listener = (): void => callback()
     ipcRenderer.on(IPC.libraryChanged, listener)

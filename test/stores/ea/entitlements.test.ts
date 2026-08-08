@@ -133,6 +133,35 @@ describe('EA entitlements', () => {
     ).toEqual([])
   })
 
+  it('returns nothing when the EA ProgramData store is not readable', async () => {
+    // The candidate user ID is found via LOCALAPPDATA, but the store
+    // directories themselves live under ProgramData — a separate directory
+    // that can fail independently.
+    const root = eaProgramDataDir(ENV)
+    expect(
+      await readEaOwnedOffers(
+        deps({
+          listDir: async (path) => {
+            if (path === root) throw new Error('ENOENT')
+            return ['user_1234.ini']
+          }
+        })
+      )
+    ).toEqual([])
+  })
+
+  it('returns nothing when the entitlement store file cannot be read', async () => {
+    expect(
+      await readEaOwnedOffers(
+        deps({
+          readBytes: async () => {
+            throw new Error('EPERM')
+          }
+        })
+      )
+    ).toEqual([])
+  })
+
   it('carries on when one settings file cannot be read', async () => {
     let first = true
     const overrides = {

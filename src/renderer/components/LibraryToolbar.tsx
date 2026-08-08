@@ -138,8 +138,19 @@ export function LibraryToolbar(props: Props): ReactElement {
         ))}
       </div>
 
+      {/* The count is the one label in the row whose width follows the data,
+          and the search field beside it grows into whatever it gives up — so
+          filtering the library slid every control between the two sideways,
+          the checkbox that was just clicked included. A hidden copy at the
+          widest the label can ever be — `shown` at its maximum is `total` —
+          holds the width still. */}
       <span className="toolbar__count">
-        {t().toolbar.shownOfTotal(props.shown, props.total)}
+        <span className="toolbar__countsizer" aria-hidden="true">
+          {t().toolbar.shownOfTotal(props.total, props.total)}
+        </span>
+        <span className="toolbar__counttext">
+          {t().toolbar.shownOfTotal(props.shown, props.total)}
+        </span>
       </span>
 
       {/* Icon only, so the label lives in the tooltip and the accessible

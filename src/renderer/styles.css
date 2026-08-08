@@ -41,10 +41,25 @@ body {
   min-width: 180px;
 }
 
+/* A width that does not change with the filter: the search field is the only
+   flexible item in the row, so every character this label loses is a character
+   the search field gains, and everything between them moves. The sizer and the
+   text share one grid cell, so the width is the widest of the two and the
+   digits grow leftwards into it. */
 .toolbar__count {
+  display: grid;
+  justify-items: end;
   margin-left: auto;
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
+}
+
+.toolbar__count > * {
+  grid-area: 1 / 1;
+}
+
+.toolbar__countsizer {
+  visibility: hidden;
 }
 
 /* The two filter checkboxes as one column. Side by side they claimed more
@@ -1029,4 +1044,26 @@ button:focus-visible {
   flex-direction: column;
   overflow-y: auto;
   background: var(--bg);
+}
+
+/* ── Install overlay ─────────────────────────────────────────────────── */
+.modal__box--install {
+  width: min(360px, 100%);
+  align-items: center;
+  text-align: center;
+}
+
+.install__spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: install-spin 0.9s linear infinite;
+}
+
+@keyframes install-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }

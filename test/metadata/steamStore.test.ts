@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fetchAppDetails, SteamStoreError, stripHtml } from '@main/metadata/steamStore'
 
 const response = (appid: number, data: unknown, success = true, status = 200) =>
@@ -37,9 +37,17 @@ describe('stripHtml', () => {
     expect(stripHtml('Just text')).toBe('Just text')
     expect(stripHtml('')).toBe('')
   })
+
+  it('leaves an entity it does not recognise untouched', () => {
+    expect(stripHtml('Caf&eacute; culture')).toBe('Caf&eacute; culture')
+  })
 })
 
 describe('fetchAppDetails', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
   it('translates a complete response', async () => {
     const meta = (await fetchAppDetails(1091500, { fetchFn: response(1091500, game()) }))!
     expect(meta.steamAppId).toBe(1091500)
@@ -141,5 +149,86 @@ describe('fetchAppDetails', () => {
       }
     })
     expect(url).toContain('l=german')
+  })
+
+  it('reports a network error rather than an unhandled rejection', async () => {
+    let caught: unknown
+    try {
+      await fetchAppDetails(1, {
+        fetchFn: async () => {
+          throw new TypeError('fetch failed')
+        }
+      })
+    } catch (e) {
+      caught = e
+    }
+    expect(caught).toBeInstanceOf(SteamStoreError)
+    expect((caught as SteamStoreError).kind).toBe('network')
+  })
+
+  it('reports invalid JSON as unexpected rather than an unhandled rejection', async () => {
+    let caught: unknown
+    try {
+      await fetchAppDetails(1, {
+        fetchFn: async () => ({
+          ok: true,
+          status: 200,
+          json: async () => {
+            throw new SyntaxError('Unexpected token')
+          }
+        })
+      })
+    } catch (e) {
+      caught = e
+    }
+    expect(caught).toBeInstanceOf(SteamStoreError)
+    expect((caught as SteamStoreError).kind).toBe('unexpected')
+  })
+
+  it('returns undefined when the payload has no entry for the requested AppID at all', async () => {
+    // Distinct from success:false — here the key itself is missing.
+    const meta = await fetchAppDetails(1, {
+      fetchFn: async () => ({ ok: true, status: 200, json: async () => ({}) })
+    })
+    expect(meta).toBeUndefined()
+  })
+
+  it('discards genre and screenshot entries that are not the expected shape', async () => {
+    const meta = (await fetchAppDetails(1, {
+      fetchFn: response(
+        1,
+        game({
+          genres: [{ description: 'RPG' }, 'not an object', 42],
+          screenshots: [{ path_full: 'https://a/1.jpg' }, 'not an object']
+        })
+      )
+    }))!
+    expect(meta.genres).toEqual(['RPG'])
+    expect(meta.screenshots).toEqual(['https://a/1.jpg'])
+  })
+
+  it('leaves out a release date or metacritic score that is not the expected shape', async () => {
+    const meta = (await fetchAppDetails(1, {
+      fetchFn: response(
+        1,
+        game({ release_date: { date: '' }, metacritic: { score: 'not a number' } })
+      )
+    }))!
+    expect(meta.releaseDate).toBeUndefined()
+    expect(meta.metacritic).toBeUndefined()
+  })
+
+  it('falls back to the global fetch when no fetchFn is supplied', async () => {
+    const globalFetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ 1: { success: true, data: game() } })
+    }))
+    vi.stubGlobal('fetch', globalFetch)
+
+    const meta = await fetchAppDetails(1)
+
+    expect(globalFetch).toHaveBeenCalledWith(expect.stringContaining('appids=1'))
+    expect(meta?.steamAppId).toBe(1)
   })
 })

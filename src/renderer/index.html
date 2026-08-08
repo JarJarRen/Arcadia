@@ -22,9 +22,84 @@
     <meta http-equiv="Content-Security-Policy"
           content="default-src 'self'; img-src 'self' data: https://cdn1.epicgames.com https://*.akamai.steamstatic.com https://cdn2.steamgriddb.com; style-src 'self' 'unsafe-inline'" />
     <title>Arcadia</title>
+    <!--
+      The window's first frame, before a single byte of the bundle has run.
+
+      The stylesheet is injected into this head by the build and is
+      render-blocking; the module script is not, so this markup paints while
+      the 636 kB bundle is still being fetched and compiled. Without these
+      rules that first frame is the browser default — a white rectangle —
+      which is what the window flashed on every cold start.
+
+      The colours are duplicated from styles.css on purpose. Anything that
+      lives in the stylesheet arrives too late to colour the first frame,
+      which is the one this exists for. --bg and --surface are the two values
+      copied; they have not changed since the theme was written.
+    -->
+    <style>
+      html {
+        background: #14161b;
+        color-scheme: dark;
+      }
+      /* Removed by React the moment it mounts: createRoot() clears the
+         container it is given before its first render. */
+      .boot {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        color: #949bab;
+        font: 14px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif;
+      }
+      .boot__name {
+        color: #e7e9ee;
+        font-size: 22px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+      .boot__bar {
+        width: 180px;
+        height: 2px;
+        border-radius: 2px;
+        background: #2b303b;
+        overflow: hidden;
+      }
+      .boot__bar::after {
+        content: '';
+        display: block;
+        width: 40%;
+        height: 100%;
+        border-radius: 2px;
+        background: #4a8cff;
+        animation: boot-slide 1.1s ease-in-out infinite;
+      }
+      @keyframes boot-slide {
+        from {
+          transform: translateX(-100%);
+        }
+        to {
+          transform: translateX(350%);
+        }
+      }
+      /* Someone who has asked for less motion gets a plain bar rather than
+         no feedback at all. */
+      @media (prefers-reduced-motion: reduce) {
+        .boot__bar::after {
+          width: 100%;
+          animation: none;
+        }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="boot">
+        <div class="boot__name">Arcadia</div>
+        <div class="boot__bar"></div>
+      </div>
+    </div>
     <script type="module" src="./main.tsx"></script>
   </body>
 </html>

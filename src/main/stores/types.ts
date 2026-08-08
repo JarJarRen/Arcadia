@@ -1,5 +1,26 @@
 import type { AvailabilityResult, Game, RawGame, StoreId } from '@shared/types'
 
+/**
+ * How to install without the store's main window taking over.
+ *
+ * Plain data, so an adapter can describe the route without importing
+ * Electron — the bridge is still the only place that acts on it.
+ */
+export interface GuidedInstall {
+  /** Executable to run instead of handing the URI to the shell. */
+  exe: string
+  /** Arguments, the install URI last. */
+  args: string[]
+  /** Image names whose top-level windows count as the store's. */
+  processNames: string[]
+  /** Exact window titles that are never the install dialog. */
+  ignoreTitles: string[]
+  /** Height to grow the dialog to if it opens shorter than this. 0 means do not resize. */
+  minHeight: number
+  /** Shown as a notice when no dialog appears within the timeout. */
+  timeoutNotice: string
+}
+
 export interface StoreAdapter {
   readonly id: StoreId
   readonly displayName: string
@@ -33,6 +54,17 @@ export interface StoreAdapter {
    * the user, so it has to explain rather than merely abort.
    */
   installUri(game: Game): string
+
+  /**
+   * The guided route for `installUri`, when the store has one.
+   *
+   * Returns undefined where the plain URI is all there is — which is every
+   * store but Steam, and Steam on any platform without the window agent.
+   * The notice travels with the plan rather than being looked up by the
+   * bridge, so the bridge needs no per-store knowledge to explain a
+   * timeout.
+   */
+  guidedInstall?(game: Game): Promise<GuidedInstall | undefined>
 
   /**
    * Explanation shown after an install click.

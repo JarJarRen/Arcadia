@@ -10,10 +10,10 @@ import { fetchArtwork, lookupBySteamAppId, searchExact, SGDB_PAUSE_MS } from './
 import { epicCatalogFile } from '@main/stores/epic/paths'
 
 /** How long to wait after a rate-limit block before carrying on. */
-const RATE_LIMIT_PAUSE_MS = 60_000
+export const RATE_LIMIT_PAUSE_MS = 60_000
 
 /** Pause between two passes, so the app can breathe. */
-const BATCH_PAUSE_MS = 2_000
+export const BATCH_PAUSE_MS = 2_000
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms))

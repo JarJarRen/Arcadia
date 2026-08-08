@@ -1,6 +1,19 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { SteamAdapter } from '@main/stores/steam'
+import { fetchOwnedGames, SteamApiError } from '@main/stores/steam/webApi'
 import { gameId, type Game } from '@shared/types'
+
+// Only the one test below ("uses the real webApi call by default") relies on
+// this: it lets the default `fetchOwned` wiring inside SteamAdapter be
+// exercised without a real HTTP call. Every other test in this file injects
+// `fetchOwned` directly and never touches the mock.
+vi.mock('@main/stores/steam/webApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@main/stores/steam/webApi')>()
+  return {
+    ...actual,
+    fetchOwnedGames: vi.fn(async () => [])
+  }
+})
 
 function game(id: string): Game {
   return {
@@ -65,6 +78,19 @@ describe('SteamAdapter', () => {
   it('returns an empty list rather than throwing when the Steam path is missing', async () => {
     const adapter = new SteamAdapter({}, { findPath: async () => undefined })
     expect(await adapter.scanInstalled()).toEqual([])
+  })
+
+  it('passes installed games through when the Steam path is present', async () => {
+    const adapter = new SteamAdapter(
+      {},
+      {
+        findPath: async () => 'd:\\steam',
+        scanLibraries: async () => [{ storeGameId: '440', name: 'TF2', installed: true }]
+      }
+    )
+    expect(await adapter.scanInstalled()).toEqual([
+      { storeGameId: '440', name: 'TF2', installed: true }
+    ])
   })
 
   it('returns an empty owned list without an API key', async () => {
@@ -133,5 +159,51 @@ describe('SteamAdapter', () => {
     )
     await adapter.scanOwned()
     expect(usedId).toBe('MANUAL')
+  })
+
+  it('wraps a plain failure from fetchOwned as an unexpected SteamApiError', async () => {
+    // Only a SteamApiError already carries a hint the user can act on (wrong
+    // key vs. private profile); anything else must not reach sync.ts as a
+    // bare, unclassified error.
+    const adapter = new SteamAdapter(
+      { apiKey: 'K', steamId64: '765' },
+      {
+        findPath: async () => 'd:\\steam',
+        fetchOwned: async () => {
+          throw new Error('ECONNRESET')
+        }
+      }
+    )
+    await expect(adapter.scanOwned()).rejects.toThrow(SteamApiError)
+    await expect(adapter.scanOwned()).rejects.toMatchObject({ kind: 'unexpected' })
+  })
+
+  it('lets a SteamApiError through unchanged rather than rewrapping it', async () => {
+    const original = new SteamApiError('private', 'profile is private')
+    const adapter = new SteamAdapter(
+      { apiKey: 'K', steamId64: '765' },
+      {
+        findPath: async () => 'd:\\steam',
+        fetchOwned: async () => {
+          throw original
+        }
+      }
+    )
+    await expect(adapter.scanOwned()).rejects.toBe(original)
+  })
+
+  it('uses the real webApi call by default', async () => {
+    // No `fetchOwned` override: this is the only test exercising the
+    // module's own default wiring rather than an injected fake.
+    vi.mocked(fetchOwnedGames).mockResolvedValueOnce([
+      { storeGameId: '440', name: 'TF2', installed: false }
+    ])
+    const adapter = new SteamAdapter(
+      { apiKey: 'K', steamId64: '765' },
+      { findPath: async () => 'd:\\steam' }
+    )
+    const games = await adapter.scanOwned()
+    expect(games).toEqual([{ storeGameId: '440', name: 'TF2', installed: false }])
+    expect(fetchOwnedGames).toHaveBeenCalledWith({ apiKey: 'K', steamId64: '765' })
   })
 })

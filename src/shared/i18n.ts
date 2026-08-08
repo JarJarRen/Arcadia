@@ -117,10 +117,22 @@ export interface Strings {
 
   library: {
     loading: string
+    /**
+     * Shown while a scan is filling a library that is still empty — which on
+     * a first start is the entire wait.
+     */
+    scanning: string
     empty: string
     noMatches: string
     /** Right-hand pane in list view with nothing selected. */
     nothingSelected: string
+  }
+
+  install: {
+    /** e.g. "Installing through Steam" */
+    overlayTitle: (store: string) => string
+    overlayBody: (store: string) => string
+    overlayDismiss: string
   }
 
   card: {
@@ -128,7 +140,6 @@ export interface Strings {
     install: string
     notInstalled: string
     installVia: (store: string) => string
-    openDetails: (name: string) => string
     addFavorite: string
     removeFavorite: string
     sharedOrFree: string
@@ -221,6 +232,8 @@ export interface Strings {
       privateProfile: string
       libraryFailed: string
       invalidAppId: (id: string) => string
+      /** Shown when the install was fired but no dialog ever appeared. */
+      noInstallDialog: string
     }
     epic: {
       notFound: string
@@ -347,9 +360,16 @@ const en: Strings = {
 
   library: {
     loading: 'Loading library…',
+    scanning: 'Searching Steam, Epic, EA and Ubisoft for your games…',
     empty: 'No games found yet. “Refresh” starts the scan.',
     noMatches: 'No game matches the current filters.',
     nothingSelected: 'Pick a game from the list.'
+  },
+
+  install: {
+    overlayTitle: (store) => `Installing through ${store}`,
+    overlayBody: (store) => `The ${store} dialog handles this step. Arcadia is waiting for it.`,
+    overlayDismiss: 'Press Esc to keep browsing'
   },
 
   card: {
@@ -357,7 +377,6 @@ const en: Strings = {
     install: 'Install',
     notInstalled: 'Not installed',
     installVia: (store) => `Install via ${store}`,
-    openDetails: (name) => `Details for ${name}`,
     addFavorite: 'Mark as favourite',
     removeFavorite: 'Remove favourite',
     sharedOrFree: 'Shared/Free',
@@ -454,7 +473,12 @@ const en: Strings = {
         'Your Steam profile does not disclose game details. Set “Game details” ' +
         'to “Public” in Steam’s privacy settings.',
       libraryFailed: 'The Steam library could not be loaded.',
-      invalidAppId: (id) => `Invalid Steam AppID: ${id}`
+      invalidAppId: (id) => `Invalid Steam AppID: ${id}`,
+      noInstallDialog:
+        'Steam did not open an install dialog. It ignores a repeat request for the ' +
+        'same game shortly after the first, so if you just opened one, give it a ' +
+        'moment. Otherwise check the Steam window — it may not be offering this ' +
+        'game, or may be waiting for you to sign in.'
     },
     epic: {
       notFound:
@@ -607,9 +631,16 @@ const de: Strings = {
 
   library: {
     loading: 'Bibliothek wird geladen…',
+    scanning: 'Steam, Epic, EA und Ubisoft werden nach deinen Spielen durchsucht…',
     empty: 'Noch keine Spiele gefunden. „Aktualisieren“ startet die Suche.',
     noMatches: 'Kein Spiel passt zu den aktuellen Filtern.',
     nothingSelected: 'Wähle ein Spiel aus der Liste.'
+  },
+
+  install: {
+    overlayTitle: (store) => `Installation über ${store}`,
+    overlayBody: (store) => `Diesen Schritt übernimmt der ${store}-Dialog. Arcadia wartet darauf.`,
+    overlayDismiss: 'Zum Weiterstöbern Esc drücken'
   },
 
   card: {
@@ -617,7 +648,6 @@ const de: Strings = {
     install: 'Installieren',
     notInstalled: 'Nicht installiert',
     installVia: (store) => `Über ${store} installieren`,
-    openDetails: (name) => `Infoseite zu ${name}`,
     addFavorite: 'Als Favorit markieren',
     removeFavorite: 'Favorit entfernen',
     sharedOrFree: 'Geteilt/Gratis',
@@ -715,7 +745,13 @@ const de: Strings = {
         'Dein Steam-Profil gibt die Spieldetails nicht preis. Stelle in den ' +
         'Steam-Privatsphäre-Einstellungen „Spieldetails“ auf „Öffentlich“.',
       libraryFailed: 'Die Steam-Bibliothek konnte nicht geladen werden.',
-      invalidAppId: (id) => `Ungültige Steam-AppID: ${id}`
+      invalidAppId: (id) => `Ungültige Steam-AppID: ${id}`,
+      noInstallDialog:
+        'Steam hat keinen Installationsdialog geöffnet. Eine erneute Anfrage für ' +
+        'dasselbe Spiel ignoriert Steam kurz nach der ersten — wenn du gerade einen ' +
+        'Dialog geöffnet hast, warte einen Moment. Andernfalls bitte im ' +
+        'Steam-Fenster nachsehen: Vielleicht bietet Steam dieses Spiel nicht an ' +
+        'oder wartet auf eine Anmeldung.'
     },
     epic: {
       notFound:

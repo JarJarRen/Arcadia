@@ -1,5 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import {
+  EA_CATALOG_ENDPOINT,
   fetchEaCatalog,
   parseCatalogResponse,
   resolveEaOffers,
@@ -88,6 +92,42 @@ describe('EA catalogue', () => {
     ).rejects.toThrow(/EA/i)
   })
 
+  it('fails when the response body cannot be read as JSON', async () => {
+    const post: PostFn = () =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.reject(new Error('unexpected end of input'))
+      })
+    await expect(fetchEaCatalog(['X'], post)).rejects.toThrow(/EA/i)
+  })
+
+  it('posts to the real EA endpoint by default', async () => {
+    // The only test here that exercises `defaultPost` rather than an
+    // injected fake — everything else in this file goes through the
+    // injected `post` to stay off the network.
+    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) =>
+      new Response(JSON.stringify({ data: { legacyOffers: [] } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      const entries = await fetchEaCatalog(['Origin.OFR.50.0004024'])
+      expect(entries).toEqual([])
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      const [url, init] = fetchMock.mock.calls[0]!
+      expect(url).toBe(EA_CATALOG_ENDPOINT)
+      expect(init.method).toBe('POST')
+      expect(JSON.parse(init.body as string).variables.offerIds).toEqual([
+        'Origin.OFR.50.0004024'
+      ])
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('asks only about offers it does not already know', async () => {
     const asked: string[][] = []
     const cache: EaCatalogEntry[] = [
@@ -149,6 +189,42 @@ describe('EA catalogue', () => {
       post: () => answer({ data: { legacyOffers: [{ id: 'fresh', displayName: 'Fresh' }] } })
     })
     expect(entries[0]?.name).toBe('Fresh')
+  })
+
+  it('treats a cache file that is not valid JSON as no cache at all', async () => {
+    // A corrupted cache is no reason to fail: everything just gets asked
+    // about again, exactly as if the cache had never existed.
+    let asked: string[] = []
+    const entries = await resolveEaOffers(['x'], {
+      cachePath: 'cache.json',
+      readCache: async () => 'not { valid json',
+      writeCache: async () => undefined,
+      post: (_url, body) => {
+        asked = (JSON.parse(body) as { variables: { offerIds: string[] } }).variables.offerIds
+        return answer({ data: { legacyOffers: [{ id: 'x', displayName: 'X' }] } })
+      }
+    })
+    expect(asked).toEqual(['x'])
+    expect(entries[0]?.name).toBe('X')
+  })
+
+  it('writes the cache to a real file by default', async () => {
+    // The only test here that exercises the default `writeCache` (and
+    // `readCache`) rather than an injected fake.
+    const dir = await mkdtemp(join(tmpdir(), 'arcadia-ea-cache-'))
+    try {
+      const cachePath = join(dir, 'ea-catalog-cache.json')
+      const entries = await resolveEaOffers(['fresh'], {
+        cachePath,
+        post: () => answer({ data: { legacyOffers: [{ id: 'fresh', displayName: 'Fresh' }] } })
+      })
+      expect(entries[0]?.name).toBe('Fresh')
+
+      const written: unknown = JSON.parse(await readFile(cachePath, 'utf8'))
+      expect(written).toEqual([{ offerId: 'fresh', name: 'Fresh' }])
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
   })
 })
 

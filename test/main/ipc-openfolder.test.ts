@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Harness, IpcHandlers } from './ipc-context'
 
 /**
  * Checks by behaviour, not by source text, that the folder channel does not
@@ -14,7 +15,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  * and looks the path up in the database. This test pins that down.
  */
 
-const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
+const handlers: IpcHandlers = new Map()
 const opened: string[] = []
 
 vi.mock('electron', () => ({
@@ -29,40 +30,27 @@ vi.mock('electron', () => ({
   }
 }))
 
-const { openDatabase } = await import('@main/db/schema')
-const { GameRepository } = await import('@main/db/repository')
-const { MetadataRepository } = await import('@main/db/metadata')
-const { SettingsRepository } = await import('@main/db/settings')
 const { registerIpcHandlers } = await import('@main/ipc')
-const { SteamAppList } = await import('@main/metadata/steamAppList')
+const { makeHarness } = await import('./ipc-context')
 const { IPC } = await import('@shared/ipc')
+const { t } = await import('@shared/i18n')
 
 describe('game:open-folder', () => {
+  let harness: Harness
   let invoke: (...args: unknown[]) => Promise<{ ok: boolean; error?: string }>
 
   beforeEach(() => {
     handlers.clear()
     opened.length = 0
 
-    const db = openDatabase(':memory:')
-    const repo = new GameRepository(db)
-    repo.upsertScan(
+    harness = makeHarness()
+    harness.repo.upsertScan(
       'steam',
       [{ storeGameId: '440', name: 'TF2', installed: true, installPath: 'F:\\games\\tf2' }],
       1_700_000_000
     )
 
-    registerIpcHandlers({
-      repo,
-      metadata: new MetadataRepository(db),
-      settings: new SettingsRepository(db),
-      adapters: [],
-      appList: new SteamAppList(),
-      fetchDetails: async () => undefined,
-      getWindow: () => undefined,
-      envFilePaths: [],
-      relaunch: () => undefined
-    })
+    registerIpcHandlers(harness.context)
 
     const handler = handlers.get(IPC.gameOpenFolder)!
     invoke = (...args) => handler({}, ...args) as Promise<{ ok: boolean; error?: string }>
@@ -106,28 +94,61 @@ describe('game:open-folder', () => {
   it('opens the looked-up path when it really is there', async () => {
     // The counter-check: without it the test would also pass if the channel
     // simply never opened anything.
-    const db = openDatabase(':memory:')
-    const repo = new GameRepository(db)
-    repo.upsertScan(
+    const second = makeHarness()
+    second.repo.upsertScan(
       'steam',
       [{ storeGameId: '440', name: 'TF2', installed: true, installPath: process.cwd() }],
       1_700_000_000
     )
     handlers.clear()
-    registerIpcHandlers({
-      repo,
-      metadata: new MetadataRepository(db),
-      settings: new SettingsRepository(db),
-      adapters: [],
-      appList: new SteamAppList(),
-      fetchDetails: async () => undefined,
-      getWindow: () => undefined,
-      envFilePaths: [],
-      relaunch: () => undefined
-    })
+    registerIpcHandlers(second.context)
 
     const result = (await handlers.get(IPC.gameOpenFolder)!({}, 'tf2')) as { ok: boolean }
     expect(result.ok).toBe(true)
     expect(opened).toEqual([process.cwd()])
+  })
+
+  it('turns an unexpected failure into a message instead of a rejection', async () => {
+    // Something other than a missing path — the database itself unreadable
+    // while looking the entry up, ahead of the stat check that handles a
+    // merely-deleted folder.
+    const broken = makeHarness({
+      repo: {
+        all: () => {
+          throw new Error('database is locked')
+        }
+      } as unknown as Harness['repo']
+    })
+    handlers.clear()
+    registerIpcHandlers(broken.context)
+
+    const result = (await handlers.get(IPC.gameOpenFolder)!({}, 'tf2')) as {
+      ok: boolean
+      error?: string
+    }
+
+    expect(result.ok).toBe(false)
+    expect(result.error).toBe(t().errors.folderOpenFailed('database is locked'))
+    expect(opened).toEqual([])
+  })
+
+  it('stringifies a non-Error thrown by an unexpected failure', async () => {
+    const broken = makeHarness({
+      repo: {
+        all: () => {
+          // eslint-disable-next-line @typescript-eslint/no-throw-literal
+          throw 'raw failure'
+        }
+      } as unknown as Harness['repo']
+    })
+    handlers.clear()
+    registerIpcHandlers(broken.context)
+
+    const result = (await handlers.get(IPC.gameOpenFolder)!({}, 'tf2')) as {
+      ok: boolean
+      error?: string
+    }
+
+    expect(result).toEqual({ ok: false, error: t().errors.folderOpenFailed('raw failure') })
   })
 })
