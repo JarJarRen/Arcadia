@@ -1,6 +1,7 @@
 import type { LibraryEntry } from './library'
 import type { SyncResult } from './sync-types'
 import type { EnvConfigSaveResult, EnvConfigState, EnvConfigValues } from './env-config'
+import type { StoreId } from './types'
 
 export const IPC = {
   libraryGet: 'library:get',
@@ -28,6 +29,8 @@ export const IPC = {
   metadataSetMatch: 'metadata:set-match',
   settingsGetLanguage: 'settings:get-language',
   settingsSetLanguage: 'settings:set-language',
+  settingsGetStores: 'settings:get-stores',
+  settingsSetStores: 'settings:set-stores',
   envConfigGet: 'env-config:get',
   envConfigSave: 'env-config:save',
   libraryAddManual: 'library:add-manual',
@@ -108,6 +111,19 @@ export interface ArcadiaApi {
    * The value is persisted, so the next start opens in this language.
    */
   setLanguage(language: string): Promise<void>
+  /**
+   * The stores Arcadia scans and shows.
+   *
+   * Answered as the canonical list when nothing has been chosen, so a
+   * renderer that has never seen the setting still gets a usable answer
+   * rather than an empty one it would have to interpret.
+   */
+  getEnabledStores(): Promise<StoreId[]>
+  /**
+   * Records the store choice. Takes effect at once — unlike the API keys
+   * there is nothing cached at startup to invalidate, so no restart.
+   */
+  setEnabledStores(stores: StoreId[]): Promise<void>
   /**
    * The API keys as the `.env` currently holds them, plus whether the
    * configuration question has been answered.

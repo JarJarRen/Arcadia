@@ -17,6 +17,7 @@ import { decodeWindowHandle } from '@main/platform/windows'
 import type { SteamAppList } from '@main/metadata/steamAppList'
 import { applyManualMatch } from '@main/metadata/queue'
 import { readEnvConfig, saveEnvConfig } from '@main/env-config'
+import { parseEnabledStores, serializeEnabledStores } from '@shared/stores'
 import { envValueIsWritable } from '@main/env-file'
 import { ENV_CONFIG_KEYS, type EnvConfigValues } from '@shared/env-config'
 
@@ -429,6 +430,36 @@ export function registerIpcHandlers(context: IpcContext): void {
       notifyChanged()
     } catch (error) {
       console.error('Language could not be saved:', error)
+    }
+  })
+
+  ipcMain.handle(IPC.settingsGetStores, () =>
+    parseEnabledStores(context.settings.get('enabled-stores'))
+  )
+
+  /**
+   * Records which stores are scanned and shown.
+   *
+   * Rejected whole rather than filtered when an id is unknown: the renderer
+   * offers only ids it got from `STORE_IDS`, so anything else is a bug worth
+   * failing on rather than a value worth salvaging.
+   *
+   * `notifyChanged` because the visible library depends on this setting —
+   * without it the grid would keep showing a store that has just been
+   * switched off until the next scan.
+   */
+  ipcMain.handle(IPC.settingsSetStores, (_event, stores: unknown) => {
+    if (!Array.isArray(stores)) return
+    const valid = stores.every(
+      (id) => typeof id === 'string' && STORE_IDS.includes(id as StoreId)
+    )
+    if (!valid) return
+
+    try {
+      context.settings.set('enabled-stores', serializeEnabledStores(stores as StoreId[]))
+      notifyChanged()
+    } catch (error) {
+      console.error('Store selection could not be saved:', error)
     }
   })
 

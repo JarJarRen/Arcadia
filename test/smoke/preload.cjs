@@ -174,6 +174,10 @@ contextBridge.exposeInMainWorld('arcadia', {
   // The language menu calls this on every switch. Missing, the click would
   // throw inside the handler and the popover would simply not close.
   setLanguage: async () => undefined,
+  // Every store enabled: matches the real default when nothing has been
+  // chosen, which is what a first-run smoke test always is.
+  getEnabledStores: async () => ['steam', 'epic', 'ea', 'ubisoft'],
+  setEnabledStores: async () => undefined,
   // Sent when the install overlay is dismissed.
   cancelInstall: async () => undefined,
   // Adding does not really change the stub's list; the smoke test only
