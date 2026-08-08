@@ -183,10 +183,10 @@ describe('GameDetail', () => {
   it('leaves the game in the library when the removal confirmation is declined', () => {
     const removeManualGame = vi.fn(async () => ({ ok: true }))
     stubArcadia({ removeManualGame })
-    // Restored locally at the end of the test: there is no global
-    // restoreMocks (see test/renderer/setup.ts), and a neighbouring test
-    // that spies on window.confirm without checking its own return value
-    // should not inherit this one's `false`.
+    // Restored locally at the end of the test. restoreMocks now reaches the
+    // dom project and would handle it, but window.confirm is a global the
+    // whole file leans on, and a test that installs one should hand it back
+    // itself rather than relying on the runner to tidy up after it.
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
     const manual = entry('Custom Game', [
       game('steam', 'manual-1', 'Custom Game', { manual: true })

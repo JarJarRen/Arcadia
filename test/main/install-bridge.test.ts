@@ -227,11 +227,10 @@ describe('guided install', () => {
     // quietly moved back after a good one look identical from the outside,
     // so untested this line is worth exactly as much as no reason at all.
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    // restoreMocks only clears this between tests within the 'node' project
-    // when it is set there directly — set at the config's top level, above
-    // `projects`, it does not reach in, the same gap the config's own alias
-    // comment already flags. Clearing by hand keeps this test honest either
-    // way rather than depending on that being fixed.
+    // restoreMocks is now declared inside each project, so it does reach
+    // this one and the spy no longer carries calls in from a neighbour.
+    // Clearing by hand anyway costs nothing and keeps the assertion below
+    // true of this test alone rather than of the file's history.
     spy.mockClear()
     const agent = fakeAgent(true, { ok: false, reason: 'denied' })
 

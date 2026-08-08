@@ -17,6 +17,12 @@ export default defineConfig({
     // Every spy and fn mock is restored to its original implementation
     // after each test, so a stub set up in one test (e.g. `window.confirm`)
     // can never leak into the next test in the same file.
+    //
+    // Declared inside each project rather than only here. A project does not
+    // inherit this from the top level — the same gap the `alias` comment
+    // above describes — and set only here it silently did nothing at all:
+    // a spy installed in one test was still mocked in the next, measured
+    // with a throwaway probe rather than assumed.
     restoreMocks: true,
     /**
      * Two environments, routed by file extension.
@@ -34,7 +40,8 @@ export default defineConfig({
         test: {
           name: 'node',
           environment: 'node',
-          include: ['test/**/*.test.ts']
+          include: ['test/**/*.test.ts'],
+          restoreMocks: true
         }
       },
       {
@@ -44,7 +51,8 @@ export default defineConfig({
           name: 'dom',
           environment: 'jsdom',
           include: ['test/**/*.test.tsx'],
-          setupFiles: ['test/renderer/setup.ts']
+          setupFiles: ['test/renderer/setup.ts'],
+          restoreMocks: true
         }
       }
     ],
