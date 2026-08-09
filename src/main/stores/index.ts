@@ -3,11 +3,15 @@ import { SteamAdapter, type SteamAdapterConfig } from './steam'
 import { EpicAdapter } from './epic'
 import { EaAdapter, type EaAdapterConfig } from './ea'
 import { UbisoftAdapter } from './ubisoft'
-import { MicrosoftAdapter } from './microsoft'
+import { MicrosoftAdapter, type MicrosoftAdapterConfig } from './microsoft'
+import type { MicrosoftSession } from './microsoft/session'
 
 export interface AdapterConfig {
   steam: SteamAdapterConfig
   ea?: EaAdapterConfig
+  microsoft?: MicrosoftAdapterConfig
+  /** The signed-in Microsoft account, or undefined where there is none. */
+  microsoftSession?: MicrosoftSession
   /**
    * AppID to game name, from Steam's app list.
    *
@@ -37,7 +41,9 @@ export function createAdapters(config: AdapterConfig): StoreAdapter[] {
     new EpicAdapter(),
     new EaAdapter(config.ea ?? {}),
     new UbisoftAdapter(),
-    new MicrosoftAdapter()
+    new MicrosoftAdapter(config.microsoft ?? {}, {
+      ...(config.microsoftSession === undefined ? {} : { session: config.microsoftSession })
+    })
   ]
 }
 

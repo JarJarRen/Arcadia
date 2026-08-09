@@ -23,12 +23,15 @@ function adapter(overrides: {
   installed?: Map<string, InstalledPackage>
   aumids?: Map<string, string>
 }): MicrosoftAdapter {
-  return new MicrosoftAdapter({
-    platform: overrides.platform ?? 'win32',
-    readXboxAppPackages: async () => overrides.families ?? [],
-    readInstalledPackages: async () => overrides.installed ?? new Map(),
-    readStartAppIds: async () => overrides.aumids ?? new Map()
-  })
+  return new MicrosoftAdapter(
+    {},
+    {
+      platform: overrides.platform ?? 'win32',
+      readXboxAppPackages: async () => overrides.families ?? [],
+      readInstalledPackages: async () => overrides.installed ?? new Map(),
+      readStartAppIds: async () => overrides.aumids ?? new Map()
+    }
+  )
 }
 
 describe('MicrosoftAdapter availability', () => {
@@ -130,11 +133,14 @@ describe('MicrosoftAdapter default dependencies', () => {
     // Comparing against an adapter with the platform passed explicitly
     // proves the omitted value actually resolves to process.platform,
     // whatever that happens to be on the machine running the test.
-    const withDefaultPlatform = new MicrosoftAdapter({
-      readXboxAppPackages: async () => [],
-      readInstalledPackages: async () => new Map(),
-      readStartAppIds: async () => new Map()
-    })
+    const withDefaultPlatform = new MicrosoftAdapter(
+      {},
+      {
+        readXboxAppPackages: async () => [],
+        readInstalledPackages: async () => new Map(),
+        readStartAppIds: async () => new Map()
+      }
+    )
     const withExplicitPlatform = adapter({ platform: process.platform })
 
     expect(await withDefaultPlatform.isAvailable()).toEqual(await withExplicitPlatform.isAvailable())
@@ -145,24 +151,25 @@ describe('MicrosoftAdapter default dependencies', () => {
     // registry/PowerShell-backed implementations — which must never run in
     // a test. Forcing platform off Windows proves the guard on line 1 of
     // scanInstalled short-circuits before any of them are called.
-    const games = await new MicrosoftAdapter({ platform: 'linux' }).scanInstalled()
+    const games = await new MicrosoftAdapter({}, { platform: 'linux' }).scanInstalled()
 
     expect(games).toEqual([])
   })
 })
 
 describe('MicrosoftAdapter launchUri and installUri', () => {
-  // Both are placeholders that always throw: a Store game cannot be started
-  // or installed through a URI at all. Task 10 adds launchCommand; Task 17
-  // gives installUri a real ProductId. Until then, every call must fail
-  // with a message that explains why rather than doing nothing silently.
+  // launchUri is a placeholder that always throws: a Store game cannot be
+  // started through a URI at all, launchCommand is what actually launches
+  // one. installUri throws too, here — not because it always does (owned.test.ts
+  // covers the case where a scan has filled in a ProductId) but because this
+  // adapter never ran a scan, so it has none to give.
   const game = { name: 'Forza Horizon' } as Game
 
   it('launchUri always throws, naming the game', () => {
     expect(() => adapter({}).launchUri(game)).toThrow(/Forza Horizon/)
   })
 
-  it('installUri always throws, naming the game', () => {
+  it('installUri throws for a game whose ProductId no scan has supplied', () => {
     expect(() => adapter({}).installUri(game)).toThrow(/Forza Horizon/)
   })
 })

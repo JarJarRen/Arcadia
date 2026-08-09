@@ -5,14 +5,33 @@ import type { ExecFn } from '@main/platform/registry'
 import { readXboxAppPackages } from './gamingServices'
 import { readInstalledPackages, type InstalledPackage } from './packages'
 import { readStartAppIds } from './startApps'
+import { readOwnedProductIds } from './collections'
+import { readPlayedTitles, type PlayedTitle } from './titlehub'
+import { readCatalogCache, resolveProducts, type CatalogEntry } from './displayCatalog'
+import type { MicrosoftSession } from './session'
+import type { XboxToken } from './xbox'
+
+export interface MicrosoftAdapterConfig {
+  /**
+   * Where resolved product names are cached.
+   *
+   * Also what `installUri` reads a ProductId back out of, so an installed
+   * copy has one after the first scan rather than after the first sign-in.
+   */
+  catalogCachePath?: string
+}
 
 export interface MicrosoftAdapterDeps {
   exec?: ExecFn
   /** Injected so the platform branch is reachable from a test on any OS. */
   platform?: string
+  session?: MicrosoftSession
   readXboxAppPackages?: (exec?: ExecFn) => Promise<string[]>
   readInstalledPackages?: (exec?: ExecFn) => Promise<Map<string, InstalledPackage>>
   readStartAppIds?: (exec?: ExecFn) => Promise<Map<string, string>>
+  readOwnedProductIds?: (token: XboxToken) => Promise<string[]>
+  resolveProducts?: (productIds: string[]) => Promise<CatalogEntry[]>
+  readPlayedTitles?: (token: XboxToken) => Promise<PlayedTitle[]>
 }
 
 /**
@@ -31,16 +50,70 @@ export class MicrosoftAdapter implements StoreAdapter {
 
   private readonly exec: ExecFn | undefined
   private readonly platform: string
+  private readonly session: MicrosoftSession | undefined
   private readonly readFamilies: NonNullable<MicrosoftAdapterDeps['readXboxAppPackages']>
   private readonly readPackages: NonNullable<MicrosoftAdapterDeps['readInstalledPackages']>
   private readonly readAumids: NonNullable<MicrosoftAdapterDeps['readStartAppIds']>
+  private readonly readOwned: NonNullable<MicrosoftAdapterDeps['readOwnedProductIds']>
+  private readonly readPlayed: NonNullable<MicrosoftAdapterDeps['readPlayedTitles']>
+  private readonly resolve: NonNullable<MicrosoftAdapterDeps['resolveProducts']>
 
-  constructor(deps: MicrosoftAdapterDeps = {}) {
+  /**
+   * Package family name → ProductId, for `installUri`.
+   *
+   * `installUri` is synchronous — the interface it implements is — so it
+   * cannot read a file. The index is filled by whichever scan runs first,
+   * and a scan always runs at startup, so it is in place long before
+   * anybody can click Install.
+   */
+  private productIds = new Map<string, string>()
+
+  constructor(
+    private readonly config: MicrosoftAdapterConfig = {},
+    deps: MicrosoftAdapterDeps = {}
+  ) {
     this.exec = deps.exec
     this.platform = deps.platform ?? process.platform
+    this.session = deps.session
     this.readFamilies = deps.readXboxAppPackages ?? readXboxAppPackages
     this.readPackages = deps.readInstalledPackages ?? readInstalledPackages
     this.readAumids = deps.readStartAppIds ?? readStartAppIds
+    this.readOwned = deps.readOwnedProductIds ?? ((token) => readOwnedProductIds(token))
+    this.readPlayed = deps.readPlayedTitles ?? ((token) => readPlayedTitles(token))
+    this.resolve =
+      deps.resolveProducts ??
+      ((productIds): Promise<CatalogEntry[]> =>
+        resolveProducts(
+          productIds,
+          this.config.catalogCachePath === undefined
+            ? {}
+            : { cachePath: this.config.catalogCachePath }
+        ))
+  }
+
+  /**
+   * The played titles, or an empty list while signed out.
+   *
+   * Fetched by both scan methods. Two requests per scan rather than one is
+   * the price of not holding a cache with a lifetime to get wrong — and
+   * `scanOwned` is only reached at all when somebody is signed in.
+   */
+  private async played(): Promise<PlayedTitle[]> {
+    const tokens = await this.session?.tokens()
+    if (tokens === undefined) return []
+    return this.readPlayed(tokens.xboxLive)
+  }
+
+  /** Makes what the catalogue already knows available to `installUri`. */
+  private remember(entries: CatalogEntry[]): void {
+    for (const entry of entries) {
+      this.productIds.set(entry.packageFamilyName, entry.productId)
+    }
+  }
+
+  private async loadCachedProducts(): Promise<void> {
+    if (this.config.catalogCachePath === undefined) return
+    this.remember(await readCatalogCache(this.config.catalogCachePath))
   }
 
   /**
@@ -68,10 +141,17 @@ export class MicrosoftAdapter implements StoreAdapter {
   async scanInstalled(): Promise<RawGame[]> {
     if (this.platform !== 'win32') return []
 
-    const families = await this.readFamilies(this.exec)
-    if (families.length === 0) return []
+    await this.loadCachedProducts()
 
-    // Both reads are one process each, no matter how many games there are.
+    const fromXboxApp = await this.readFamilies(this.exec)
+    // Signed in, the title list names which other packages are games. Signed
+    // out there is no way to tell, and guessing would put applications in
+    // somebody's library.
+    const fromHistory = (await this.played()).map((title) => title.packageFamilyName)
+
+    const families = new Set([...fromXboxApp, ...fromHistory])
+    if (families.size === 0) return []
+
     const installed = await this.readPackages(this.exec)
     const aumids = await this.readAumids(this.exec)
 
@@ -96,6 +176,52 @@ export class MicrosoftAdapter implements StoreAdapter {
   }
 
   /**
+   * The owned library, including games not installed here.
+   *
+   * Three sources, joined on the package family name. The entitlement
+   * service decides what is owned — a title in the history that it does not
+   * list is a Game Pass title, playable for now but not owned, and it
+   * appears through `scanInstalled` for as long as it is on disk. The
+   * catalogue supplies the names, the history the last-played dates.
+   *
+   * Signed out this is empty rather than an error: not being signed in is a
+   * state, not a failure. Everything else throws, which `sync.ts` records as
+   * a partial failure while still writing the installed games.
+   */
+  async scanOwned(): Promise<RawGame[]> {
+    if (this.platform !== 'win32') return []
+    if (this.session === undefined || !this.session.isSignedIn()) return []
+
+    const tokens = await this.session.tokens()
+    if (tokens === undefined) return []
+
+    const productIds = await this.readOwned(tokens.marketplace)
+    if (productIds.length === 0) return []
+
+    const catalog = await this.resolve(productIds)
+    this.remember(catalog)
+
+    const lastPlayed = new Map(
+      (await this.readPlayed(tokens.xboxLive)).map((title) => [
+        title.packageFamilyName,
+        title.lastPlayed
+      ])
+    )
+
+    return catalog.map((entry) => {
+      const played = lastPlayed.get(entry.packageFamilyName)
+      return {
+        storeGameId: entry.packageFamilyName,
+        name: entry.name,
+        installed: false,
+        // Xbox exposes achievements and a date, never minutes. A fabricated
+        // number would be worse than an empty field.
+        ...(played === undefined ? {} : { lastPlayed: played })
+      }
+    })
+  }
+
+  /**
    * Never reached in practice: `launchCommand` takes precedence in the
    * bridge. Present because `StoreAdapter` requires it, and it says the same
    * thing the command would.
@@ -114,6 +240,10 @@ export class MicrosoftAdapter implements StoreAdapter {
   }
 
   installUri(game: Game): string {
-    throw new Error(t().stores.microsoft.noProductId(game.name))
+    const productId = this.productIds.get(game.storeGameId)
+    if (productId === undefined) {
+      throw new Error(t().stores.microsoft.noProductId(game.name))
+    }
+    return `ms-windows-store://pdp/?productid=${productId}`
   }
 }
