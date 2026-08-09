@@ -226,6 +226,81 @@ describe('IPC Microsoft sign-in', () => {
     expect(cancellations[1]?.()).toBe(false)
   })
 
+  /**
+   * The double click this guards against: two invocations that both start
+   * before either has heard back from Microsoft, so neither can see the
+   * other's flow by checking `signInFlow` at the top the way a purely
+   * sequential pair of calls would.
+   *
+   * `requestDeviceCode` is held open on hand-resolved promises rather than
+   * awaited normally, so both invocations are genuinely in flight — still
+   * inside their own `await microsoft.requestDeviceCode()` — at the moment
+   * the second one starts. A sequential `await invoke(); await invoke()`
+   * would let the first call finish registering its flow before the second
+   * began, which is precisely the case the old guard already handled.
+   *
+   * `pollForTokens` reports its own device code back in the error message so
+   * the two flows can be told apart once both eventually "expire": it checks
+   * `cancelled()` once, exactly where the real implementation checks it at
+   * the top of its loop, before ever reporting an expiry.
+   *
+   * Against the code before this fix, the guard clears and reads
+   * `signInFlow` before either invocation has registered a replacement, so
+   * both find it `undefined` and neither marks the other cancelled or
+   * superseded. The first flow's poll then never notices anything happened
+   * and its eventual "expired" answer reaches the screen as a genuine error,
+   * clearing whatever code the second flow already put there. Registering
+   * the new flow before the `await` (this fix) closes that window: the
+   * second invocation now finds the first flow still in the slot and
+   * supersedes it before either has a device code, so the first flow's
+   * later expiry is caught and silenced instead of reported.
+   */
+  it('supersedes a flow that is still requesting its device code, and keeps the older one silent', async () => {
+    let resolveFirst: ((code: typeof CODE) => void) | undefined
+    let resolveSecond: ((code: typeof CODE) => void) | undefined
+    let calls = 0
+    build({
+      requestDeviceCode: async () => {
+        calls += 1
+        if (calls === 1) {
+          return await new Promise<typeof CODE>((resolve) => {
+            resolveFirst = resolve
+          })
+        }
+        return await new Promise<typeof CODE>((resolve) => {
+          resolveSecond = resolve
+        })
+      },
+      pollForTokens: async (code: typeof CODE, cancelled: () => boolean) => {
+        if (cancelled()) throw new Error('The sign-in was cancelled.')
+        throw new Error(`expired:${code.userCode}`)
+      }
+    })
+
+    const first = invoke(IPC.microsoftSignIn)
+    const second = invoke(IPC.microsoftSignIn)
+
+    // Both calls are genuinely concurrent: neither has a device code yet, so
+    // neither has reached the point of registering its flow's replacement.
+    expect(calls).toBe(2)
+
+    resolveFirst?.({ ...CODE, userCode: 'FIRST' })
+    resolveSecond?.({ ...CODE, userCode: 'SECOND' })
+
+    await Promise.all([first, second])
+    await settle()
+
+    const expired = harness.sentWithArgs
+      .filter((event) => event.channel === IPC.microsoftAuthChanged)
+      .map((event) => event.args[0])
+      .filter((arg): arg is string => typeof arg === 'string' && arg.startsWith('expired:'))
+
+    // Only the newer flow may ever report its own expiry. The older one
+    // must have been superseded before it got that far, not left to answer
+    // for itself minutes later.
+    expect(expired).toEqual(['expired:SECOND'])
+  })
+
   it('says nothing to the screen when the flow it cancelled ends', async () => {
     // The newer code is already on screen. "The sign-in was cancelled"
     // arriving on top of it would clear the very code being typed.

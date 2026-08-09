@@ -658,21 +658,28 @@ export function registerIpcHandlers(context: IpcContext): void {
     if (signInFlow !== undefined) {
       signInFlow.cancelled = true
       signInFlow.superseded = true
-      // Cleared now rather than when the new flow is stored: requesting the
-      // device code below is an await, and the old poll must not be able to
-      // see itself as current in the meantime.
-      signInFlow = undefined
     }
+
+    // Registered before the device-code request, not after: that request is
+    // an await, and a second invocation that enters while this one is still
+    // in flight must find a flow here to supersede. Registering it only
+    // after the await left a window where two overlapping invocations each
+    // saw signInFlow as undefined and neither cancelled the other — the
+    // first would go on to report its own expiry as an error and clear
+    // whatever code the second one had already put on screen.
+    const flow: SignInFlow = { cancelled: false, superseded: false }
+    signInFlow = flow
 
     let code: DeviceCode
     try {
       code = await microsoft.requestDeviceCode()
     } catch (error) {
+      // Only clears the slot if nothing newer has already taken it — a
+      // concurrent invocation may have superseded this flow while the
+      // request was in flight.
+      if (signInFlow === flow) signInFlow = undefined
       return { ok: false, error: error instanceof Error ? error.message : String(error) }
     }
-
-    const flow: SignInFlow = { cancelled: false, superseded: false }
-    signInFlow = flow
 
     void microsoft
       .pollForTokens(code, () => flow.cancelled)
