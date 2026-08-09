@@ -197,6 +197,26 @@ describe('AddGameDialog', () => {
     return waitFor(() => expect(addManualGame.mock.calls[0]![0].storeId).toBe('steam'))
   })
 
+  it('files the game under the store picked from the list', async () => {
+    // Also pins that switching the store re-runs the identifier check: EA
+    // takes digits only, Epic does not, so an id valid for one is not
+    // silently carried over as valid for the other.
+    const addManualGame = vi.fn(async (_payload: AddManualGamePayload) => ({
+      ok: true,
+      id: 'epic:manual-1'
+    }))
+    stubArcadia({ addManualGame })
+    render(
+      <AddGameDialog availableStores={['ea', 'epic']} onClose={vi.fn()} onAdded={vi.fn()} />
+    )
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'A Game' } })
+    fireEvent.change(screen.getByLabelText('Store'), { target: { value: 'epic' } })
+    fireEvent.click(screen.getByText('Add'))
+
+    await waitFor(() => expect(addManualGame.mock.calls[0]![0].storeId).toBe('epic'))
+  })
+
   it('says so, and adds nothing, when every store is switched off', () => {
     const addManualGame = vi.fn(async () => ({ ok: true, id: 'x' }))
     stubArcadia({ addManualGame })

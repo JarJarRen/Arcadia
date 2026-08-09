@@ -185,7 +185,35 @@ describe('preload bridge', () => {
       channel: IPC.microsoftSignOut,
       args: [],
       call: () => api.signOutOfMicrosoft()
-    }
+    },
+    // The five the table used to miss, despite claiming to cover every
+    // invoke-based method. Each is a channel mapping like any other, and
+    // each would have been just as capable of pointing at the wrong one.
+    {
+      name: 'getEnabledStores',
+      channel: IPC.settingsGetStores,
+      args: [],
+      call: () => api.getEnabledStores()
+    },
+    {
+      name: 'setEnabledStores',
+      channel: IPC.settingsSetStores,
+      args: [['steam', 'microsoft']],
+      call: () => api.setEnabledStores(['steam', 'microsoft'])
+    },
+    {
+      name: 'getStoreAvailability',
+      channel: IPC.storesAvailability,
+      args: [],
+      call: () => api.getStoreAvailability()
+    },
+    {
+      name: 'isSecureStorageAvailable',
+      channel: IPC.storesSecureStorage,
+      args: [],
+      call: () => api.isSecureStorageAvailable()
+    },
+    { name: 'isScanning', channel: IPC.libraryScanState, args: [], call: () => api.isScanning() }
   ]
 
   beforeEach(() => {
@@ -202,9 +230,20 @@ describe('preload bridge', () => {
     expect(invokeCalls[0]?.args).toEqual(row.args)
   })
 
-  it('covers every invoke-based method exactly once, with twenty-one distinct channels', () => {
-    expect(INVOKE_TABLE).toHaveLength(21)
-    expect(new Set(INVOKE_TABLE.map((row) => row.name)).size).toBe(21)
+  it('covers every invoke-based method exactly once, with twenty-six distinct channels', () => {
+    expect(INVOKE_TABLE).toHaveLength(26)
+    expect(new Set(INVOKE_TABLE.map((row) => row.name)).size).toBe(26)
+    // Exhaustive for real, rather than by assertion: every method on the
+    // bridge is either in the table above or one of the five listeners.
+    const listenerMethods = [
+      'onScanningChanged',
+      'onLibraryChanged',
+      'onNavigateBack',
+      'onNavigateForward',
+      'onMicrosoftAuthChanged'
+    ]
+    const covered = new Set([...INVOKE_TABLE.map((row) => row.name), ...listenerMethods])
+    expect(Object.keys(api).filter((name) => !covered.has(name))).toEqual([])
   })
 
   it('never sends two methods down the same channel', () => {
@@ -221,7 +260,7 @@ describe('preload bridge', () => {
     ]
 
     expect(new Set(allChannels).size).toBe(allChannels.length)
-    expect(allChannels).toHaveLength(25)
+    expect(allChannels).toHaveLength(30)
   })
 
   /**
