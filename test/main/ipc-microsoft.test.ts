@@ -91,6 +91,24 @@ describe('IPC Microsoft sign-in', () => {
     await vi.waitFor(() => expect(harness.sent).toContain(IPC.libraryChanged))
   })
 
+  /**
+   * MicrosoftSession.signIn() writes the token but does not itself learn the
+   * gamertag — that only arrives from Xbox Live, through session.tokens(),
+   * which the scan triggered by this very sign-in is what calls it. A single
+   * notifyAuthChanged sent right after signIn() would have the renderer read
+   * the auth state before that scan has had any chance to run, and it would
+   * be stuck showing no gamertag until some unrelated later event. A second
+   * notification once the rescan has gone through is what lets the renderer
+   * pick up the name for real.
+   */
+  it('announces the auth change again after the rescan, so a gamertag learned only during it is not missed', async () => {
+    await invoke(IPC.microsoftSignIn)
+    await vi.waitFor(() => expect(harness.sent).toContain(IPC.libraryChanged))
+
+    const authChangedCount = harness.sent.filter((c) => c === IPC.microsoftAuthChanged).length
+    expect(authChangedCount).toBeGreaterThanOrEqual(2)
+  })
+
   it('reports a device code that could not be requested', async () => {
     build({
       requestDeviceCode: async () => {

@@ -604,6 +604,13 @@ export function registerIpcHandlers(context: IpcContext): void {
           )
         )
         notifyChanged()
+        // signIn() writes the token but does not itself learn the gamertag —
+        // that only arrives from Xbox Live, through session.tokens(), which
+        // the scan just above is what actually calls. The first
+        // notifyAuthChanged, right after signIn(), told the screen a sign-in
+        // was in progress; this second one is what lets it pick up the name
+        // once the scan has had the chance to fetch it.
+        notifyAuthChanged()
       })
       .catch((error: unknown) => {
         console.error('Microsoft sign-in failed:', error)
