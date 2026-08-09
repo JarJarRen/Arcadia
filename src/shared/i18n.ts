@@ -280,6 +280,7 @@ export interface Strings {
       collectionsFailed: (reason: string) => string
       titleHistoryFailed: (reason: string) => string
       missingXuid: string
+      catalogFailed: (reason: string) => string
     }
   }
 }
@@ -582,7 +583,8 @@ const en: Strings = {
       titleHistoryFailed: (reason) => `The Xbox title history could not be read: ${reason}`,
       missingXuid:
         'Xbox Live did not return a player ID for this account, so the title history ' +
-        'cannot be read.'
+        'cannot be read.',
+      catalogFailed: (reason) => `The Microsoft Store catalogue could not be read: ${reason}`
     }
   }
 }
@@ -901,7 +903,9 @@ const de: Strings = {
         `Der Xbox-Spielverlauf konnte nicht gelesen werden: ${reason}`,
       missingXuid:
         'Xbox Live hat für dieses Konto keine Spieler-ID zurückgegeben, daher kann der ' +
-        'Spielverlauf nicht gelesen werden.'
+        'Spielverlauf nicht gelesen werden.',
+      catalogFailed: (reason) =>
+        `Der Microsoft-Store-Katalog konnte nicht gelesen werden: ${reason}`
     }
   }
 }
