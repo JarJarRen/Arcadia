@@ -109,6 +109,38 @@ describe('MicrosoftSession', () => {
     expect(tokens.value()).toBe('rotated')
   })
 
+  /**
+   * The overlap is not hypothetical: `scan-state.ts` counts scans with a
+   * depth counter precisely because a Refresh click can land while the
+   * startup scan is still running. Both scans reach `tokens()`, and
+   * Microsoft's consumer endpoint invalidates a refresh token the moment it
+   * is presented — so a second, concurrent exchange of the *same* stored
+   * token comes back `invalid_grant` and signs the user out of an account
+   * they never asked to leave.
+   */
+  it('exchanges once for two concurrent callers, and answers both with the same tokens', async () => {
+    const refreshTokens = vi.fn(async () => ({ accessToken: 'access', refreshToken: 'rotated' }))
+    const { session: subject } = session({ stored: 'stored-refresh', refreshTokens })
+
+    const [first, second] = await Promise.all([subject.tokens(), subject.tokens()])
+
+    expect(refreshTokens).toHaveBeenCalledTimes(1)
+    expect(first).toEqual({ xboxLive: XBL, marketplace: MP })
+    expect(second).toBe(first)
+  })
+
+  it('starts a fresh exchange once the shared one has settled', async () => {
+    // The access tokens live minutes. Holding the promise for ever would
+    // hand a later scan tokens that had long since expired.
+    const refreshTokens = vi.fn(async () => ({ accessToken: 'access', refreshToken: 'rotated' }))
+    const { session: subject } = session({ stored: 'stored-refresh', refreshTokens })
+
+    await subject.tokens()
+    await subject.tokens()
+
+    expect(refreshTokens).toHaveBeenCalledTimes(2)
+  })
+
   it('reports the gamertag once it has one', async () => {
     const { session: subject } = session({ stored: 'stored-refresh' })
     await subject.tokens()

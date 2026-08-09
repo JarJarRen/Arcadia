@@ -44,6 +44,22 @@ export class MicrosoftSession {
   private readonly authenticate: NonNullable<MicrosoftSessionDeps['authenticateXboxUser']>
   private readonly authorize: NonNullable<MicrosoftSessionDeps['authorizeXsts']>
   private name: string | undefined
+  /**
+   * The exchange that is running right now, if one is.
+   *
+   * Two scans can be in flight at once — `scan-state.ts` says so in as many
+   * words: a Refresh click while the startup scan is still going is an
+   * obvious thing to do when the library looks empty. Both would reach
+   * `tokens()`, both would read the same stored refresh token, and both
+   * would present it. Microsoft's consumer endpoint rotates refresh tokens
+   * and invalidates the one presented, so the second exchange comes back
+   * `invalid_grant` — a definitive refusal, which signs the account out.
+   * The user pressed Refresh and was logged out.
+   *
+   * Sharing the promise is what makes that impossible: the second caller
+   * waits on the first exchange instead of starting a competing one.
+   */
+  private pending: Promise<XboxTokens | undefined> | undefined
 
   constructor(deps: MicrosoftSessionDeps) {
     this.store = deps.store
@@ -82,8 +98,24 @@ export class MicrosoftSession {
    * rejected identically for ever — every later scan would fail the same
    * way with no route back but a sign-out nobody knew to perform. Any other
    * failure, a dropped connection above all, leaves the sign-in alone.
+   *
+   * Overlapping callers share one exchange; see `pending`. The promise is
+   * dropped as soon as it settles, so the next scan derives fresh access
+   * tokens rather than reusing ones that have since expired.
    */
-  async tokens(): Promise<XboxTokens | undefined> {
+  tokens(): Promise<XboxTokens | undefined> {
+    if (this.pending !== undefined) return this.pending
+
+    const pending = this.exchange().finally(() => {
+      // Guarded rather than cleared outright: a later exchange may already
+      // have taken the slot by the time this one settles.
+      if (this.pending === pending) this.pending = undefined
+    })
+    this.pending = pending
+    return pending
+  }
+
+  private async exchange(): Promise<XboxTokens | undefined> {
     const stored = this.store.read()
     if (stored === undefined || stored === '') return undefined
 
