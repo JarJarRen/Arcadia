@@ -2,10 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } 
 import type { LibraryEntry } from '@shared/library'
 import { t } from '@shared/i18n'
 import type { EnvConfigState } from '@shared/env-config'
-import type { StoreId } from '@shared/types'
+import { STORE_IDS, type StoreId } from '@shared/types'
 import { useLibrary } from './hooks/useLibrary'
 import {
   filterGames,
+  pruneStores,
   sortGames,
   type LibraryFilter,
   type SortDirection,
@@ -80,6 +81,14 @@ export function App(): ReactElement {
    * the older answer close the newer overlay.
    */
   const installSequence = useRef(0)
+  /**
+   * The stores switched on in the configuration screen.
+   *
+   * Starts as all of them rather than empty: the answer arrives over IPC a
+   * beat after mount, and an empty list would blank the store filter for
+   * that beat.
+   */
+  const [enabledStores, setEnabledStores] = useState<StoreId[]>([...STORE_IDS])
 
   const visible = useMemo(
     () => sortGames(filterGames(entries, filter), sort, sortDirection),
@@ -111,6 +120,35 @@ export function App(): ReactElement {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    window.arcadia
+      .getEnabledStores()
+      .then((stores) => {
+        if (!cancelled) setEnabledStores(stores)
+      })
+      .catch((error: unknown) => console.error('Store selection could not be read:', error))
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  /**
+   * Drops a switched-off store from the active filter.
+   *
+   * Left alone, the selection would still name a store the menu no longer
+   * offers: the grid would filter on it, the library would look empty, and
+   * nothing on screen would say why.
+   */
+  useEffect(() => {
+    setFilter((current) => {
+      const pruned = pruneStores(current.stores, enabledStores)
+      // Same array back means nothing changed — returning `current` keeps
+      // this from queueing a render on every enabled-store update.
+      return pruned === current.stores ? current : { ...current, stores: pruned }
+    })
+  }, [enabledStores])
 
   /** Reopens the screen from the gear, with what the file says right now. */
   const openSetup = useCallback(async (): Promise<void> => {
@@ -339,6 +377,7 @@ export function App(): ReactElement {
         total={entries.length}
         shown={visible.length}
         syncing={syncing}
+        availableStores={enabledStores}
         onFilterChange={setFilter}
         onSortChange={setSort}
         onSortDirectionChange={setSortDirection}

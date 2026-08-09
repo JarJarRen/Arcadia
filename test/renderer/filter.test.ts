@@ -3,6 +3,7 @@ import {
   filterGames,
   formatPlaytime,
   formatSize,
+  pruneStores,
   sortGames,
   storeFilterLabel,
   storeFilterTitle,
@@ -289,6 +290,29 @@ describe('formatPlaytime', () => {
 
   it('returns undefined for a missing value', () => {
     expect(formatPlaytime(undefined)).toBeUndefined()
+  })
+})
+
+describe('pruneStores', () => {
+  it('keeps a selection whose stores are all still enabled', () => {
+    const selected: StoreId[] = ['steam', 'epic']
+    // The same array back, so React sees no change and does not re-render.
+    expect(pruneStores(selected, ['steam', 'epic', 'ea'])).toBe(selected)
+  })
+
+  it('drops a store that is no longer enabled', () => {
+    expect(pruneStores(['steam', 'epic'], ['steam'])).toEqual(['steam'])
+  })
+
+  it('empties a selection whose every store was switched off', () => {
+    // Which reads as "All stores" — the truthful answer once none of the
+    // filtered stores exists any more.
+    expect(pruneStores(['epic'], ['steam'])).toEqual([])
+  })
+
+  it('leaves the neutral selection alone', () => {
+    const empty: StoreId[] = []
+    expect(pruneStores(empty, ['steam'])).toBe(empty)
   })
 })
 

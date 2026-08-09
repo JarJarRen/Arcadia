@@ -11,6 +11,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { LibraryToolbar } from '@renderer/components/LibraryToolbar'
 import type { LibraryFilter } from '@renderer/filter'
+import { STORE_IDS } from '@shared/types'
 
 const FILTER: LibraryFilter = {
   search: 'far cry',
@@ -29,6 +30,7 @@ function renderToolbar(overrides: Partial<Parameters<typeof LibraryToolbar>[0]> 
     total: 312,
     shown: 7,
     syncing: false,
+    availableStores: [...STORE_IDS],
     onFilterChange: vi.fn(),
     onSortChange: vi.fn(),
     onSortDirectionChange: vi.fn(),
