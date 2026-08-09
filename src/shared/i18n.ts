@@ -277,6 +277,7 @@ export interface Strings {
       xboxAuthFailed: (reason: string) => string
       noXboxProfile: string
       childAccount: string
+      collectionsFailed: (reason: string) => string
     }
   }
 }
@@ -573,7 +574,9 @@ const en: Strings = {
         'to create one, then try again.',
       childAccount:
         'This account is a child account and has to be added to a family ' +
-        'before it can use Xbox Live.'
+        'before it can use Xbox Live.',
+      collectionsFailed: (reason) =>
+        `The owned Microsoft Store games could not be read: ${reason}`
     }
   }
 }
@@ -885,7 +888,9 @@ const de: Strings = {
         'xbox.com an, um eines anzulegen, und versuche es dann erneut.',
       childAccount:
         'Dieses Konto ist ein Kinderkonto und muss erst einer Familie ' +
-        'hinzugefügt werden, bevor es Xbox Live nutzen kann.'
+        'hinzugefügt werden, bevor es Xbox Live nutzen kann.',
+      collectionsFailed: (reason) =>
+        `Die gekauften Microsoft-Store-Spiele konnten nicht gelesen werden: ${reason}`
     }
   }
 }
