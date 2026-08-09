@@ -77,6 +77,44 @@ describe('IPC Microsoft sign-in', () => {
     })
   })
 
+  /**
+   * Pins the property the whole handler exists for: it must answer with the
+   * device code the moment one exists, not once the browser sign-in has
+   * finished. The test above resolves `pollForTokens` immediately, so it
+   * cannot tell an `await`ed poll from a fire-and-forget one — both shapes
+   * make it pass. This one holds the poll open with a promise the test
+   * settles by hand, so the invoke can only resolve early if the handler
+   * really does not wait on it.
+   *
+   * A short explicit timeout, rather than the suite's default: if this
+   * regresses, the invoke hangs forever on the still-open poll promise, and
+   * the failure should be fast rather than stalling the whole run.
+   */
+  it('answers with the device code while the poll is still outstanding, not after it settles', async () => {
+    let resolvePoll: ((tokens: { accessToken: string; refreshToken: string }) => void) | undefined
+    const poll = new Promise<{ accessToken: string; refreshToken: string }>((resolve) => {
+      resolvePoll = resolve
+    })
+    build({ pollForTokens: async () => poll })
+
+    const result = await invoke(IPC.microsoftSignIn)
+
+    expect(result).toEqual({
+      ok: true,
+      userCode: 'ABCD-EFGH',
+      verificationUri: 'https://microsoft.com/link'
+    })
+    // The poll has deliberately not been resolved yet — reaching this line
+    // at all is the proof the handler did not await it.
+    expect(signIn).not.toHaveBeenCalled()
+
+    // Now let the browser side of the sign-in finish, and check the
+    // completion path still runs to the end.
+    resolvePoll?.({ accessToken: 'a', refreshToken: 'r' })
+    await vi.waitFor(() => expect(signIn).toHaveBeenCalled())
+    expect(harness.sent).toContain(IPC.microsoftAuthChanged)
+  }, 1000)
+
   it('keeps the tokens once the browser sign-in finishes', async () => {
     await invoke(IPC.microsoftSignIn)
     // The polling runs on after the handler answered.
