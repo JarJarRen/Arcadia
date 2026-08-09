@@ -823,7 +823,7 @@ app.whenReady().then(async () => {
     const prefilled = inputs().map((i) => i.value)
     const links = box().querySelectorAll('.modal__link').length
 
-    const skip = box().querySelector('.modal__toggle input')
+    const skip = box().querySelector('.modal__toggle--skip input')
     skip.click()
     await wait()
     const disabledAfterSkip = inputs().every((i) => i.disabled)

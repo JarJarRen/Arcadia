@@ -158,7 +158,7 @@ export function SetupDialog({
           </label>
         ))}
 
-        <label className="modal__toggle">
+        <label className="modal__toggle modal__toggle--skip">
           <input
             type="checkbox"
             checked={skip}

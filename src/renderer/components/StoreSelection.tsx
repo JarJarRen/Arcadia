@@ -73,7 +73,7 @@ export function StoreSelection({ enabled, onChange }: Props): ReactElement {
 
       {STORE_IDS.map((id) => (
         <div key={id}>
-          <label className="modal__toggle">
+          <label className="modal__toggle modal__toggle--store">
             <input
               type="checkbox"
               checked={enabled.includes(id)}
