@@ -197,7 +197,14 @@ app.whenReady().then(() => {
   const metadata = new MetadataRepository(db)
   const settings = new SettingsRepository(db)
 
-  const microsoftSession = new MicrosoftSession({ store: microsoftTokenStore(settings) })
+  const microsoftSession = new MicrosoftSession({
+    store: microsoftTokenStore(settings),
+    // A scan can sign itself out: a refresh token the service has refused
+    // is discarded on the spot, with no IPC handler involved to announce
+    // it. Without this the configuration screen would keep showing
+    // "Signed in as …" until it was closed and reopened.
+    onChanged: () => mainWindow?.webContents.send(IPC.microsoftAuthChanged)
+  })
 
   // Still before the renderer can ask, which is what actually matters: the
   // window is created above, but the language reaches the interface through

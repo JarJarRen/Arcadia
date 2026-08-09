@@ -28,6 +28,21 @@ export interface MicrosoftSessionDeps {
   refreshTokens?: (refreshToken: string) => Promise<MicrosoftTokens>
   authenticateXboxUser?: (accessToken: string) => Promise<string>
   authorizeXsts?: (userToken: string, relyingParty: string) => Promise<XboxToken>
+  /**
+   * Called whenever the stored sign-in stops being one.
+   *
+   * The IPC handlers announce the sign-outs they perform themselves, but
+   * they cannot see this one: a scan reaching a refused refresh token
+   * discards the credential in the middle of the main process, and a
+   * configuration screen standing open at that moment would go on saying
+   * "Signed in as …" until it was closed and reopened. The design's error
+   * table names the event by hand — "Token discarded,
+   * `microsoft:auth-changed` sent".
+   *
+   * A plain callback, injected: sending the event needs a BrowserWindow,
+   * and this module must stay free of Electron.
+   */
+  onChanged?: () => void
 }
 
 export interface XboxTokens {
@@ -47,6 +62,7 @@ export class MicrosoftSession {
   private readonly refresh: NonNullable<MicrosoftSessionDeps['refreshTokens']>
   private readonly authenticate: NonNullable<MicrosoftSessionDeps['authenticateXboxUser']>
   private readonly authorize: NonNullable<MicrosoftSessionDeps['authorizeXsts']>
+  private readonly onChanged: MicrosoftSessionDeps['onChanged']
   private name: string | undefined
   /**
    * The exchange that is running right now, if one is.
@@ -71,6 +87,7 @@ export class MicrosoftSession {
     this.authenticate = deps.authenticateXboxUser ?? ((token) => defaultAuthenticateXboxUser(token))
     this.authorize =
       deps.authorizeXsts ?? ((userToken, party) => defaultAuthorizeXsts(userToken, party))
+    this.onChanged = deps.onChanged
   }
 
   isSignedIn(): boolean {
@@ -90,6 +107,7 @@ export class MicrosoftSession {
   signOut(): void {
     this.store.write(undefined)
     this.name = undefined
+    this.onChanged?.()
   }
 
   /**

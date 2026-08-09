@@ -198,6 +198,54 @@ describe('MicrosoftSession', () => {
     expect(tokens.value()).toBeUndefined()
   })
 
+  /**
+   * The sign-out the interface never asked for.
+   *
+   * `notifyAuthChanged` is only reachable from the three IPC handlers, so a
+   * credential discarded mid-scan changed the state with nobody told: a
+   * configuration screen standing open went on saying "Signed in as …"
+   * until it was reopened. The design's error table names the event by
+   * hand — "Token discarded, `microsoft:auth-changed` sent".
+   */
+  it('announces a sign-out it performed itself, mid-scan', async () => {
+    const onChanged = vi.fn()
+    const { session: subject } = session({
+      stored: 'stale',
+      onChanged,
+      refreshTokens: async () => {
+        throw new OAuthRefusedError('invalid_grant', 'refused')
+      }
+    })
+
+    await expect(subject.tokens()).rejects.toThrow(/refused/)
+
+    expect(onChanged).toHaveBeenCalledOnce()
+  })
+
+  it('announces an ordinary sign-out as well', async () => {
+    const onChanged = vi.fn()
+    const { session: subject } = session({ stored: 'stored-refresh', onChanged })
+
+    subject.signOut()
+
+    expect(onChanged).toHaveBeenCalledOnce()
+  })
+
+  it('says nothing when a failure left the sign-in alone', async () => {
+    const onChanged = vi.fn()
+    const { session: subject } = session({
+      stored: 'good',
+      onChanged,
+      refreshTokens: async () => {
+        throw new Error('fetch failed')
+      }
+    })
+
+    await expect(subject.tokens()).rejects.toThrow(/fetch failed/)
+
+    expect(onChanged).not.toHaveBeenCalled()
+  })
+
   it('falls back to the real exchange when no functions are injected', async () => {
     // Stubs the global so this never reaches the network — it proves the
     // three defaults really forward to auth.ts/xbox.ts, not that Microsoft
