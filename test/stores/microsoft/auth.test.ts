@@ -88,9 +88,12 @@ describe('pollForTokens', () => {
     expect(sleep).toHaveBeenCalledWith(5000)
   })
 
-  it('lengthens the interval when told to slow down', async () => {
-    // Ignoring slow_down gets the client throttled outright, which looks
-    // like a broken sign-in rather than an impatient one.
+  it('applies the lengthened interval to the very next wait, not one poll later', async () => {
+    // RFC 8628 §3.5: slow_down grows the interval "for this and all
+    // subsequent requests" — "this" is the next poll, so the wait right
+    // after slow_down must already use the longer interval. Ignoring that
+    // and waiting the old, too-short interval is exactly what gets a client
+    // throttled outright.
     const http = vi
       .fn()
       .mockResolvedValueOnce(respond(400, { error: 'slow_down' }))
@@ -102,7 +105,24 @@ describe('pollForTokens', () => {
 
     await pollForTokens(DEVICE_CODE, { http, sleep })
 
-    expect(sleep.mock.calls.map((call) => call[0])).toEqual([5000, 10000])
+    expect(sleep.mock.calls.map((call) => call[0])).toEqual([10000, 10000])
+  })
+
+  it('grows the interval exactly once and keeps it grown across later polls', async () => {
+    // Pins the distinction from the test above: a single slow_down must not
+    // keep compounding on every subsequent authorization_pending — it grows
+    // once, and authorization_pending alone never grows it further.
+    const http = vi
+      .fn()
+      .mockResolvedValueOnce(respond(400, { error: 'slow_down' }))
+      .mockResolvedValueOnce(respond(400, { error: 'authorization_pending' }))
+      .mockResolvedValueOnce(respond(400, { error: 'authorization_pending' }))
+      .mockResolvedValueOnce(respond(200, { access_token: 'a', refresh_token: 'r' }))
+    const sleep = vi.fn<(ms: number) => Promise<void>>(async () => undefined)
+
+    await pollForTokens(DEVICE_CODE, { http, sleep })
+
+    expect(sleep.mock.calls.map((call) => call[0])).toEqual([10000, 10000, 10000])
   })
 
   it('gives up when the code expires', async () => {

@@ -114,15 +114,15 @@ export async function pollForTokens(
       throw new Error(refusalText(error, body, response.status))
     }
 
-    // The wait before the *next* poll uses whatever interval was current
-    // when this answer came back. `slow_down` grows the interval for polls
-    // after this one — the interval it complained about has already been
-    // waited out by the time the answer arrives, so re-sending it now would
-    // just get throttled again.
-    await sleep(intervalMs)
+    // RFC 8628 §3.5: on `slow_down` the interval "MUST be increased by 5
+    // seconds for this and all subsequent requests" — "this" is the very
+    // next poll, so the increment has to land before the wait that precedes
+    // it. Waiting the old, too-short interval right after being told to
+    // slow down is exactly what gets a client throttled outright.
     if (error === 'slow_down') {
       intervalMs += 5000
     }
+    await sleep(intervalMs)
   }
 }
 
