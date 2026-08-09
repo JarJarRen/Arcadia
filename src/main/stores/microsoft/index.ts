@@ -95,10 +95,22 @@ export class MicrosoftAdapter implements StoreAdapter {
     return games
   }
 
+  /**
+   * Never reached in practice: `launchCommand` takes precedence in the
+   * bridge. Present because `StoreAdapter` requires it, and it says the same
+   * thing the command would.
+   */
   launchUri(game: Game): string {
-    // Replaced by launchCommand in the next task; a Store game cannot be
-    // started through a URI at all.
     throw new Error(t().stores.microsoft.notInstalledCannotLaunch(game.name))
+  }
+
+  launchCommand(game: Game): { exe: string; args: string[] } {
+    // The AUMID comes from the local package data, so an owned game that is
+    // not installed has none — there is genuinely nothing to start.
+    if (game.launchId === undefined || game.launchId === '') {
+      throw new Error(t().stores.microsoft.notInstalledCannotLaunch(game.name))
+    }
+    return { exe: 'explorer.exe', args: [`shell:AppsFolder\\${game.launchId}`] }
   }
 
   installUri(game: Game): string {

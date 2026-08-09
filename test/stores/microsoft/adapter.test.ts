@@ -166,3 +166,33 @@ describe('MicrosoftAdapter launchUri and installUri', () => {
     expect(() => adapter({}).installUri(game)).toThrow(/Forza Horizon/)
   })
 })
+
+describe('MicrosoftAdapter launching', () => {
+  const game = {
+    id: `microsoft:${FORZA}`,
+    storeId: 'microsoft' as const,
+    storeGameId: FORZA,
+    name: 'Forza Horizon',
+    installed: true,
+    launchId: `${FORZA}!Game`,
+    favorite: false,
+    hidden: false,
+    firstSeen: 0,
+    lastSeen: 0
+  }
+
+  it('activates the AUMID through the shell namespace', () => {
+    // `shell:AppsFolder\…` is a shell namespace path, not a protocol, so
+    // shell.openExternal cannot open it — hence a command rather than a URI.
+    expect(adapter({}).launchCommand(game)).toEqual({
+      exe: 'explorer.exe',
+      args: [`shell:AppsFolder\\${FORZA}!Game`]
+    })
+  })
+
+  it('refuses to launch a game that is not installed', () => {
+    expect(() => adapter({}).launchCommand({ ...game, installed: false, launchId: undefined })).toThrow(
+      /Forza Horizon/
+    )
+  })
+})
