@@ -115,6 +115,70 @@ describe('StoreSelection', () => {
     expect(screen.getByRole('link').getAttribute('href')).toBe('https://microsoft.com/link')
   })
 
+  /**
+   * A failed poll — expired code, declined, network drop — used to leave
+   * `pending` set forever: the auth-changed refresh only ever cleared it on
+   * a signed-in result, so the expired code sat on screen with no sign-in
+   * button to retry from. Recovery required closing and reopening the
+   * Configuration dialog. These two tests pin the fix: the refresh must also
+   * clear `pending` — and show the reason — when it comes back "not signed
+   * in".
+   */
+  it('clears the pending code and brings back the sign-in button when a poll fails', async () => {
+    stubApi()
+    ;(window.arcadia as unknown as Record<string, unknown>).signInToMicrosoft = async () => ({
+      ok: true,
+      userCode: 'ABCD-EFGH',
+      verificationUri: 'https://microsoft.com/link'
+    })
+    let notifyAuthChanged: ((error?: string) => void) | undefined
+    ;(window.arcadia as unknown as Record<string, unknown>).onMicrosoftAuthChanged = (
+      callback: (error?: string) => void
+    ) => {
+      notifyAuthChanged = callback
+      return () => undefined
+    }
+    render(<StoreSelection enabled={[...STORE_IDS]} onChange={vi.fn()} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /connect a microsoft account/i }))
+    expect(await screen.findByText(/ABCD-EFGH/)).toBeDefined()
+
+    // Main's poll ended without a sign-in; getMicrosoftAuth still answers
+    // "not signed in" (the stub's default), same as it would for real.
+    notifyAuthChanged?.('The sign-in code expired before it was used. Please try again.')
+
+    expect(
+      await screen.findByRole('button', { name: /connect a microsoft account/i })
+    ).toBeDefined()
+    expect(screen.queryByText(/ABCD-EFGH/)).toBeNull()
+  })
+
+  it('shows the reason a poll failed, so the user knows what to try again for', async () => {
+    stubApi()
+    ;(window.arcadia as unknown as Record<string, unknown>).signInToMicrosoft = async () => ({
+      ok: true,
+      userCode: 'ABCD-EFGH',
+      verificationUri: 'https://microsoft.com/link'
+    })
+    let notifyAuthChanged: ((error?: string) => void) | undefined
+    ;(window.arcadia as unknown as Record<string, unknown>).onMicrosoftAuthChanged = (
+      callback: (error?: string) => void
+    ) => {
+      notifyAuthChanged = callback
+      return () => undefined
+    }
+    render(<StoreSelection enabled={[...STORE_IDS]} onChange={vi.fn()} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /connect a microsoft account/i }))
+    expect(await screen.findByText(/ABCD-EFGH/)).toBeDefined()
+
+    notifyAuthChanged?.('The sign-in code expired before it was used. Please try again.')
+
+    expect(
+      await screen.findByText('The sign-in code expired before it was used. Please try again.')
+    ).toBeDefined()
+  })
+
   it('shows the gamertag and an exit once connected', async () => {
     stubApi()
     ;(window.arcadia as unknown as Record<string, unknown>).getMicrosoftAuth = async () => ({

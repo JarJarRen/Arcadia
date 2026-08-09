@@ -43,15 +43,22 @@ export function StoreSelection({ enabled, onChange }: Props): ReactElement {
   }, [])
 
   useEffect(() => {
-    const refresh = (): void => {
+    // `error` is only ever set by the auth-changed event, and only when a
+    // poll ended without a sign-in — the code expired, was declined, or the
+    // network dropped. Without clearing `pending` here too, that dead code
+    // would stay on screen with no way back to the sign-in button short of
+    // reopening the dialog.
+    const refresh = (error?: string): void => {
       window.arcadia
         .getMicrosoftAuth()
         .then((state) => {
           setAuth(state)
-          // The code has been used; there is nothing left to type.
-          if (state.signedIn) setPending(undefined)
+          // Either the code has just been used, or it never will be —
+          // there is nothing left to type in both cases.
+          setPending(undefined)
+          if (!state.signedIn) setAuthError(error)
         })
-        .catch((error: unknown) => console.error('Sign-in state could not be read:', error))
+        .catch((readError: unknown) => console.error('Sign-in state could not be read:', readError))
     }
     refresh()
     return window.arcadia.onMicrosoftAuthChanged(refresh)

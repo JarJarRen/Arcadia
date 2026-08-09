@@ -557,8 +557,17 @@ export function registerIpcHandlers(context: IpcContext): void {
     }
   })
 
-  const notifyAuthChanged = (): void => {
-    context.getWindow()?.webContents.send(IPC.microsoftAuthChanged)
+  /**
+   * Tells the renderer the sign-in state moved, and why when it moved
+   * because a poll ended without one.
+   *
+   * `error` is already the localised sentence `auth.ts` threw — expired,
+   * declined, cancelled, or the raw failure — passed straight through
+   * rather than rewrapped, so main throws nothing away that the screen
+   * could otherwise show.
+   */
+  const notifyAuthChanged = (error?: string): void => {
+    context.getWindow()?.webContents.send(IPC.microsoftAuthChanged, error)
   }
 
   ipcMain.handle(IPC.microsoftAuthState, () => {
@@ -614,7 +623,7 @@ export function registerIpcHandlers(context: IpcContext): void {
       })
       .catch((error: unknown) => {
         console.error('Microsoft sign-in failed:', error)
-        notifyAuthChanged()
+        notifyAuthChanged(error instanceof Error ? error.message : String(error))
       })
 
     return { ok: true, userCode: code.userCode, verificationUri: code.verificationUri }

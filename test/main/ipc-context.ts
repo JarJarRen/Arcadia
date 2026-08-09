@@ -32,6 +32,17 @@ export interface Harness {
   settings: SettingsRepository
   /** Channels the handlers pushed to the renderer, in order. */
   sent: string[]
+  /**
+   * The same events as `sent`, paired with whatever arguments accompanied
+   * them.
+   *
+   * Kept separate from `sent` rather than replacing it: most tests only care
+   * which channels fired, and changing `sent`'s element type would force
+   * every one of those `toContain(IPC.whatever)` assertions to be rewritten
+   * for no benefit. This is for the minority that need the payload too —
+   * `microsoft:auth-changed`'s error string, for one.
+   */
+  sentWithArgs: Array<{ channel: string; args: unknown[] }>
   context: IpcContext
 }
 
@@ -41,6 +52,7 @@ export function makeHarness(overrides: Partial<IpcContext> = {}): Harness {
   const metadata = new MetadataRepository(db)
   const settings = new SettingsRepository(db)
   const sent: string[] = []
+  const sentWithArgs: Array<{ channel: string; args: unknown[] }> = []
 
   const context: IpcContext = {
     repo,
@@ -53,17 +65,25 @@ export function makeHarness(overrides: Partial<IpcContext> = {}): Harness {
     // library:changed notifications, in the order they happened.
     scan: createScanState((scanning) => {
       sent.push(`${IPC.libraryScanning}:${String(scanning)}`)
+      sentWithArgs.push({ channel: `${IPC.libraryScanning}:${String(scanning)}`, args: [] })
     }),
     appList: new SteamAppList(),
     fetchDetails: async () => undefined,
     // A fake window, so notifyChanged is observable. The handlers only ever
     // reach webContents.send, so nothing else needs to exist.
     getWindow: () =>
-      ({ webContents: { send: (channel: string) => sent.push(channel) } }) as unknown as BrowserWindow,
+      ({
+        webContents: {
+          send: (channel: string, ...args: unknown[]) => {
+            sent.push(channel)
+            sentWithArgs.push({ channel, args })
+          }
+        }
+      }) as unknown as BrowserWindow,
     envFilePaths: [],
     relaunch: () => undefined,
     ...overrides
   }
 
-  return { db, repo, metadata, settings, sent, context }
+  return { db, repo, metadata, settings, sent, sentWithArgs, context }
 }

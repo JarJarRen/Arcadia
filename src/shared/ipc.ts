@@ -226,7 +226,15 @@ export interface ArcadiaApi {
    */
   signInToMicrosoft(): Promise<MicrosoftSignInStart>
   signOutOfMicrosoft(): Promise<void>
-  onMicrosoftAuthChanged(callback: () => void): () => void
+  /**
+   * Fires on sign-in, sign-out, and a poll that ended without one.
+   *
+   * `error` carries the already-localised reason a poll failed — expired
+   * code, declined, cancelled, or the raw failure message — so the screen
+   * can show it instead of leaving a dead code on screen. Absent for the
+   * success and sign-out cases, which have nothing to report.
+   */
+  onMicrosoftAuthChanged(callback: (error?: string) => void): () => void
 }
 
 export interface AppSuggestion {

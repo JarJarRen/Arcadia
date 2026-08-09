@@ -119,7 +119,7 @@ describe('IPC Microsoft sign-in', () => {
     expect(await invoke(IPC.microsoftSignIn)).toEqual({ ok: false, error: 'invalid_client' })
   })
 
-  it('announces a sign-in that failed while polling', async () => {
+  it('announces a sign-in that failed while polling, carrying the reason', async () => {
     build({
       pollForTokens: async () => {
         throw new Error('expired')
@@ -129,6 +129,12 @@ describe('IPC Microsoft sign-in', () => {
     await invoke(IPC.microsoftSignIn)
     await vi.waitFor(() => expect(harness.sent).toContain(IPC.microsoftAuthChanged))
     expect(await invoke(IPC.microsoftAuthState)).toEqual({ signedIn: false })
+
+    // The reason is not just logged and dropped — it rides along on the
+    // event so the renderer can show the user why the sign-in did not
+    // finish, instead of leaving a dead code on screen.
+    const authChanged = harness.sentWithArgs.find((event) => event.channel === IPC.microsoftAuthChanged)
+    expect(authChanged?.args).toEqual(['expired'])
   })
 
   it('signs out and rescans, so the owned games fall out again', async () => {

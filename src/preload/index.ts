@@ -52,7 +52,7 @@ const api: ArcadiaApi = {
   signInToMicrosoft: () => ipcRenderer.invoke(IPC.microsoftSignIn),
   signOutOfMicrosoft: () => ipcRenderer.invoke(IPC.microsoftSignOut),
   onMicrosoftAuthChanged: (callback) => {
-    const listener = (): void => callback()
+    const listener = (_event: unknown, error?: string): void => callback(error)
     ipcRenderer.on(IPC.microsoftAuthChanged, listener)
     return () => ipcRenderer.removeListener(IPC.microsoftAuthChanged, listener)
   }
