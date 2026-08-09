@@ -102,6 +102,11 @@ export interface Strings {
     storeChecking: string
     storeDetected: string
     storeNotFound: string
+    microsoftSignIn: string
+    microsoftSignOut: string
+    microsoftSignedInAs: (gamertag: string) => string
+    microsoftCodeHint: (code: string) => string
+    microsoftOpenLink: string
     /** e.g. "Saved to C:\Users\…\.env" */
     fileHint: (path: string) => string
     steamKeyLabel: string
@@ -367,6 +372,11 @@ const en: Strings = {
     storeChecking: 'checking…',
     storeDetected: 'found on this machine',
     storeNotFound: 'not found on this machine',
+    microsoftSignIn: 'Connect a Microsoft account',
+    microsoftSignOut: 'Disconnect',
+    microsoftSignedInAs: (gamertag) => `Signed in as ${gamertag}`,
+    microsoftCodeHint: (code) => `Enter the code ${code} in your browser:`,
+    microsoftOpenLink: 'Open the sign-in page',
     fileHint: (path) => `Stored in ${path}`,
     steamKeyLabel: 'Steam Web API key',
     steamKeyHint:
@@ -679,6 +689,11 @@ const de: Strings = {
     storeChecking: 'wird geprüft …',
     storeDetected: 'auf diesem Rechner gefunden',
     storeNotFound: 'auf diesem Rechner nicht gefunden',
+    microsoftSignIn: 'Microsoft-Konto verbinden',
+    microsoftSignOut: 'Trennen',
+    microsoftSignedInAs: (gamertag) => `Angemeldet als ${gamertag}`,
+    microsoftCodeHint: (code) => `Gib den Code ${code} im Browser ein:`,
+    microsoftOpenLink: 'Anmeldeseite öffnen',
     fileHint: (path) => `Gespeichert in ${path}`,
     steamKeyLabel: 'Steam-Web-API-Schlüssel',
     steamKeyHint:

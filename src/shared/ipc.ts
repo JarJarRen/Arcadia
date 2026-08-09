@@ -38,7 +38,11 @@ export const IPC = {
   libraryRemoveManual: 'library:remove-manual',
   artworkBroken: 'artwork:broken',
   navigateBack: 'navigate:back',
-  navigateForward: 'navigate:forward'
+  navigateForward: 'navigate:forward',
+  microsoftAuthState: 'microsoft:auth-state',
+  microsoftSignIn: 'microsoft:sign-in',
+  microsoftSignOut: 'microsoft:sign-out',
+  microsoftAuthChanged: 'microsoft:auth-changed'
 } as const
 
 export interface LaunchResult {
@@ -52,6 +56,19 @@ export interface LaunchResult {
    * click would look as though it had done nothing.
    */
   notice?: string
+}
+
+export interface MicrosoftAuthState {
+  signedIn: boolean
+  gamertag?: string
+}
+
+export interface MicrosoftSignInStart {
+  ok: boolean
+  /** The short code to type in the browser. */
+  userCode?: string
+  verificationUri?: string
+  error?: string
 }
 
 export interface ArcadiaApi {
@@ -199,6 +216,17 @@ export interface ArcadiaApi {
   onNavigateBack(callback: () => void): () => void
   /** The forward thumb button; reopens the page back has just closed. */
   onNavigateForward(callback: () => void): () => void
+  getMicrosoftAuth(): Promise<MicrosoftAuthState>
+  /**
+   * Starts the device-code sign-in.
+   *
+   * Answers as soon as the code exists, not when the sign-in completes: the
+   * user still has to type the code into a browser, and the screen has to
+   * be able to show it to them. Completion arrives as onMicrosoftAuthChanged.
+   */
+  signInToMicrosoft(): Promise<MicrosoftSignInStart>
+  signOutOfMicrosoft(): Promise<void>
+  onMicrosoftAuthChanged(callback: () => void): () => void
 }
 
 export interface AppSuggestion {

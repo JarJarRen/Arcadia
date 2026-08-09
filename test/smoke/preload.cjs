@@ -201,5 +201,12 @@ contextBridge.exposeInMainWorld('arcadia', {
   onScanningChanged: () => () => undefined,
   onLibraryChanged: () => () => undefined,
   onNavigateBack: () => () => undefined,
-  onNavigateForward: () => () => undefined
+  onNavigateForward: () => () => undefined,
+  // No Microsoft session in the smoke stub: signed out, and a sign-in
+  // attempt reports the platform reason a real handler would give when no
+  // session was built.
+  getMicrosoftAuth: async () => ({ signedIn: false }),
+  signInToMicrosoft: async () => ({ ok: false, error: 'The Microsoft Store only exists on Windows.' }),
+  signOutOfMicrosoft: async () => undefined,
+  onMicrosoftAuthChanged: () => () => undefined
 })

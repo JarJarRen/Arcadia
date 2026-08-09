@@ -57,6 +57,10 @@ export function stubArcadia(overrides: Partial<ArcadiaApi> = {}): ArcadiaApi {
     onLibraryChanged: () => () => undefined,
     onNavigateBack: () => () => undefined,
     onNavigateForward: () => () => undefined,
+    getMicrosoftAuth: async () => ({ signedIn: false }),
+    signInToMicrosoft: async () => ({ ok: false, error: 'not configured' }),
+    signOutOfMicrosoft: async () => undefined,
+    onMicrosoftAuthChanged: () => () => undefined,
     ...overrides
   }
 

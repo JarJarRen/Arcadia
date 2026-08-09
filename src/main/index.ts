@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, safeStorage, shell } from 'electron'
 import { join } from 'node:path'
 import { config as loadDotenv } from 'dotenv'
 import { openDatabase } from '@main/db/schema'
@@ -18,6 +18,8 @@ import { parseLanguage, setLanguage } from '@shared/i18n'
 import { envFileCandidates } from '@main/env-file'
 import { createScanState } from '@main/scan-state'
 import { enabledAdapters } from '@main/stores/enabled'
+import { MicrosoftSession, type TokenStore } from '@main/stores/microsoft/session'
+import { pollForTokens, requestDeviceCode } from '@main/stores/microsoft/auth'
 
 let mainWindow: BrowserWindow | undefined
 
@@ -111,6 +113,55 @@ function createWindow(): BrowserWindow {
   return win
 }
 
+const MICROSOFT_TOKEN_KEY = 'microsoft-refresh-token'
+/** Marks a value as encrypted, so a plaintext fallback stays readable. */
+const ENCRYPTED_PREFIX = 'enc:'
+
+/**
+ * Where the Microsoft refresh token is kept.
+ *
+ * In the database rather than the `.env`: that file holds keys the user
+ * typed, and Arcadia writing a rotating credential into it would be a
+ * surprise. Encrypted through safeStorage, which is DPAPI on Windows.
+ *
+ * Where encryption is unavailable — some Linux desktops have no keyring —
+ * the token is stored as it is. That is worth doing rather than refusing:
+ * the file already sits in the user's own profile, and the alternative is
+ * signing in again on every start. The configuration screen says so.
+ */
+function microsoftTokenStore(settings: SettingsRepository): TokenStore {
+  return {
+    read: () => {
+      const stored = settings.get(MICROSOFT_TOKEN_KEY)
+      if (stored === undefined || stored === '') return undefined
+      if (!stored.startsWith(ENCRYPTED_PREFIX)) return stored
+      try {
+        return safeStorage.decryptString(
+          Buffer.from(stored.slice(ENCRYPTED_PREFIX.length), 'base64')
+        )
+      } catch {
+        // Encrypted by another machine or another user account. The token is
+        // unusable, and reporting it as absent asks for a fresh sign-in.
+        return undefined
+      }
+    },
+    write: (value) => {
+      if (value === undefined) {
+        settings.set(MICROSOFT_TOKEN_KEY, '')
+        return
+      }
+      if (!safeStorage.isEncryptionAvailable()) {
+        settings.set(MICROSOFT_TOKEN_KEY, value)
+        return
+      }
+      settings.set(
+        MICROSOFT_TOKEN_KEY,
+        ENCRYPTED_PREFIX + safeStorage.encryptString(value).toString('base64')
+      )
+    }
+  }
+}
+
 app.whenReady().then(() => {
   // The window before the setup, not after it.
   //
@@ -146,6 +197,8 @@ app.whenReady().then(() => {
   const metadata = new MetadataRepository(db)
   const settings = new SettingsRepository(db)
 
+  const microsoftSession = new MicrosoftSession({ store: microsoftTokenStore(settings) })
+
   // Still before the renderer can ask, which is what actually matters: the
   // window is created above, but the language reaches the interface through
   // `settings:get-language`, and that handler is registered further down in
@@ -174,7 +227,9 @@ app.whenReady().then(() => {
     ea: { catalogCachePath: join(app.getPath('userData'), 'ea-catalog.json') },
     // Names for the games from localconfig.vdf. The local file knows only
     // identifiers; without a name a game is skipped.
-    resolveSteamName: (appId) => appList.nameFor(appId)
+    resolveSteamName: (appId) => appList.nameFor(appId),
+    microsoft: { catalogCachePath: join(app.getPath('userData'), 'microsoft-catalog.json') },
+    microsoftSession
   })
 
   // Closes gaps the app opens itself. The renderer reports images that fail
@@ -208,6 +263,11 @@ app.whenReady().then(() => {
     fetchDetails: fetchAppDetails,
     getWindow: () => mainWindow,
     onArtworkGap: () => artworkGaps.request(),
+    microsoft: {
+      session: microsoftSession,
+      requestDeviceCode: () => requestDeviceCode(),
+      pollForTokens: (code) => pollForTokens(code)
+    },
     envFilePaths,
     // The keys reach the adapters at startup and nowhere else, so a changed
     // key only takes effect in a process that starts after it was written.

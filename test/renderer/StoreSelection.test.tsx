@@ -8,10 +8,15 @@
 import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { StoreSelection } from '@renderer/components/StoreSelection'
+import { STORE_IDS } from '@shared/types'
 
 function stubApi(availability: Record<string, unknown> = {}): void {
   ;(window as unknown as { arcadia: unknown }).arcadia = {
-    getStoreAvailability: async () => availability
+    getStoreAvailability: async () => availability,
+    getMicrosoftAuth: async () => ({ signedIn: false }),
+    signInToMicrosoft: async () => ({ ok: false, error: 'not configured' }),
+    signOutOfMicrosoft: async () => undefined,
+    onMicrosoftAuthChanged: () => () => undefined
   }
 }
 
@@ -73,12 +78,93 @@ describe('StoreSelection', () => {
     ;(window as unknown as { arcadia: unknown }).arcadia = {
       getStoreAvailability: async () => {
         throw new Error('nope')
-      }
+      },
+      getMicrosoftAuth: async () => ({ signedIn: false }),
+      signInToMicrosoft: async () => ({ ok: false, error: 'not configured' }),
+      signOutOfMicrosoft: async () => undefined,
+      onMicrosoftAuthChanged: () => () => undefined
     }
     const onChange = vi.fn()
     render(<StoreSelection enabled={[]} onChange={onChange} />)
 
     fireEvent.click(screen.getByRole('checkbox', { name: /steam/i }))
     await waitFor(() => expect(onChange).toHaveBeenCalledWith(['steam']))
+  })
+
+  it('offers to connect a Microsoft account', async () => {
+    stubApi()
+    render(<StoreSelection enabled={[...STORE_IDS]} onChange={vi.fn()} />)
+
+    expect(await screen.findByRole('button', { name: /connect a microsoft account/i })).toBeDefined()
+  })
+
+  it('shows the code and the link once the sign-in has started', async () => {
+    stubApi()
+    ;(window.arcadia as unknown as Record<string, unknown>).signInToMicrosoft = async () => ({
+      ok: true,
+      userCode: 'ABCD-EFGH',
+      verificationUri: 'https://microsoft.com/link'
+    })
+    render(<StoreSelection enabled={[...STORE_IDS]} onChange={vi.fn()} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /connect a microsoft account/i }))
+
+    expect(await screen.findByText(/ABCD-EFGH/)).toBeDefined()
+    // A plain link, so the window's open handler sends it to the system
+    // browser — no new main-process shell call for this.
+    expect(screen.getByRole('link').getAttribute('href')).toBe('https://microsoft.com/link')
+  })
+
+  it('shows the gamertag and an exit once connected', async () => {
+    stubApi()
+    ;(window.arcadia as unknown as Record<string, unknown>).getMicrosoftAuth = async () => ({
+      signedIn: true,
+      gamertag: 'Player'
+    })
+    render(<StoreSelection enabled={[...STORE_IDS]} onChange={vi.fn()} />)
+
+    expect(await screen.findByText(/Signed in as Player/)).toBeDefined()
+    expect(screen.getByRole('button', { name: /disconnect/i })).toBeDefined()
+  })
+
+  it('disconnects on click and drops the pending code, so a stale one is never shown again', async () => {
+    stubApi()
+    const signOutOfMicrosoft = vi.fn(async () => undefined)
+    ;(window.arcadia as unknown as Record<string, unknown>).getMicrosoftAuth = async () => ({
+      signedIn: true,
+      gamertag: 'Player'
+    })
+    ;(window.arcadia as unknown as Record<string, unknown>).signOutOfMicrosoft = signOutOfMicrosoft
+    render(<StoreSelection enabled={[...STORE_IDS]} onChange={vi.fn()} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /disconnect/i }))
+
+    expect(signOutOfMicrosoft).toHaveBeenCalledOnce()
+  })
+
+  it('shows the failure when starting the sign-in rejects outright', async () => {
+    stubApi()
+    ;(window.arcadia as unknown as Record<string, unknown>).signInToMicrosoft = async () => {
+      throw new Error('network unreachable')
+    }
+    render(<StoreSelection enabled={[...STORE_IDS]} onChange={vi.fn()} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /connect a microsoft account/i }))
+
+    expect(await screen.findByText('network unreachable')).toBeDefined()
+    // No code to show: the request never got that far.
+    expect(screen.queryByRole('link')).toBeNull()
+  })
+
+  it('stays on the sign-in offer when the auth state cannot be read', async () => {
+    stubApi()
+    ;(window.arcadia as unknown as Record<string, unknown>).getMicrosoftAuth = async () => {
+      throw new Error('ipc down')
+    }
+    render(<StoreSelection enabled={[...STORE_IDS]} onChange={vi.fn()} />)
+
+    // The failure is swallowed rather than crashing the screen: the row
+    // falls back to its default signed-out state, offer intact.
+    expect(await screen.findByRole('button', { name: /connect a microsoft account/i })).toBeDefined()
   })
 })

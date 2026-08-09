@@ -47,6 +47,14 @@ const api: ArcadiaApi = {
     const listener = (): void => callback()
     ipcRenderer.on(IPC.navigateForward, listener)
     return () => ipcRenderer.removeListener(IPC.navigateForward, listener)
+  },
+  getMicrosoftAuth: () => ipcRenderer.invoke(IPC.microsoftAuthState),
+  signInToMicrosoft: () => ipcRenderer.invoke(IPC.microsoftSignIn),
+  signOutOfMicrosoft: () => ipcRenderer.invoke(IPC.microsoftSignOut),
+  onMicrosoftAuthChanged: (callback) => {
+    const listener = (): void => callback()
+    ipcRenderer.on(IPC.microsoftAuthChanged, listener)
+    return () => ipcRenderer.removeListener(IPC.microsoftAuthChanged, listener)
   }
 }
 

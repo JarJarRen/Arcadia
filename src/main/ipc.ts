@@ -21,6 +21,8 @@ import { parseEnabledStores, serializeEnabledStores } from '@shared/stores'
 import { enabledAdapters } from '@main/stores/enabled'
 import { envValueIsWritable } from '@main/env-file'
 import { ENV_CONFIG_KEYS, type EnvConfigValues } from '@shared/env-config'
+import type { MicrosoftSession } from '@main/stores/microsoft/session'
+import type { DeviceCode, MicrosoftTokens } from '@main/stores/microsoft/auth'
 
 export interface IpcContext {
   repo: GameRepository
@@ -68,6 +70,18 @@ export interface IpcContext {
    * for the next start of the app, which is the behaviour this replaces.
    */
   onArtworkGap?: () => void
+  /**
+   * The Microsoft account, where one can exist.
+   *
+   * Optional because everything else works without it — on Linux there is
+   * no Microsoft Store at all — and the handlers answer "signed out" rather
+   * than failing when it is absent.
+   */
+  microsoft?: {
+    session: MicrosoftSession
+    requestDeviceCode: () => Promise<DeviceCode>
+    pollForTokens: (code: DeviceCode) => Promise<MicrosoftTokens>
+  }
 }
 
 /**
@@ -541,6 +555,81 @@ export function registerIpcHandlers(context: IpcContext): void {
       const message = error instanceof Error ? error.message : String(error)
       return { ok: false, error: t().errors.envSaveFailed(message), restarting: false }
     }
+  })
+
+  const notifyAuthChanged = (): void => {
+    context.getWindow()?.webContents.send(IPC.microsoftAuthChanged)
+  }
+
+  ipcMain.handle(IPC.microsoftAuthState, () => {
+    const session = context.microsoft?.session
+    if (session === undefined || !session.isSignedIn()) return { signedIn: false }
+    const gamertag = session.gamertag()
+    return { signedIn: true, ...(gamertag === undefined ? {} : { gamertag }) }
+  })
+
+  /**
+   * Starts the sign-in and returns the code, not the result.
+   *
+   * The polling then runs on in this process. A handler that waited for it
+   * would leave the configuration screen with nothing to show for as long as
+   * the user took in their browser — which is exactly when they need to see
+   * the code.
+   */
+  ipcMain.handle(IPC.microsoftSignIn, async () => {
+    const microsoft = context.microsoft
+    if (microsoft === undefined) {
+      return { ok: false, error: t().stores.microsoft.windowsOnly }
+    }
+
+    let code: DeviceCode
+    try {
+      code = await microsoft.requestDeviceCode()
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    }
+
+    void microsoft
+      .pollForTokens(code)
+      .then(async (tokens) => {
+        microsoft.session.signIn(tokens)
+        notifyAuthChanged()
+        // At once, not at the next refresh: the owned library only becomes
+        // readable now, and waiting would look as though nothing happened.
+        await context.scan.track(() =>
+          runSync(
+            enabledAdapters(context.adapters, context.settings.get('enabled-stores')),
+            context.repo,
+            Math.floor(Date.now() / 1000)
+          )
+        )
+        notifyChanged()
+      })
+      .catch((error: unknown) => {
+        console.error('Microsoft sign-in failed:', error)
+        notifyAuthChanged()
+      })
+
+    return { ok: true, userCode: code.userCode, verificationUri: code.verificationUri }
+  })
+
+  /**
+   * Signs out and rescans.
+   *
+   * The rescan is the point: without it the owned-but-not-installed games
+   * would sit in the library as rows nothing can account for.
+   */
+  ipcMain.handle(IPC.microsoftSignOut, async () => {
+    context.microsoft?.session.signOut()
+    notifyAuthChanged()
+    await context.scan.track(() =>
+      runSync(
+        enabledAdapters(context.adapters, context.settings.get('enabled-stores')),
+        context.repo,
+        Math.floor(Date.now() / 1000)
+      )
+    )
+    notifyChanged()
   })
 }
 

@@ -23,6 +23,9 @@ export function StoreSelection({ enabled, onChange }: Props): ReactElement {
   const [availability, setAvailability] = useState<
     Record<string, AvailabilityResult> | undefined
   >()
+  const [auth, setAuth] = useState<{ signedIn: boolean; gamertag?: string }>({ signedIn: false })
+  const [pending, setPending] = useState<{ userCode: string; verificationUri: string } | undefined>()
+  const [authError, setAuthError] = useState<string | undefined>()
 
   useEffect(() => {
     let cancelled = false
@@ -37,6 +40,21 @@ export function StoreSelection({ enabled, onChange }: Props): ReactElement {
     return () => {
       cancelled = true
     }
+  }, [])
+
+  useEffect(() => {
+    const refresh = (): void => {
+      window.arcadia
+        .getMicrosoftAuth()
+        .then((state) => {
+          setAuth(state)
+          // The code has been used; there is nothing left to type.
+          if (state.signedIn) setPending(undefined)
+        })
+        .catch((error: unknown) => console.error('Sign-in state could not be read:', error))
+    }
+    refresh()
+    return window.arcadia.onMicrosoftAuthChanged(refresh)
   }, [])
 
   const toggle = (id: StoreId): void => {
@@ -54,17 +72,78 @@ export function StoreSelection({ enabled, onChange }: Props): ReactElement {
       <p className="modal__sublabel">{t().setup.storesHint}</p>
 
       {STORE_IDS.map((id) => (
-        <label className="modal__toggle" key={id}>
-          <input
-            type="checkbox"
-            checked={enabled.includes(id)}
-            onChange={() => toggle(id)}
-          />
-          <span>
-            {STORE_LABELS[id] ?? id}
-            <span className="modal__sublabel">{note(availability, id)}</span>
-          </span>
-        </label>
+        <div key={id}>
+          <label className="modal__toggle">
+            <input
+              type="checkbox"
+              checked={enabled.includes(id)}
+              onChange={() => toggle(id)}
+            />
+            <span>
+              {STORE_LABELS[id] ?? id}
+              <span className="modal__sublabel">{note(availability, id)}</span>
+            </span>
+          </label>
+          {id === 'microsoft' && (
+            <span className="modal__sublabel">
+              {auth.signedIn ? (
+                <>
+                  {t().setup.microsoftSignedInAs(auth.gamertag ?? '')}{' '}
+                  <button
+                    type="button"
+                    className="button button--link"
+                    onClick={() => {
+                      setPending(undefined)
+                      void window.arcadia.signOutOfMicrosoft()
+                    }}
+                  >
+                    {t().setup.microsoftSignOut}
+                  </button>
+                </>
+              ) : pending === undefined ? (
+                <button
+                  type="button"
+                  className="button button--link"
+                  onClick={() => {
+                    setAuthError(undefined)
+                    window.arcadia
+                      .signInToMicrosoft()
+                      .then((started) => {
+                        if (started.ok && started.userCode !== undefined && started.verificationUri !== undefined) {
+                          setPending({
+                            userCode: started.userCode,
+                            verificationUri: started.verificationUri
+                          })
+                        } else {
+                          setAuthError(started.error)
+                        }
+                      })
+                      .catch((error: unknown) =>
+                        setAuthError(error instanceof Error ? error.message : String(error))
+                      )
+                  }}
+                >
+                  {t().setup.microsoftSignIn}
+                </button>
+              ) : (
+                <>
+                  {t().setup.microsoftCodeHint(pending.userCode)}{' '}
+                  {/* An ordinary link: the window's open handler denies
+                      in-app navigation and hands the URL to the shell. */}
+                  <a
+                    className="modal__link"
+                    href={pending.verificationUri}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {t().setup.microsoftOpenLink}
+                  </a>
+                </>
+              )}
+              {authError !== undefined && <span className="modal__error">{authError}</span>}
+            </span>
+          )}
+        </div>
       ))}
     </fieldset>
   )
