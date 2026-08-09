@@ -11,6 +11,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { AddGameDialog } from '@renderer/components/AddGameDialog'
 import { stubArcadia } from './fixtures'
+import { STORE_IDS } from '@shared/types'
 import type { ArcadiaApi } from '@shared/ipc'
 
 /** So `.mock.calls[0][0]` is typed as the payload rather than `never`. */
@@ -22,7 +23,7 @@ describe('AddGameDialog', () => {
       async (_payload: AddManualGamePayload) => ({ ok: true, id: 'steam:manual-1' })
     )
     stubArcadia({ addManualGame })
-    render(<AddGameDialog onClose={vi.fn()} onAdded={vi.fn()} />)
+    render(<AddGameDialog availableStores={[...STORE_IDS]} onClose={vi.fn()} onAdded={vi.fn()} />)
 
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'A Game' } })
     fireEvent.click(screen.getByText('Add'))
@@ -38,7 +39,7 @@ describe('AddGameDialog', () => {
       async (_payload: AddManualGamePayload) => ({ ok: true, id: 'steam:440' })
     )
     stubArcadia({ addManualGame })
-    render(<AddGameDialog onClose={vi.fn()} onAdded={vi.fn()} />)
+    render(<AddGameDialog availableStores={[...STORE_IDS]} onClose={vi.fn()} onAdded={vi.fn()} />)
 
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'TF2' } })
     // The brief's exact string 'Store ID (optional)' does not match: the
@@ -58,7 +59,7 @@ describe('AddGameDialog', () => {
   it('hands the new id back so the caller can select it', async () => {
     stubArcadia({ addManualGame: async () => ({ ok: true, id: 'steam:manual-7' }) })
     const onAdded = vi.fn()
-    render(<AddGameDialog onClose={vi.fn()} onAdded={onAdded} />)
+    render(<AddGameDialog availableStores={[...STORE_IDS]} onClose={vi.fn()} onAdded={onAdded} />)
 
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'A Game' } })
     fireEvent.click(screen.getByText('Add'))
@@ -69,7 +70,7 @@ describe('AddGameDialog', () => {
   it('does not submit an empty name', () => {
     const addManualGame = vi.fn(async () => ({ ok: true, id: 'x' }))
     stubArcadia({ addManualGame })
-    render(<AddGameDialog onClose={vi.fn()} onAdded={vi.fn()} />)
+    render(<AddGameDialog availableStores={[...STORE_IDS]} onClose={vi.fn()} onAdded={vi.fn()} />)
 
     fireEvent.click(screen.getByText('Add'))
 
@@ -83,7 +84,7 @@ describe('AddGameDialog', () => {
     stubArcadia({
       addManualGame: async () => ({ ok: false, error: 'A game with this name already exists.' })
     })
-    render(<AddGameDialog onClose={vi.fn()} onAdded={vi.fn()} />)
+    render(<AddGameDialog availableStores={[...STORE_IDS]} onClose={vi.fn()} onAdded={vi.fn()} />)
 
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'TF2' } })
     fireEvent.click(screen.getByText('Add'))
@@ -97,7 +98,7 @@ describe('AddGameDialog', () => {
     const addManualGame = vi.fn(async () => ({ ok: true, id: 'x' }))
     stubArcadia({ addManualGame })
     const onClose = vi.fn()
-    render(<AddGameDialog onClose={onClose} onAdded={vi.fn()} />)
+    render(<AddGameDialog availableStores={[...STORE_IDS]} onClose={onClose} onAdded={vi.fn()} />)
 
     fireEvent.click(screen.getByText('Cancel'))
 
@@ -108,7 +109,7 @@ describe('AddGameDialog', () => {
   it('closes on Escape', () => {
     stubArcadia()
     const onClose = vi.fn()
-    render(<AddGameDialog onClose={onClose} onAdded={vi.fn()} />)
+    render(<AddGameDialog availableStores={[...STORE_IDS]} onClose={onClose} onAdded={vi.fn()} />)
 
     fireEvent.keyDown(window, { key: 'Escape' })
 
@@ -122,7 +123,7 @@ describe('AddGameDialog', () => {
   it('blocks submission when the store ID does not look valid for the selected store', () => {
     const addManualGame = vi.fn(async () => ({ ok: true, id: 'x' }))
     stubArcadia({ addManualGame })
-    render(<AddGameDialog onClose={vi.fn()} onAdded={vi.fn()} />)
+    render(<AddGameDialog availableStores={[...STORE_IDS]} onClose={vi.fn()} onAdded={vi.fn()} />)
 
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'A Game' } })
     fireEvent.change(screen.getByLabelText(/^Store ID \(optional\)/), {
@@ -139,7 +140,7 @@ describe('AddGameDialog', () => {
   it('submits on Enter in the name field', async () => {
     const addManualGame = vi.fn(async () => ({ ok: true, id: 'x' }))
     stubArcadia({ addManualGame })
-    render(<AddGameDialog onClose={vi.fn()} onAdded={vi.fn()} />)
+    render(<AddGameDialog availableStores={[...STORE_IDS]} onClose={vi.fn()} onAdded={vi.fn()} />)
 
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'A Game' } })
     fireEvent.keyDown(screen.getByLabelText('Name'), { key: 'Enter' })
@@ -152,12 +153,62 @@ describe('AddGameDialog', () => {
   it('submits on Enter in the store ID field', async () => {
     const addManualGame = vi.fn(async () => ({ ok: true, id: 'x' }))
     stubArcadia({ addManualGame })
-    render(<AddGameDialog onClose={vi.fn()} onAdded={vi.fn()} />)
+    render(<AddGameDialog availableStores={[...STORE_IDS]} onClose={vi.fn()} onAdded={vi.fn()} />)
 
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'A Game' } })
     fireEvent.keyDown(screen.getByLabelText(/^Store ID \(optional\)/), { key: 'Enter' })
 
     await waitFor(() => expect(addManualGame).toHaveBeenCalledOnce())
+  })
+
+  /**
+   * A game filed under a switched-off store is written and then filtered
+   * straight back out of the visible library: removal is only reachable
+   * from a grid row, so there is none to click, and adding it again fails
+   * as a duplicate. An unreachable row with no error and no route back.
+   */
+  it('offers only the stores that are switched on', () => {
+    stubArcadia()
+    render(
+      <AddGameDialog availableStores={['steam', 'epic']} onClose={vi.fn()} onAdded={vi.fn()} />
+    )
+
+    expect(screen.getAllByRole('option').map((option) => option.getAttribute('value'))).toEqual([
+      'steam',
+      'epic'
+    ])
+  })
+
+  it('files the game under an enabled store when the usual default is off', () => {
+    // EA is the store this dialog exists for, but it cannot be the default
+    // when the user has switched it off.
+    const addManualGame = vi.fn(async (_payload: AddManualGamePayload) => ({
+      ok: true,
+      id: 'steam:manual-1'
+    }))
+    stubArcadia({ addManualGame })
+    render(
+      <AddGameDialog availableStores={['steam', 'epic']} onClose={vi.fn()} onAdded={vi.fn()} />
+    )
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'A Game' } })
+    fireEvent.click(screen.getByText('Add'))
+
+    return waitFor(() => expect(addManualGame.mock.calls[0]![0].storeId).toBe('steam'))
+  })
+
+  it('says so, and adds nothing, when every store is switched off', () => {
+    const addManualGame = vi.fn(async () => ({ ok: true, id: 'x' }))
+    stubArcadia({ addManualGame })
+    render(<AddGameDialog availableStores={[]} onClose={vi.fn()} onAdded={vi.fn()} />)
+
+    expect(screen.getByText(/No store is switched on/)).toBeDefined()
+    expect(screen.queryByRole('combobox')).toBeNull()
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'A Game' } })
+    fireEvent.click(screen.getByText('Add'))
+
+    expect(addManualGame).not.toHaveBeenCalled()
   })
 
   it('shows the thrown error message when adding a game rejects', async () => {
@@ -169,7 +220,7 @@ describe('AddGameDialog', () => {
         throw new Error('Disk full')
       }
     })
-    render(<AddGameDialog onClose={vi.fn()} onAdded={vi.fn()} />)
+    render(<AddGameDialog availableStores={[...STORE_IDS]} onClose={vi.fn()} onAdded={vi.fn()} />)
 
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'A Game' } })
     fireEvent.click(screen.getByText('Add'))

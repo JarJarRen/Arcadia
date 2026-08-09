@@ -420,6 +420,10 @@ export function App(): ReactElement {
 
       {addOpen && (
         <AddGameDialog
+          // The same list the store filter offers. A game filed under a
+          // switched-off store would be written and then filtered straight
+          // back out of the visible library, with no way to reach it again.
+          availableStores={enabledStores}
           onClose={() => setAddOpen(false)}
           // Only remembered here, not selected: the library reloads through
           // an IPC event, so at this moment `entries` is still the list from

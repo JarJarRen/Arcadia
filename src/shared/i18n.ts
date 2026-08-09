@@ -80,6 +80,8 @@ export interface Strings {
     hint: string
     nameLabel: string
     storeLabel: string
+    /** Shown in place of the store list when every store is switched off. */
+    noStores: string
     idLabel: string
     idHint: string
     submit: string
@@ -346,6 +348,9 @@ const en: Strings = {
       'this machine.',
     nameLabel: 'Name',
     storeLabel: 'Store',
+    noStores:
+      'No store is switched on. Switch one on under Stores in the ' +
+      'configuration screen, then add the game.',
     idLabel: 'Store ID (optional)',
     idHint:
       'Leave empty if you do not know it. The entry then gets artwork and a ' +
@@ -662,6 +667,9 @@ const de: Strings = {
       'Rechner installiert war.',
     nameLabel: 'Name',
     storeLabel: 'Store',
+    noStores:
+      'Es ist kein Store eingeschaltet. Schalte in der Konfiguration unter ' +
+      'Stores einen ein und füge das Spiel dann hinzu.',
     idLabel: 'Store-ID (optional)',
     idHint:
       'Leer lassen, wenn du sie nicht kennst. Der Eintrag bekommt dann Bild ' +
