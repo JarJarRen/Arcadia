@@ -277,7 +277,10 @@ app.whenReady().then(() => {
     microsoft: {
       session: microsoftSession,
       requestDeviceCode: () => requestDeviceCode(),
-      pollForTokens: (code) => pollForTokens(code)
+      // `cancelled` was declared and checked in pollForTokens but never
+      // supplied, so a started poll ran to the server's expiry with nothing
+      // able to stop it. The handler owns the flow and decides.
+      pollForTokens: (code, cancelled) => pollForTokens(code, { cancelled })
     },
     envFilePaths,
     // The keys reach the adapters at startup and nowhere else, so a changed

@@ -89,8 +89,35 @@ export interface IpcContext {
   microsoft?: {
     session: MicrosoftSession
     requestDeviceCode: () => Promise<DeviceCode>
-    pollForTokens: (code: DeviceCode) => Promise<MicrosoftTokens>
+    /**
+     * `cancelled` is checked before every poll, and is what ends a flow
+     * that has been superseded or signed out from under. Without it a
+     * started poll ran to the server's expiry with nothing able to stop it.
+     */
+    pollForTokens: (code: DeviceCode, cancelled: () => boolean) => Promise<MicrosoftTokens>
   }
+}
+
+/**
+ * A device-code sign-in that is still running.
+ *
+ * At most one exists. A second `microsoft:sign-in` — which is one dialog
+ * close and reopen away, since closing it clears the code from the screen
+ * but not the poll from this process — used to start a competing device
+ * code and a second poll loop, each of which triggered a full five-store
+ * rescan on success.
+ */
+interface SignInFlow {
+  /** Read by the poll before each request. */
+  cancelled: boolean
+  /**
+   * Whether a later sign-in took this one's place.
+   *
+   * A superseded flow reports nothing when it ends: the screen is already
+   * showing the newer code, and "The sign-in was cancelled" arriving on top
+   * of it would wipe the very code the user was about to type.
+   */
+  superseded: boolean
 }
 
 /**
@@ -588,6 +615,16 @@ export function registerIpcHandlers(context: IpcContext): void {
     context.getWindow()?.webContents.send(IPC.microsoftAuthChanged, error)
   }
 
+  /**
+   * The sign-in in progress, if there is one.
+   *
+   * Held in the closure rather than at module scope: `registerIpcHandlers`
+   * is called exactly once in a real process, so the two are equivalent
+   * there, and a closure cannot leak one test's half-finished flow into the
+   * next.
+   */
+  let signInFlow: SignInFlow | undefined
+
   ipcMain.handle(IPC.microsoftAuthState, () => {
     const session = context.microsoft?.session
     if (session === undefined || !session.isSignedIn()) return { signedIn: false }
@@ -602,11 +639,29 @@ export function registerIpcHandlers(context: IpcContext): void {
    * would leave the configuration screen with nothing to show for as long as
    * the user took in their browser — which is exactly when they need to see
    * the code.
+   *
+   * A second attempt replaces the first rather than racing it. Closing the
+   * dialog clears the code from the screen but not the poll from here, so
+   * reopening it and clicking Sign in is an ordinary thing to do — and it
+   * used to start a second device code and a second poll loop, each of
+   * which triggered a full five-store rescan when it succeeded. Replacing
+   * is the right way round rather than answering with the old code,
+   * because it is also the only way a poll can be stopped at all: the user
+   * clicking Sign in again is what says the first attempt is over.
    */
   ipcMain.handle(IPC.microsoftSignIn, async () => {
     const microsoft = context.microsoft
     if (microsoft === undefined) {
       return { ok: false, error: t().stores.microsoft.windowsOnly }
+    }
+
+    if (signInFlow !== undefined) {
+      signInFlow.cancelled = true
+      signInFlow.superseded = true
+      // Cleared now rather than when the new flow is stored: requesting the
+      // device code below is an await, and the old poll must not be able to
+      // see itself as current in the meantime.
+      signInFlow = undefined
     }
 
     let code: DeviceCode
@@ -616,9 +671,17 @@ export function registerIpcHandlers(context: IpcContext): void {
       return { ok: false, error: error instanceof Error ? error.message : String(error) }
     }
 
+    const flow: SignInFlow = { cancelled: false, superseded: false }
+    signInFlow = flow
+
     void microsoft
-      .pollForTokens(code)
+      .pollForTokens(code, () => flow.cancelled)
       .then(async (tokens) => {
+        // The poll can only notice a cancellation between requests, so it
+        // can still come back with tokens for a flow that has since been
+        // signed out or replaced. Connecting an account on the strength of
+        // that would undo whatever cancelled it.
+        if (flow.cancelled) return
         microsoft.session.signIn(tokens)
         notifyAuthChanged()
         // At once, not at the next refresh: the owned library only becomes
@@ -641,7 +704,14 @@ export function registerIpcHandlers(context: IpcContext): void {
       })
       .catch((error: unknown) => {
         console.error('Microsoft sign-in failed:', error)
+        // A flow that was replaced says nothing: the screen is already
+        // showing the newer code, and its own cancellation arriving as an
+        // error would clear the code the user is halfway through typing.
+        if (flow.superseded) return
         notifyAuthChanged(error instanceof Error ? error.message : String(error))
+      })
+      .finally(() => {
+        if (signInFlow === flow) signInFlow = undefined
       })
 
     return { ok: true, userCode: code.userCode, verificationUri: code.verificationUri }
@@ -652,8 +722,14 @@ export function registerIpcHandlers(context: IpcContext): void {
    *
    * The rescan is the point: without it the owned-but-not-installed games
    * would sit in the library as rows nothing can account for.
+   *
+   * A sign-in still polling is cancelled as well, and told so — it is not
+   * superseded by anything, so its own reason reaches the screen. Left
+   * running it would connect an account moments after the user disconnected
+   * one, which reads as the button having done nothing.
    */
   ipcMain.handle(IPC.microsoftSignOut, async () => {
+    if (signInFlow !== undefined) signInFlow.cancelled = true
     context.microsoft?.session.signOut()
     notifyAuthChanged()
     await context.scan.track(() =>

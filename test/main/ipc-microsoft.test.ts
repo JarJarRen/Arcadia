@@ -30,6 +30,17 @@ const CODE = {
   intervalSeconds: 5
 }
 
+/**
+ * Lets every pending continuation run.
+ *
+ * A real timer rather than a microtask flush: the completion path awaits a
+ * rescan, so the assertions after it need more than one turn of the queue,
+ * and asserting on "nothing happened" needs the queue to have emptied
+ * rather than merely advanced.
+ */
+const settle = async (): Promise<void> =>
+  await new Promise((done) => setTimeout(done, 20))
+
 describe('IPC Microsoft sign-in', () => {
   let harness: Harness
   let signedIn: boolean
@@ -183,6 +194,108 @@ describe('IPC Microsoft sign-in', () => {
 
     expect(await invoke(IPC.microsoftAuthState)).toEqual({ signedIn: false })
     expect(harness.sent).toContain(IPC.microsoftAuthChanged)
+  })
+
+  /**
+   * Closing the configuration dialog clears the code from the screen but
+   * not the poll from this process, so reopening it and clicking Sign in is
+   * an ordinary thing to do. It used to start a second device code and a
+   * second poll loop alongside the first, each triggering a full five-store
+   * rescan when it succeeded — and `cancelled` was declared, checked inside
+   * pollForTokens, and never supplied by anything, so neither loop could be
+   * stopped.
+   */
+  it('cancels the poll already running rather than racing a second one against it', async () => {
+    const cancellations: Array<() => boolean> = []
+    build({
+      pollForTokens: async (_code: unknown, cancelled: () => boolean) => {
+        cancellations.push(cancelled)
+        // Never settles: a real poll is still waiting on the browser.
+        return new Promise<never>(() => undefined)
+      }
+    })
+
+    await invoke(IPC.microsoftSignIn)
+    expect(cancellations[0]?.()).toBe(false)
+
+    await invoke(IPC.microsoftSignIn)
+
+    expect(cancellations).toHaveLength(2)
+    // The first poll is told to stop; the second one carries on.
+    expect(cancellations[0]?.()).toBe(true)
+    expect(cancellations[1]?.()).toBe(false)
+  })
+
+  it('says nothing to the screen when the flow it cancelled ends', async () => {
+    // The newer code is already on screen. "The sign-in was cancelled"
+    // arriving on top of it would clear the very code being typed.
+    let endFirst: ((reason: Error) => void) | undefined
+    build({
+      pollForTokens: async (_code: unknown, cancelled: () => boolean) =>
+        await new Promise<never>((_resolve, reject) => {
+          if (cancelled()) return
+          endFirst ??= reject
+        })
+    })
+
+    await invoke(IPC.microsoftSignIn)
+    await invoke(IPC.microsoftSignIn)
+    const before = harness.sentWithArgs.filter((e) => e.channel === IPC.microsoftAuthChanged).length
+
+    endFirst?.(new Error('The sign-in was cancelled.'))
+    await settle()
+
+    expect(
+      harness.sentWithArgs.filter((e) => e.channel === IPC.microsoftAuthChanged)
+    ).toHaveLength(before)
+  })
+
+  it('does not connect the account when the poll comes back after a sign-out', async () => {
+    // The poll only notices a cancellation between requests, so it can
+    // still answer with tokens for a flow that has been signed out from
+    // under it. Connecting on the strength of that would undo the sign-out
+    // moments after the user asked for it.
+    let finishPoll: ((tokens: { accessToken: string; refreshToken: string }) => void) | undefined
+    const poll = new Promise<{ accessToken: string; refreshToken: string }>((resolve) => {
+      finishPoll = resolve
+    })
+    build({ pollForTokens: async () => await poll })
+
+    await invoke(IPC.microsoftSignIn)
+    await invoke(IPC.microsoftSignOut)
+
+    finishPoll?.({ accessToken: 'a', refreshToken: 'r' })
+    await settle()
+
+    expect(signIn).not.toHaveBeenCalled()
+    expect(await invoke(IPC.microsoftAuthState)).toEqual({ signedIn: false })
+  })
+
+  it('tells the screen why, when a sign-out ends a poll that nothing replaced', async () => {
+    // Not superseded by a newer attempt, so its own reason is the truthful
+    // thing to show — the string t().stores.microsoft.signInCancelled was
+    // unreachable before anything supplied `cancelled` at all.
+    build({
+      pollForTokens: async (_code: unknown, cancelled: () => boolean) => {
+        for (;;) {
+          if (cancelled()) throw new Error('The sign-in was cancelled.')
+          await new Promise((done) => setTimeout(done, 1))
+        }
+      }
+    })
+
+    await invoke(IPC.microsoftSignIn)
+    await invoke(IPC.microsoftSignOut)
+
+    await vi.waitFor(() =>
+      expect(
+        harness.sentWithArgs.some(
+          (event) =>
+            event.channel === IPC.microsoftAuthChanged &&
+            event.args[0] === 'The sign-in was cancelled.'
+        )
+      ).toBe(true)
+    )
   })
 
   it('answers signed-out where no Microsoft session was built at all', async () => {
