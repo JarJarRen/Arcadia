@@ -56,9 +56,8 @@ describe('readOwnedProductIds', () => {
     expect(await readOwnedProductIds(TOKEN, { http })).toEqual(['GAME'])
   })
 
-  it('follows the continuation token to the end', async () => {
-    const http = vi
-      .fn()
+  it('forwards the continuation token to the next request', async () => {
+    const http = vi.fn<HttpFn>()
       .mockResolvedValueOnce(
         respond(200, { Items: [{ productId: 'A', productKind: 'Game' }], continuationToken: 'next' })
       )
@@ -66,6 +65,14 @@ describe('readOwnedProductIds', () => {
 
     expect(await readOwnedProductIds(TOKEN, { http })).toEqual(['A', 'B'])
     expect(http).toHaveBeenCalledTimes(2)
+
+    // First request must not include a continuation token
+    const firstBody = JSON.parse(http.mock.calls[0]?.[1]?.body as string)
+    expect(firstBody).not.toHaveProperty('continuationToken')
+
+    // Second request must include the continuation token from the first response
+    const secondBody = JSON.parse(http.mock.calls[1]?.[1]?.body as string)
+    expect(secondBody.continuationToken).toBe('next')
   })
 
   it('sends the marketplace token', async () => {
