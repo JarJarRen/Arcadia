@@ -79,6 +79,54 @@ describe('MicrosoftAdapter scanOwned', () => {
     expect(games.map((game) => game.storeGameId)).toEqual([FORZA])
   })
 
+  /**
+   * "The title history contributes `lastPlayed` and a name for anything the
+   * catalogue could not resolve" — the design says so, and the code mapped
+   * the catalogue alone. The Display Catalog is asked in the interface
+   * language, and a product with no localisation for it answers with an
+   * empty `LocalizedProperties`; that owned game was dropped outright even
+   * where the title history had a perfectly good name for its package.
+   */
+  it('names an owned game from the title history when the catalogue could not', async () => {
+    const games = await signedIn({
+      resolveProducts: async () => [{ productId: 'GAME1', name: '', packageFamilyName: FORZA }]
+    }).scanOwned()
+
+    expect(games).toEqual([
+      {
+        storeGameId: FORZA,
+        name: 'Forza Horizon',
+        installed: false,
+        lastPlayed: 1_700_000_000
+      }
+    ])
+  })
+
+  it('drops an owned game neither source can name', async () => {
+    // A name is the one field a library row cannot do without.
+    const games = await signedIn({
+      resolveProducts: async () => [{ productId: 'GAME1', name: '', packageFamilyName: FORZA }],
+      readPlayedTitles: async () => []
+    }).scanOwned()
+
+    expect(games).toEqual([])
+  })
+
+  it('still takes ownership from the entitlement service alone', async () => {
+    // The fallback is about naming, not about listing. A played title the
+    // account does not own is a Game Pass title and must not arrive through
+    // this door.
+    const games = await signedIn({
+      resolveProducts: async () => [{ productId: 'GAME1', name: '', packageFamilyName: FORZA }],
+      readPlayedTitles: async () => [
+        { packageFamilyName: FORZA, name: 'Forza Horizon' },
+        { packageFamilyName: ROBLOX, name: 'Roblox' }
+      ]
+    }).scanOwned()
+
+    expect(games.map((game) => game.storeGameId)).toEqual([FORZA])
+  })
+
   it('lists nothing while signed out, without asking anything', async () => {
     const readOwnedProductIds = vi.fn()
     const games = await signedIn({

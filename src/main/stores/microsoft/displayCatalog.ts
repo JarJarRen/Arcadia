@@ -15,6 +15,15 @@ const BATCH_SIZE = 20
 
 export interface CatalogEntry {
   productId: string
+  /**
+   * Empty where the catalogue named the product in no language Arcadia
+   * asked for.
+   *
+   * Kept rather than dropped, because the title history can still name it:
+   * the design says the history contributes "a name for anything the
+   * catalogue could not resolve", and the package family name below is the
+   * key that joins the two. `scanOwned` drops what neither source names.
+   */
   name: string
   /** Games without one are console titles and never reach this list. */
   packageFamilyName: string
@@ -105,11 +114,18 @@ async function fetchProducts(productIds: string[], deps: Deps): Promise<CatalogE
       const name = product.LocalizedProperties?.[0]?.ProductTitle
       const packageFamilyName = product.Properties?.PackageFamilyName
       if (typeof productId !== 'string' || productId === '') continue
-      if (typeof name !== 'string' || name === '') continue
       // No package: a console title, which cannot run on this machine.
       if (typeof packageFamilyName !== 'string' || packageFamilyName === '') continue
 
-      entries.push({ productId, name, packageFamilyName })
+      // A missing title is not a reason to drop the product. `languages` is
+      // the interface language, and a product with no localisation for it
+      // comes back with an empty LocalizedProperties — dropping it lost an
+      // owned game outright, where the title history can still name it.
+      entries.push({
+        productId,
+        name: typeof name === 'string' ? name : '',
+        packageFamilyName
+      })
     }
   }
   return entries

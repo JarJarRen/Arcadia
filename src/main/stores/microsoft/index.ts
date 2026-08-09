@@ -198,7 +198,8 @@ export class MicrosoftAdapter implements StoreAdapter {
    * service decides what is owned — a title in the history that it does not
    * list is a Game Pass title, playable for now but not owned, and it
    * appears through `scanInstalled` for as long as it is on disk. The
-   * catalogue supplies the names, the history the last-played dates.
+   * catalogue supplies the names, the history the last-played dates and a
+   * name for anything the catalogue could not put one to.
    *
    * Signed out this is empty rather than an error: not being signed in is a
    * state, not a failure. Everything else throws, which `sync.ts` records as
@@ -217,24 +218,33 @@ export class MicrosoftAdapter implements StoreAdapter {
     const catalog = await this.resolve(productIds)
     this.remember(catalog)
 
-    const lastPlayed = new Map(
-      (await this.readPlayed(tokens.xboxLive)).map((title) => [
-        title.packageFamilyName,
-        title.lastPlayed
-      ])
+    const history = new Map(
+      (await this.readPlayed(tokens.xboxLive)).map((title) => [title.packageFamilyName, title])
     )
 
-    return catalog.map((entry) => {
-      const played = lastPlayed.get(entry.packageFamilyName)
-      return {
+    const games: RawGame[] = []
+    for (const entry of catalog) {
+      const played = history.get(entry.packageFamilyName)
+      // The history names what the catalogue could not: a product with no
+      // localisation for the interface language comes back titleless, and
+      // dropping it would lose an owned game the user can see in the Xbox
+      // app. Iterating the catalogue and not the history is what keeps
+      // ownership a matter for the entitlement service alone — a played
+      // title nobody owns is a Game Pass title and is listed only while it
+      // is installed.
+      const name = entry.name !== '' ? entry.name : (played?.name ?? '')
+      if (name === '') continue
+
+      games.push({
         storeGameId: entry.packageFamilyName,
-        name: entry.name,
+        name,
         installed: false,
         // Xbox exposes achievements and a date, never minutes. A fabricated
         // number would be worse than an empty field.
-        ...(played === undefined ? {} : { lastPlayed: played })
-      }
-    })
+        ...(played?.lastPlayed === undefined ? {} : { lastPlayed: played.lastPlayed })
+      })
+    }
+    return games
   }
 
   /**

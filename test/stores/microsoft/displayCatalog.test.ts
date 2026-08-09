@@ -162,7 +162,16 @@ describe('resolveProducts', () => {
     expect(await resolveProducts(['GAME1'], { http })).toEqual([])
   })
 
-  it('drops a game with no title', async () => {
+  /**
+   * `languages` is the interface language, and a product with no
+   * localisation for it answers with an empty `LocalizedProperties`.
+   * Dropping it lost an owned game outright — while the title history,
+   * which joins on this very package family name, can still name it. The
+   * design puts it plainly: the history contributes "a name for anything
+   * the catalogue could not resolve". `scanOwned` drops what neither
+   * source names.
+   */
+  it('keeps a game with no title, nameless, so the title history can name it', async () => {
     const http = vi.fn(async () =>
       respond(200, {
         Products: [
@@ -173,6 +182,18 @@ describe('resolveProducts', () => {
             Properties: { PackageFamilyName: 'Some.Package_8wekyb3d8bbwe' }
           }
         ]
+      })
+    )
+
+    expect(await resolveProducts(['GAME1'], { http })).toEqual([
+      { productId: 'GAME1', name: '', packageFamilyName: 'Some.Package_8wekyb3d8bbwe' }
+    ])
+  })
+
+  it('still drops a nameless product with no package, console-only as ever', async () => {
+    const http = vi.fn(async () =>
+      respond(200, {
+        Products: [{ ProductId: 'GAME1', ProductKind: 'Game', LocalizedProperties: [] }]
       })
     )
 
