@@ -263,6 +263,14 @@ export interface Strings {
       ownedFromLocalCache: string
       invalidGameId: (id: string) => string
     }
+    microsoft: {
+      windowsOnly: string
+      noPlaytime: string
+      noInstallSize: string
+      signedOutOnlyXboxApp: string
+      notInstalledCannotLaunch: (name: string) => string
+      noProductId: (name: string) => string
+    }
   }
 }
 
@@ -533,6 +541,21 @@ const en: Strings = {
         'local caches and reflect the last time it signed in; a game it does ' +
         'not name is left out.',
       invalidGameId: (id) => `Invalid Ubisoft game ID: ${id}`
+    },
+    microsoft: {
+      windowsOnly: 'The Microsoft Store only exists on Windows.',
+      noPlaytime: 'Xbox reports no playtime, only when a game was last played.',
+      noInstallSize: 'The install size of a Store game is not reported.',
+      signedOutOnlyXboxApp:
+        'Without a Microsoft account only games installed through the Xbox ' +
+        'app are shown — a local scan cannot otherwise tell a game from an ' +
+        'application.',
+      notInstalledCannotLaunch: (name) =>
+        `${name} is not installed, so there is nothing to start.`,
+      noProductId: (name) =>
+        `Arcadia does not know the Store product for ${name}, so it cannot ` +
+        `open its page. Sign in with a Microsoft account, or install it from ` +
+        `the Xbox app.`
     }
   }
 }
@@ -819,6 +842,21 @@ const de: Strings = {
         'Zwischenspeichern von Ubisoft Connect und entsprechen dem Stand der ' +
         'letzten Anmeldung; ein Spiel ohne Namen bleibt außen vor.',
       invalidGameId: (id) => `Unzulässige Ubisoft-Spiel-ID: ${id}`
+    },
+    microsoft: {
+      windowsOnly: 'Den Microsoft Store gibt es nur unter Windows.',
+      noPlaytime: 'Xbox meldet keine Spielzeit, nur wann zuletzt gespielt wurde.',
+      noInstallSize: 'Die Installationsgröße eines Store-Spiels wird nicht gemeldet.',
+      signedOutOnlyXboxApp:
+        'Ohne Microsoft-Konto werden nur Spiele angezeigt, die über die ' +
+        'Xbox-App installiert wurden — lokal lässt sich ein Spiel sonst ' +
+        'nicht von einer Anwendung unterscheiden.',
+      notInstalledCannotLaunch: (name) =>
+        `${name} ist nicht installiert, es gibt also nichts zu starten.`,
+      noProductId: (name) =>
+        `Arcadia kennt das Store-Produkt zu ${name} nicht und kann die Seite ` +
+        `daher nicht öffnen. Melde dich mit einem Microsoft-Konto an oder ` +
+        `installiere es über die Xbox-App.`
     }
   }
 }

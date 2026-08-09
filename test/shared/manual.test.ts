@@ -63,6 +63,10 @@ describe('storeGameIdLooksValid', () => {
     expect(storeGameIdLooksValid('epic', '4256d7c7170f4326a1a861d0b30f1af7')).toBe(true)
   })
 
+  it('accepts a Microsoft package family name', () => {
+    expect(storeGameIdLooksValid('microsoft', 'Microsoft.Forza_8wekyb3d8bbwe')).toBe(true)
+  })
+
   it('rejects what must never reach a launch URI', () => {
     // The identifier ends up in a URI handed to the operating system's
     // shell. This is the same boundary the store adapters enforce, applied
@@ -72,6 +76,9 @@ describe('storeGameIdLooksValid', () => {
     }
     for (const bad of ['a b', 'a/b', 'a?b', '']) {
       expect(storeGameIdLooksValid('epic', bad), bad).toBe(false)
+    }
+    for (const bad of ['a b', 'a;calc', 'noSeparator', '', '_8wekyb3d8bbwe']) {
+      expect(storeGameIdLooksValid('microsoft', bad), bad).toBe(false)
     }
   })
 })

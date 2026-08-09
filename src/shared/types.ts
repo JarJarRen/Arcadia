@@ -1,4 +1,4 @@
-export const STORE_IDS = ['steam', 'epic', 'ea', 'ubisoft'] as const
+export const STORE_IDS = ['steam', 'epic', 'ea', 'ubisoft', 'microsoft'] as const
 export type StoreId = (typeof STORE_IDS)[number]
 
 /** What an adapter reads raw from a store. */

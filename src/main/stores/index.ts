@@ -3,6 +3,7 @@ import { SteamAdapter, type SteamAdapterConfig } from './steam'
 import { EpicAdapter } from './epic'
 import { EaAdapter, type EaAdapterConfig } from './ea'
 import { UbisoftAdapter } from './ubisoft'
+import { MicrosoftAdapter } from './microsoft'
 
 export interface AdapterConfig {
   steam: SteamAdapterConfig
@@ -23,8 +24,9 @@ export interface AdapterConfig {
  * Steam is the only one that needs a credential. Epic reads its manifests and
  * catalogue cache, Ubisoft the registry, and EA reads the registry plus its
  * own encrypted entitlement store — EA then asks a public catalogue service
- * for the names, which needs a connection but no sign-in. Nothing here holds
- * a store account.
+ * for the names, which needs a connection but no sign-in. The Microsoft
+ * adapter reads the registry too, and likewise needs no credential for its
+ * local half. Nothing here holds a store account.
  */
 export function createAdapters(config: AdapterConfig): StoreAdapter[] {
   return [
@@ -34,7 +36,8 @@ export function createAdapters(config: AdapterConfig): StoreAdapter[] {
     ),
     new EpicAdapter(),
     new EaAdapter(config.ea ?? {}),
-    new UbisoftAdapter()
+    new UbisoftAdapter(),
+    new MicrosoftAdapter()
   ]
 }
 
