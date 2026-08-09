@@ -6,12 +6,22 @@ export type { HttpFn }
 /**
  * Arcadia's own public client.
  *
- * Published on purpose: a public client has no secret by definition, and
- * the device-code flow is specified for exactly this case. The alternative —
- * asking every user to register an Azure application — is far more work than
- * copying a Steam key, and is where most people would stop.
+ * Committed on purpose: a public client has no secret by definition, and the
+ * device-code flow is specified for exactly this case. The value identifies
+ * the *application* to Microsoft, never a user, and grants whoever reads it
+ * no access to anything.
+ *
+ * It is registered once, by Arcadia, rather than by each person who runs it.
+ * The alternative — every user creating their own Azure application — is far
+ * more work than copying a Steam key and is where most people would stop.
+ * Each user still signs in with their own Microsoft account against this one
+ * registration.
+ *
+ * The registration is a public client with personal Microsoft accounts only,
+ * matching the `/consumers/` endpoints below, and with public client flows
+ * allowed — the device-code grant is refused without that.
  */
-export const MICROSOFT_CLIENT_ID = '00000000-0000-0000-0000-000000000000'
+export const MICROSOFT_CLIENT_ID = '43221990-7644-4115-83ce-c7d062178f4c'
 
 const DEVICE_CODE_ENDPOINT =
   'https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode'
