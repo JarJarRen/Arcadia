@@ -35,6 +35,18 @@ export function StoreSelection({ enabled, onChange }: Props): ReactElement {
   const [encrypted, setEncrypted] = useState(true)
   const [pending, setPending] = useState<{ userCode: string; verificationUri: string } | undefined>()
   const [authError, setAuthError] = useState<string | undefined>()
+  /**
+   * True for the round trip to Microsoft's device-code endpoint, before
+   * `pending` has anything to show.
+   *
+   * The button is only replaced by the code once `pending` is set, and that
+   * request can take a moment — long enough that nothing on screen changes
+   * in response to the first click. Without this, a second click before the
+   * response lands starts a second flow, which the main process now
+   * supersedes correctly, but which a person watching the screen has no way
+   * to know happened: the first click looks like it did nothing.
+   */
+  const [signingIn, setSigningIn] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -131,8 +143,10 @@ export function StoreSelection({ enabled, onChange }: Props): ReactElement {
                 <button
                   type="button"
                   className="button button--link"
+                  disabled={signingIn}
                   onClick={() => {
                     setAuthError(undefined)
+                    setSigningIn(true)
                     window.arcadia
                       .signInToMicrosoft()
                       .then((started) => {
@@ -148,9 +162,10 @@ export function StoreSelection({ enabled, onChange }: Props): ReactElement {
                       .catch((error: unknown) =>
                         setAuthError(error instanceof Error ? error.message : String(error))
                       )
+                      .finally(() => setSigningIn(false))
                   }}
                 >
-                  {t().setup.microsoftSignIn}
+                  {signingIn ? t().setup.microsoftSigningIn : t().setup.microsoftSignIn}
                 </button>
               ) : (
                 <>

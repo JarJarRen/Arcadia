@@ -100,6 +100,44 @@ describe('StoreSelection', () => {
     expect(await screen.findByRole('button', { name: /connect a microsoft account/i })).toBeDefined()
   })
 
+  /**
+   * The button used to stay clickable for the whole round trip to
+   * Microsoft's device-code endpoint, with no feedback at all — which is
+   * exactly what invites a second click. That second click used to start a
+   * second flow racing the first; main now supersedes correctly, but the
+   * button itself still needs to say something happened, and stop taking
+   * further clicks until it does.
+   *
+   * `signInToMicrosoft` is held open on a hand-resolved promise so the
+   * pending state can be observed before the request settles.
+   */
+  it('disables the sign-in button and shows feedback while the request is in flight', async () => {
+    stubApi()
+    let resolveSignIn:
+      | ((result: { ok: boolean; userCode?: string; verificationUri?: string; error?: string }) => void)
+      | undefined
+    ;(window.arcadia as unknown as Record<string, unknown>).signInToMicrosoft = async () =>
+      await new Promise((resolve) => {
+        resolveSignIn = resolve
+      })
+    render(<StoreSelection enabled={[...STORE_IDS]} onChange={vi.fn()} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /connect a microsoft account/i }))
+
+    const pendingButton = (await screen.findByRole('button', {
+      name: /connecting/i
+    })) as HTMLButtonElement
+    expect(pendingButton.disabled).toBe(true)
+
+    resolveSignIn?.({
+      ok: true,
+      userCode: 'ABCD-EFGH',
+      verificationUri: 'https://microsoft.com/link'
+    })
+
+    expect(await screen.findByText(/ABCD-EFGH/)).toBeDefined()
+  })
+
   it('shows the code and the link once the sign-in has started', async () => {
     stubApi()
     ;(window.arcadia as unknown as Record<string, unknown>).signInToMicrosoft = async () => ({

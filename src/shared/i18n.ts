@@ -105,6 +105,8 @@ export interface Strings {
     storeDetected: string
     storeNotFound: string
     microsoftSignIn: string
+    /** Shown on the sign-in button itself while the device code is being requested, so a second click cannot start a second flow before the first has anything to show for it. */
+    microsoftSigningIn: string
     microsoftSignOut: string
     microsoftSignedInAs: (gamertag: string) => string
     microsoftCodeHint: (code: string) => string
@@ -380,6 +382,7 @@ const en: Strings = {
     storeDetected: 'found on this machine',
     storeNotFound: 'not found on this machine',
     microsoftSignIn: 'Connect a Microsoft account',
+    microsoftSigningIn: 'Connecting…',
     microsoftSignOut: 'Disconnect',
     microsoftSignedInAs: (gamertag) => `Signed in as ${gamertag}`,
     microsoftCodeHint: (code) => `Enter the code ${code} in your browser:`,
@@ -704,6 +707,7 @@ const de: Strings = {
     storeDetected: 'auf diesem Rechner gefunden',
     storeNotFound: 'auf diesem Rechner nicht gefunden',
     microsoftSignIn: 'Microsoft-Konto verbinden',
+    microsoftSigningIn: 'Verbindung wird hergestellt…',
     microsoftSignOut: 'Trennen',
     microsoftSignedInAs: (gamertag) => `Angemeldet als ${gamertag}`,
     microsoftCodeHint: (code) => `Gib den Code ${code} im Browser ein:`,
