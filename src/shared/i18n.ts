@@ -274,6 +274,9 @@ export interface Strings {
       signInExpired: string
       signInDeclined: string
       signInCancelled: string
+      xboxAuthFailed: (reason: string) => string
+      noXboxProfile: string
+      childAccount: string
     }
   }
 }
@@ -563,7 +566,14 @@ const en: Strings = {
       signInFailed: (reason) => `The Microsoft sign-in failed: ${reason}`,
       signInExpired: 'The sign-in code expired before it was used. Please try again.',
       signInDeclined: 'The sign-in was declined.',
-      signInCancelled: 'The sign-in was cancelled.'
+      signInCancelled: 'The sign-in was cancelled.',
+      xboxAuthFailed: (reason) => `Xbox Live refused the sign-in: ${reason}`,
+      noXboxProfile:
+        'This Microsoft account has no Xbox profile. Sign in once at xbox.com ' +
+        'to create one, then try again.',
+      childAccount:
+        'This account is a child account and has to be added to a family ' +
+        'before it can use Xbox Live.'
     }
   }
 }
@@ -868,7 +878,14 @@ const de: Strings = {
       signInFailed: (reason) => `Die Microsoft-Anmeldung ist fehlgeschlagen: ${reason}`,
       signInExpired: 'Der Anmeldecode ist abgelaufen, bevor er benutzt wurde. Bitte erneut versuchen.',
       signInDeclined: 'Die Anmeldung wurde abgelehnt.',
-      signInCancelled: 'Die Anmeldung wurde abgebrochen.'
+      signInCancelled: 'Die Anmeldung wurde abgebrochen.',
+      xboxAuthFailed: (reason) => `Xbox Live hat die Anmeldung abgelehnt: ${reason}`,
+      noXboxProfile:
+        'Dieses Microsoft-Konto hat kein Xbox-Profil. Melde dich einmal auf ' +
+        'xbox.com an, um eines anzulegen, und versuche es dann erneut.',
+      childAccount:
+        'Dieses Konto ist ein Kinderkonto und muss erst einer Familie ' +
+        'hinzugefügt werden, bevor es Xbox Live nutzen kann.'
     }
   }
 }
