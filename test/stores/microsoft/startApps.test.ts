@@ -59,15 +59,28 @@ describe('readStartAppIds', () => {
     expect(ids.size).toBe(0)
   })
 
-  it('uses the default exec when not provided', async () => {
-    // This test exercises the defaultExec code path. On systems with PowerShell
-    // and Get-StartApps working, it will call the real command and cover lines
-    // inside defaultExec. On systems without PowerShell, it will fail and return
-    // an empty map, but the function will still be exercised.
+  it('reads real AUMIDs through the default PowerShell runner', async () => {
+    // The only test in this file that exercises `defaultExec` rather than an
+    // injected fake — it runs the real Get-StartApps command against this
+    // machine's own Start menu. The exact entries are unverifiable (they
+    // depend on the machine this runs on), so this pins the shape instead:
+    // every value must be its own key with `!` appended, since the key is by
+    // construction the AUMID up to the separator. A wrong parse — splitting
+    // on the wrong character, mapping the wrong field, swapping key and
+    // value — would break this invariant even though it kept returning a Map.
     const ids = await readStartAppIds()
 
-    expect(ids instanceof Map).toBe(true)
-  })
+    for (const [family, aumid] of ids) {
+      expect(aumid.startsWith(`${family}!`)).toBe(true)
+    }
+
+    // On Windows, Get-StartApps genuinely returns Start-menu entries, so an
+    // empty result there would itself be a sign something broke. Off Windows
+    // there is no PowerShell and an empty map is the correct answer.
+    if (process.platform === 'win32') {
+      expect(ids.size).toBeGreaterThan(0)
+    }
+  }, 15000)
 
   it('skips entries that are not objects', async () => {
     const output = JSON.stringify([
