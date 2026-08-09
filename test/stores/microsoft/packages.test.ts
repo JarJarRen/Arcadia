@@ -36,6 +36,14 @@ describe('familyNameFromFullName', () => {
   it('rejects a name with no publisher suffix', () => {
     expect(familyNameFromFullName('NotAPackage')).toBeUndefined()
   })
+
+  it('rejects a name with a leading underscore', () => {
+    expect(familyNameFromFullName('_something_8wekyb3d8bbwe')).toBeUndefined()
+  })
+
+  it('rejects a name with a trailing underscore', () => {
+    expect(familyNameFromFullName('something_')).toBeUndefined()
+  })
 })
 
 describe('usableDisplayName', () => {
@@ -93,5 +101,54 @@ describe('readInstalledPackages', () => {
     })
 
     expect(packages.size).toBe(0)
+  })
+
+  it('skips entries with a malformed PackageID while including valid entries', async () => {
+    const fixture = String.raw`
+HKEY_CURRENT_USER\Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppModel\Repository\Packages\ROBLOXCORPORATION.ROBLOX_2.699.877.0_x64__55nm5eh3cm0pr
+    DisplayName    REG_SZ    Roblox
+    PackageID    REG_SZ    ROBLOXCORPORATION.ROBLOX_2.699.877.0_x64__55nm5eh3cm0pr
+    PackageRootFolder    REG_SZ    C:\Program Files\WindowsApps\ROBLOXCORPORATION.ROBLOX_2.699.877.0_x64__55nm5eh3cm0pr
+
+HKEY_CURRENT_USER\Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppModel\Repository\Packages\MalformedPackage
+    DisplayName    REG_SZ    Bad Package
+    PackageID    REG_SZ    MalformedPackage
+    PackageRootFolder    REG_SZ    C:\Program Files\WindowsApps\MalformedPackage
+
+HKEY_CURRENT_USER\Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppModel\Repository\Packages\Microsoft.MSPaint_6.2410.13017.0_x64__8wekyb3d8bbwe
+    DisplayName    REG_SZ    Paint
+    PackageID    REG_SZ    Microsoft.MSPaint_6.2410.13017.0_x64__8wekyb3d8bbwe
+    PackageRootFolder    REG_SZ    C:\Program Files\WindowsApps\Microsoft.MSPaint_6.2410.13017.0_x64__8wekyb3d8bbwe
+`
+    const packages = await readInstalledPackages(async () => fixture)
+
+    // The malformed package should be skipped, but valid packages should be present
+    expect([...packages.keys()].sort()).toEqual([
+      'Microsoft.MSPaint_8wekyb3d8bbwe',
+      'ROBLOXCORPORATION.ROBLOX_55nm5eh3cm0pr'
+    ])
+    expect(packages.has('MalformedPackage')).toBe(false)
+  })
+
+  it('includes an entry without PackageRootFolder as having no installPath', async () => {
+    const fixture = String.raw`
+HKEY_CURRENT_USER\Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppModel\Repository\Packages\Microsoft.NoPath_6.2410.13017.0_x64__8wekyb3d8bbwe
+    DisplayName    REG_SZ    App Without Path
+    PackageID    REG_SZ    Microsoft.NoPath_6.2410.13017.0_x64__8wekyb3d8bbwe
+
+HKEY_CURRENT_USER\Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppModel\Repository\Packages\Microsoft.WithPath_6.2410.13017.0_x64__8wekyb3d8bbwe
+    DisplayName    REG_SZ    App With Path
+    PackageID    REG_SZ    Microsoft.WithPath_6.2410.13017.0_x64__8wekyb3d8bbwe
+    PackageRootFolder    REG_SZ    C:\Program Files\WindowsApps\Microsoft.WithPath_6.2410.13017.0_x64__8wekyb3d8bbwe
+`
+    const packages = await readInstalledPackages(async () => fixture)
+
+    const noPath = packages.get('Microsoft.NoPath_8wekyb3d8bbwe')
+    expect(noPath?.packageFamilyName).toBe('Microsoft.NoPath_8wekyb3d8bbwe')
+    expect(noPath?.displayName).toBe('App Without Path')
+    expect(noPath?.installPath).toBeUndefined()
+
+    const withPath = packages.get('Microsoft.WithPath_8wekyb3d8bbwe')
+    expect(withPath?.installPath).toBe(String.raw`C:\Program Files\WindowsApps\Microsoft.WithPath_6.2410.13017.0_x64__8wekyb3d8bbwe`)
   })
 })
