@@ -97,11 +97,27 @@ export class MicrosoftAdapter implements StoreAdapter {
    * Fetched by both scan methods. Two requests per scan rather than one is
    * the price of not holding a cache with a lifetime to get wrong — and
    * `scanOwned` is only reached at all when somebody is signed in.
+   *
+   * Every failure answers with an empty list rather than throwing. The
+   * title history *enhances* the local scan — it names which other packages
+   * are games — but it is not a precondition for it, and `scanOne` awaits
+   * `scanInstalled()` outside any try: a throw here escaped past
+   * `repo.upsertScan`, so a refused refresh token or an unreachable Xbox
+   * Live cost the user their installed games as well. The design's error
+   * table says the opposite in two rows.
    */
   private async played(): Promise<PlayedTitle[]> {
-    const tokens = await this.session?.tokens()
-    if (tokens === undefined) return []
-    return this.readPlayed(tokens.xboxLive)
+    try {
+      const tokens = await this.session?.tokens()
+      if (tokens === undefined) return []
+      return await this.readPlayed(tokens.xboxLive)
+    } catch (error) {
+      // Logged rather than swallowed silently: `scanOwned` reports the same
+      // failure to the interface as a partial one, so nothing is hidden,
+      // but a console line is what explains a suddenly shorter local list.
+      console.warn('[microsoft] the title history could not be read:', error)
+      return []
+    }
   }
 
   /** Makes what the catalogue already knows available to `installUri`. */

@@ -131,6 +131,44 @@ describe('MicrosoftAdapter scanInstalled while signed in', () => {
     expect(games).toEqual([])
   })
 
+  /**
+   * The design's error table has two rows saying so: "Refresh token
+   * rejected → scan continues with the local half" and "Xbox Live
+   * unreachable → installed games are still written". `scanOne` awaits
+   * `scanInstalled()` outside any try, so a throw from the title history
+   * escaped past `repo.upsertScan` — and a signed-in user with Xbox Live
+   * down lost their installed games from the library too.
+   */
+  it('still lists the Xbox-app games when the session cannot be refreshed', async () => {
+    const games = await signedIn({
+      session: {
+        isSignedIn: () => true,
+        gamertag: () => undefined,
+        tokens: async () => {
+          throw new Error('fetch failed')
+        }
+      },
+      readXboxAppPackages: async () => [FORZA],
+      readInstalledPackages: async () =>
+        new Map([[FORZA, { packageFamilyName: FORZA, displayName: 'Forza Horizon' }]])
+    }).scanInstalled()
+
+    expect(games.map((game) => game.storeGameId)).toEqual([FORZA])
+  })
+
+  it('still lists the Xbox-app games when the title history is unreachable', async () => {
+    const games = await signedIn({
+      readXboxAppPackages: async () => [FORZA],
+      readInstalledPackages: async () =>
+        new Map([[FORZA, { packageFamilyName: FORZA, displayName: 'Forza Horizon' }]]),
+      readPlayedTitles: async () => {
+        throw new Error('HTTP 503')
+      }
+    }).scanInstalled()
+
+    expect(games.map((game) => game.storeGameId)).toEqual([FORZA])
+  })
+
   it('does not list a game twice when the Xbox app installed it as well', async () => {
     const games = await signedIn({
       readXboxAppPackages: async () => [FORZA],
