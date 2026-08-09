@@ -490,6 +490,28 @@ export function registerIpcHandlers(context: IpcContext): void {
     }
   })
 
+  /**
+   * Probes every store, for the configuration screen.
+   *
+   * Reuses what the adapters already implement for `runSync`, so the
+   * renderer needs no per-store knowledge. A probe that throws answers
+   * "unavailable" with its own message rather than rejecting the whole call
+   * — one broken adapter must not blank the list.
+   */
+  ipcMain.handle(IPC.storesAvailability, async () => {
+    const probes = await Promise.all(
+      context.adapters.map(async (adapter) => {
+        try {
+          return [adapter.id, await adapter.isAvailable()] as const
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : String(error)
+          return [adapter.id, { available: false, reason }] as const
+        }
+      })
+    )
+    return Object.fromEntries(probes)
+  })
+
   ipcMain.handle(IPC.envConfigGet, () => readEnvConfig(context.envFilePaths))
 
   /**

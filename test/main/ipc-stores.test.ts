@@ -88,4 +88,59 @@ describe('IPC enabled-store channels', () => {
     expect(harness.sent).toEqual([])
     consoleError.mockRestore()
   })
+
+  it('reports each adapter\'s availability, reason and limitations', async () => {
+    const withAdapters = makeHarness({
+      adapters: [
+        {
+          id: 'steam',
+          displayName: 'Steam',
+          isAvailable: async () => ({ available: true, limitations: ['only installed'] }),
+          scanInstalled: async () => [],
+          launchUri: () => '',
+          installUri: () => ''
+        },
+        {
+          id: 'epic',
+          displayName: 'Epic',
+          isAvailable: async () => ({ available: false, reason: 'not here' }),
+          scanInstalled: async () => [],
+          launchUri: () => '',
+          installUri: () => ''
+        }
+      ]
+    })
+    handlers.clear()
+    registerIpcHandlers(withAdapters.context)
+
+    expect(await invoke(IPC.storesAvailability)).toEqual({
+      steam: { available: true, limitations: ['only installed'] },
+      epic: { available: false, reason: 'not here' }
+    })
+  })
+
+  it('turns an adapter that throws while probing into an unavailable answer', async () => {
+    // A probe is not worth crashing the dialog over: the store simply
+    // reports itself unavailable, with the reason it threw.
+    const throwing = makeHarness({
+      adapters: [
+        {
+          id: 'ea',
+          displayName: 'EA',
+          isAvailable: async () => {
+            throw new Error('registry locked')
+          },
+          scanInstalled: async () => [],
+          launchUri: () => '',
+          installUri: () => ''
+        }
+      ]
+    })
+    handlers.clear()
+    registerIpcHandlers(throwing.context)
+
+    expect(await invoke(IPC.storesAvailability)).toEqual({
+      ea: { available: false, reason: 'registry locked' }
+    })
+  })
 })

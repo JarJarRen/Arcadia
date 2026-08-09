@@ -1,7 +1,7 @@
 import type { LibraryEntry } from './library'
 import type { SyncResult } from './sync-types'
 import type { EnvConfigSaveResult, EnvConfigState, EnvConfigValues } from './env-config'
-import type { StoreId } from './types'
+import type { AvailabilityResult, StoreId } from './types'
 
 export const IPC = {
   libraryGet: 'library:get',
@@ -31,6 +31,7 @@ export const IPC = {
   settingsSetLanguage: 'settings:set-language',
   settingsGetStores: 'settings:get-stores',
   settingsSetStores: 'settings:set-stores',
+  storesAvailability: 'stores:availability',
   envConfigGet: 'env-config:get',
   envConfigSave: 'env-config:save',
   libraryAddManual: 'library:add-manual',
@@ -124,6 +125,13 @@ export interface ArcadiaApi {
    * there is nothing cached at startup to invalidate, so no restart.
    */
   setEnabledStores(stores: StoreId[]): Promise<void>
+  /**
+   * Whether each store was found on this machine.
+   *
+   * Every adapter, not only the enabled ones: the point is to tell someone
+   * whether switching a store on would find anything.
+   */
+  getStoreAvailability(): Promise<Record<string, AvailabilityResult>>
   /**
    * The API keys as the `.env` currently holds them, plus whether the
    * configuration question has been answered.

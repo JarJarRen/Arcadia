@@ -19,6 +19,7 @@ const api: ArcadiaApi = {
   setLanguage: (language) => ipcRenderer.invoke(IPC.settingsSetLanguage, language),
   getEnabledStores: () => ipcRenderer.invoke(IPC.settingsGetStores),
   setEnabledStores: (stores) => ipcRenderer.invoke(IPC.settingsSetStores, stores),
+  getStoreAvailability: () => ipcRenderer.invoke(IPC.storesAvailability),
   getEnvConfig: () => ipcRenderer.invoke(IPC.envConfigGet),
   saveEnvConfig: (values) => ipcRenderer.invoke(IPC.envConfigSave, values),
   addManualGame: (game) => ipcRenderer.invoke(IPC.libraryAddManual, game),

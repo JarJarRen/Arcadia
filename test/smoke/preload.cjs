@@ -178,6 +178,15 @@ contextBridge.exposeInMainWorld('arcadia', {
   // chosen, which is what a first-run smoke test always is.
   getEnabledStores: async () => ['steam', 'epic', 'ea', 'ubisoft'],
   setEnabledStores: async () => undefined,
+  // Every store reports available with no limitations: the smoke test's
+  // fake bridge has no real adapters behind it, and "checking…" forever
+  // would be a false failure signal for a screen this test does not open.
+  getStoreAvailability: async () => ({
+    steam: { available: true },
+    epic: { available: true },
+    ea: { available: true },
+    ubisoft: { available: true }
+  }),
   // Sent when the install overlay is dismissed.
   cancelInstall: async () => undefined,
   // Adding does not really change the stub's list; the smoke test only

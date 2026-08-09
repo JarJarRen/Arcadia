@@ -402,6 +402,18 @@ export function App(): ReactElement {
           values={envConfig.values}
           path={envConfig.path}
           firstRun={setupIsGate}
+          enabledStores={enabledStores}
+          onEnabledStoresChange={(stores) => {
+            // Optimistic: the checkbox reacts at once and the library
+            // reloads when main sends library:changed. A failed write is
+            // logged, and the next start reads what is actually stored.
+            setEnabledStores(stores)
+            window.arcadia
+              .setEnabledStores(stores)
+              .catch((error: unknown) =>
+                console.error('Store selection could not be saved:', error)
+              )
+          }}
           onClose={() => setSetupOpen(false)}
         />
       )}

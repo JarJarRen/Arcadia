@@ -97,6 +97,11 @@ export interface Strings {
     title: string
     intro: string
     firstRunHint: string
+    storesTitle: string
+    storesHint: string
+    storeChecking: string
+    storeDetected: string
+    storeNotFound: string
     /** e.g. "Saved to C:\Users\…\.env" */
     fileHint: (path: string) => string
     steamKeyLabel: string
@@ -335,6 +340,14 @@ const en: Strings = {
     firstRunHint:
       'You will only be asked once. The gear in the toolbar reopens this at ' +
       'any time.',
+    storesTitle: 'Stores',
+    storesHint:
+      'Only the ticked stores are searched, and only they appear in the ' +
+      'store filter. Games from a store you switch off are hidden, not ' +
+      'deleted — switching it back on brings them straight back.',
+    storeChecking: 'checking…',
+    storeDetected: 'found on this machine',
+    storeNotFound: 'not found on this machine',
     fileHint: (path) => `Stored in ${path}`,
     steamKeyLabel: 'Steam Web API key',
     steamKeyHint:
@@ -605,6 +618,15 @@ const de: Strings = {
     firstRunHint:
       'Du wirst nur einmal gefragt. Das Zahnrad in der Leiste öffnet das ' +
       'hier jederzeit wieder.',
+    storesTitle: 'Stores',
+    storesHint:
+      'Nur die angehakten Stores werden durchsucht, und nur sie erscheinen ' +
+      'im Store-Filter. Spiele eines abgeschalteten Stores werden ' +
+      'ausgeblendet, nicht gelöscht — beim Wiedereinschalten sind sie ' +
+      'sofort zurück.',
+    storeChecking: 'wird geprüft …',
+    storeDetected: 'auf diesem Rechner gefunden',
+    storeNotFound: 'auf diesem Rechner nicht gefunden',
     fileHint: (path) => `Gespeichert in ${path}`,
     steamKeyLabel: 'Steam-Web-API-Schlüssel',
     steamKeyHint:
