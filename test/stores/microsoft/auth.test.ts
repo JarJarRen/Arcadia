@@ -8,6 +8,8 @@
  */
 import { describe, expect, it, vi } from 'vitest'
 import {
+  isOAuthRefusal,
+  OAuthRefusedError,
   pollForTokens,
   refreshTokens,
   requestDeviceCode,
@@ -175,10 +177,50 @@ describe('refreshTokens', () => {
     })
   })
 
-  it('reports a refresh token that is no longer accepted', async () => {
+  /**
+   * The refusal has to be recognisable, not merely reported.
+   *
+   * `session.ts` discards the stored credential for this error and for
+   * nothing else. Thrown as a plain Error it would be indistinguishable
+   * from a dropped connection, and the session would have to choose between
+   * signing everybody out on a flaky network or never signing anybody out
+   * at all.
+   */
+  it('reports a refresh token that is no longer accepted, as a refusal', async () => {
     const http = vi.fn(async () => respond(400, { error: 'invalid_grant' }))
 
-    await expect(refreshTokens('stale', { http })).rejects.toThrow(/invalid_grant/)
+    const failure = await refreshTokens('stale', { http }).catch((error: unknown) => error)
+
+    expect(isOAuthRefusal(failure)).toBe(true)
+    expect((failure as OAuthRefusedError).reason).toBe('invalid_grant')
+    expect((failure as Error).message).toMatch(/invalid_grant/)
+  })
+
+  it('reports a client the tenant no longer accepts as a refusal too', async () => {
+    const http = vi.fn(async () => respond(400, { error: 'invalid_client' }))
+
+    expect(isOAuthRefusal(await refreshTokens('any', { http }).catch((e: unknown) => e))).toBe(true)
+  })
+
+  it('does not call a service outage a refusal', async () => {
+    // A 5xx is Microsoft having a bad day, not a verdict on the token —
+    // even when the body carries a code that would be one from a 400.
+    const http = vi.fn(async () => respond(503, { error: 'invalid_grant' }))
+
+    const failure = await refreshTokens('good', { http }).catch((error: unknown) => error)
+
+    expect(isOAuthRefusal(failure)).toBe(false)
+    expect(failure).toBeInstanceOf(Error)
+  })
+
+  it('does not call an unrecognised refusal code a refusal', async () => {
+    // `interaction_required` means "ask the user again", not "the token is
+    // gone" — throwing the credential away would be an overreaction.
+    const http = vi.fn(async () => respond(400, { error: 'interaction_required' }))
+
+    expect(isOAuthRefusal(await refreshTokens('good', { http }).catch((e: unknown) => e))).toBe(
+      false
+    )
   })
 
   it('reports a missing access token rather than handing back an empty one', async () => {

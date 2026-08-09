@@ -35,6 +35,42 @@ export interface MicrosoftTokens {
   refreshToken: string
 }
 
+/**
+ * A refusal that no amount of retrying will get past.
+ *
+ * The distinction matters exactly once, and it is the difference between an
+ * inconvenience and a silent sign-out: `session.ts` discards the stored
+ * credential for this error and for nothing else. `refreshTokens` otherwise
+ * throws for every non-`ok` answer, and `defaultHttp` is bare `fetch`, which
+ * also rejects on a DNS failure, a dropped connection, a captive portal, a
+ * 429 or a 5xx. A laptop that starts Arcadia before the Wi-Fi has associated
+ * must not lose its account over it.
+ */
+export class OAuthRefusedError extends Error {
+  constructor(
+    /** The OAuth error code, e.g. `invalid_grant`. */
+    readonly reason: string,
+    message: string
+  ) {
+    super(message)
+    this.name = 'OAuthRefusedError'
+  }
+}
+
+/**
+ * The two answers that mean the credential itself is dead.
+ *
+ * `invalid_grant` is a refresh token that has been revoked, expired or
+ * already been redeemed; `invalid_client` is a client the tenant no longer
+ * accepts. Both would be answered identically for ever.
+ */
+const DEFINITIVE_REFUSALS = new Set(['invalid_grant', 'invalid_client'])
+
+/** Narrows across the module boundary without exporting the class shape. */
+export function isOAuthRefusal(error: unknown): error is OAuthRefusedError {
+  return error instanceof OAuthRefusedError
+}
+
 export interface AuthDeps {
   http?: HttpFn
   /** Injected so the polling tests do not actually wait. */
@@ -143,7 +179,16 @@ export async function refreshTokens(
   })
 
   const body = (await response.json()) as Record<string, unknown>
-  if (!response.ok) throw new Error(errorText(body, response.status))
+  if (!response.ok) {
+    const reason = typeof body.error === 'string' ? body.error : ''
+    // A 400-family answer naming one of the two dead-credential codes, and
+    // only that: a 500 saying `invalid_grant` would be the service having a
+    // bad day, not a verdict on the token.
+    if (response.status >= 400 && response.status < 500 && DEFINITIVE_REFUSALS.has(reason)) {
+      throw new OAuthRefusedError(reason, errorText(body, response.status))
+    }
+    throw new Error(errorText(body, response.status))
+  }
 
   // Microsoft rotates the refresh token, but does not always send a new one.
   // Keeping the old one is what stops a silent sign-out on the next start.

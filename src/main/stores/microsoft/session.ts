@@ -1,4 +1,8 @@
-import { refreshTokens as defaultRefreshTokens, type MicrosoftTokens } from './auth'
+import {
+  isOAuthRefusal,
+  refreshTokens as defaultRefreshTokens,
+  type MicrosoftTokens
+} from './auth'
 import {
   authenticateXboxUser as defaultAuthenticateXboxUser,
   authorizeXsts as defaultAuthorizeXsts,
@@ -123,7 +127,12 @@ export class MicrosoftSession {
     try {
       microsoft = await this.refresh(stored)
     } catch (error) {
-      this.signOut()
+      // Only a verdict on the credential itself, never a failure to reach
+      // the service. `refreshTokens` throws for every non-ok answer and the
+      // underlying fetch rejects for a dropped connection, a captive portal,
+      // a 429 or a 5xx — signing out for any of those would throw somebody
+      // out of their account for starting Arcadia before the Wi-Fi came up.
+      if (isOAuthRefusal(error)) this.signOut()
       throw error
     }
     this.store.write(microsoft.refreshToken)

@@ -8,6 +8,7 @@
  */
 import { describe, expect, it, vi } from 'vitest'
 import { MicrosoftSession } from '@main/stores/microsoft/session'
+import { OAuthRefusedError } from '@main/stores/microsoft/auth'
 
 function store(initial?: string): {
   read: () => string | undefined
@@ -81,13 +82,14 @@ describe('MicrosoftSession', () => {
     expect(refreshTokens).not.toHaveBeenCalled()
   })
 
-  it('signs out when the stored token is no longer accepted', async () => {
-    // A rejected refresh token is dead: keeping it would make every scan
-    // fail the same way for ever.
+  it('signs out when the refresh is refused outright', async () => {
+    // A refused refresh token is dead: keeping it would make every scan
+    // fail the same way for ever, with no route back but a sign-out nobody
+    // knew to perform.
     const { session: subject, tokens } = session({
       stored: 'stale',
       refreshTokens: async () => {
-        throw new Error('invalid_grant')
+        throw new OAuthRefusedError('invalid_grant', 'The Microsoft sign-in failed: invalid_grant')
       }
     })
 
@@ -96,8 +98,31 @@ describe('MicrosoftSession', () => {
     expect(subject.isSignedIn()).toBe(false)
   })
 
-  it('keeps the sign-in when the failure is only the network', async () => {
-    // Not a reason to throw someone out of their account.
+  /**
+   * The reachable case, and the one that used to behave backwards.
+   *
+   * This test injected its failure at `authorizeXsts` before, which runs
+   * *after* the refresh and outside the `try` that signs out — so it passed
+   * against code that discarded the credential for every failure at the
+   * refresh itself. A dropped connection there is the ordinary case: a
+   * laptop that starts Arcadia before its Wi-Fi has associated.
+   */
+  it('keeps the sign-in when the refresh fails for want of a network', async () => {
+    const { session: subject, tokens } = session({
+      stored: 'good',
+      refreshTokens: async () => {
+        throw new Error('fetch failed')
+      }
+    })
+
+    await expect(subject.tokens()).rejects.toThrow(/fetch failed/)
+    expect(tokens.value()).toBe('good')
+    expect(subject.isSignedIn()).toBe(true)
+  })
+
+  it('keeps the sign-in when a later step fails', async () => {
+    // Everything past the refresh was always outside the sign-out path;
+    // this pins that it stays that way.
     const { session: subject, tokens } = session({
       stored: 'good',
       authorizeXsts: async () => {
@@ -107,6 +132,21 @@ describe('MicrosoftSession', () => {
 
     await expect(subject.tokens()).rejects.toThrow(/fetch failed/)
     expect(tokens.value()).toBe('rotated')
+    expect(subject.isSignedIn()).toBe(true)
+  })
+
+  it('lets a second caller retry after the shared exchange failed', async () => {
+    // A failure must not be memoised either: the network coming back should
+    // be enough, without restarting Arcadia.
+    const refreshTokens = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('fetch failed'))
+      .mockResolvedValueOnce({ accessToken: 'access', refreshToken: 'rotated' })
+    const { session: subject } = session({ stored: 'stored-refresh', refreshTokens })
+
+    await expect(subject.tokens()).rejects.toThrow(/fetch failed/)
+
+    expect(await subject.tokens()).toEqual({ xboxLive: XBL, marketplace: MP })
   })
 
   /**
