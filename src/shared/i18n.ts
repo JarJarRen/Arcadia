@@ -109,6 +109,8 @@ export interface Strings {
     microsoftSignedInAs: (gamertag: string) => string
     microsoftCodeHint: (code: string) => string
     microsoftOpenLink: string
+    /** Shown where safeStorage reports it cannot encrypt anything. */
+    microsoftNoEncryption: string
     /** e.g. "Saved to C:\Users\…\.env" */
     fileHint: (path: string) => string
     steamKeyLabel: string
@@ -382,6 +384,10 @@ const en: Strings = {
     microsoftSignedInAs: (gamertag) => `Signed in as ${gamertag}`,
     microsoftCodeHint: (code) => `Enter the code ${code} in your browser:`,
     microsoftOpenLink: 'Open the sign-in page',
+    microsoftNoEncryption:
+      'This system offers no keyring, so the Microsoft sign-in is stored ' +
+      'unencrypted in Arcadia’s database. The file sits in your own user ' +
+      'profile; anyone who can read it can read the token.',
     fileHint: (path) => `Stored in ${path}`,
     steamKeyLabel: 'Steam Web API key',
     steamKeyHint:
@@ -702,6 +708,11 @@ const de: Strings = {
     microsoftSignedInAs: (gamertag) => `Angemeldet als ${gamertag}`,
     microsoftCodeHint: (code) => `Gib den Code ${code} im Browser ein:`,
     microsoftOpenLink: 'Anmeldeseite öffnen',
+    microsoftNoEncryption:
+      'Dieses System bietet keinen Schlüsselbund, daher wird die ' +
+      'Microsoft-Anmeldung unverschlüsselt in Arcadias Datenbank ' +
+      'gespeichert. Die Datei liegt in deinem eigenen Benutzerprofil; wer ' +
+      'sie lesen kann, kann auch das Token lesen.',
     fileHint: (path) => `Gespeichert in ${path}`,
     steamKeyLabel: 'Steam-Web-API-Schlüssel',
     steamKeyHint:

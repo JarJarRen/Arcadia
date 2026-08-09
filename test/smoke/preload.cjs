@@ -187,6 +187,9 @@ contextBridge.exposeInMainWorld('arcadia', {
     ea: { available: true },
     ubisoft: { available: true }
   }),
+  // DPAPI on the machine this smoke test runs on; the configuration
+  // screen only warns when this is false.
+  isSecureStorageAvailable: async () => true,
   // Sent when the install overlay is dismissed.
   cancelInstall: async () => undefined,
   // Adding does not really change the stub's list; the smoke test only

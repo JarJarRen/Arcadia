@@ -20,6 +20,7 @@ const api: ArcadiaApi = {
   getEnabledStores: () => ipcRenderer.invoke(IPC.settingsGetStores),
   setEnabledStores: (stores) => ipcRenderer.invoke(IPC.settingsSetStores, stores),
   getStoreAvailability: () => ipcRenderer.invoke(IPC.storesAvailability),
+  isSecureStorageAvailable: () => ipcRenderer.invoke(IPC.storesSecureStorage),
   getEnvConfig: () => ipcRenderer.invoke(IPC.envConfigGet),
   saveEnvConfig: (values) => ipcRenderer.invoke(IPC.envConfigSave, values),
   addManualGame: (game) => ipcRenderer.invoke(IPC.libraryAddManual, game),

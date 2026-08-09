@@ -13,6 +13,7 @@ import { STORE_IDS } from '@shared/types'
 function stubApi(availability: Record<string, unknown> = {}): void {
   ;(window as unknown as { arcadia: unknown }).arcadia = {
     getStoreAvailability: async () => availability,
+    isSecureStorageAvailable: async () => true,
     getMicrosoftAuth: async () => ({ signedIn: false }),
     signInToMicrosoft: async () => ({ ok: false, error: 'not configured' }),
     signOutOfMicrosoft: async () => undefined,
@@ -79,6 +80,7 @@ describe('StoreSelection', () => {
       getStoreAvailability: async () => {
         throw new Error('nope')
       },
+      isSecureStorageAvailable: async () => true,
       getMicrosoftAuth: async () => ({ signedIn: false }),
       signInToMicrosoft: async () => ({ ok: false, error: 'not configured' }),
       signOutOfMicrosoft: async () => undefined,
@@ -218,6 +220,43 @@ describe('StoreSelection', () => {
     expect(await screen.findByText('network unreachable')).toBeDefined()
     // No code to show: the request never got that far.
     expect(screen.queryByRole('link')).toBeNull()
+  })
+
+  /**
+   * `main/index.ts` says "The configuration screen says so" of a system
+   * where safeStorage cannot encrypt, and the design requires it — but no
+   * string in either bundle mentioned encryption, a keyring or plaintext.
+   * On a desktop with no keyring the refresh token goes into arcadia.db in
+   * the clear and the user was never told.
+   */
+  it('says so when the sign-in cannot be stored encrypted', async () => {
+    stubApi()
+    ;(window.arcadia as unknown as Record<string, unknown>).isSecureStorageAvailable = async () =>
+      false
+    render(<StoreSelection enabled={[...STORE_IDS]} onChange={vi.fn()} />)
+
+    expect(await screen.findByText(/stored unencrypted/i)).toBeDefined()
+  })
+
+  it('says nothing about encryption where the system can encrypt', async () => {
+    stubApi()
+    render(<StoreSelection enabled={[...STORE_IDS]} onChange={vi.fn()} />)
+
+    // Awaited on something else first, so this is not merely testing that
+    // the effects have not run yet.
+    expect(await screen.findByRole('button', { name: /connect a microsoft account/i })).toBeDefined()
+    expect(screen.queryByText(/stored unencrypted/i)).toBeNull()
+  })
+
+  it('says nothing about encryption when the probe itself fails', async () => {
+    stubApi()
+    ;(window.arcadia as unknown as Record<string, unknown>).isSecureStorageAvailable = async () => {
+      throw new Error('ipc down')
+    }
+    render(<StoreSelection enabled={[...STORE_IDS]} onChange={vi.fn()} />)
+
+    expect(await screen.findByRole('button', { name: /connect a microsoft account/i })).toBeDefined()
+    expect(screen.queryByText(/stored unencrypted/i)).toBeNull()
   })
 
   it('stays on the sign-in offer when the auth state cannot be read', async () => {

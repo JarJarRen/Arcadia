@@ -24,6 +24,15 @@ export function StoreSelection({ enabled, onChange }: Props): ReactElement {
     Record<string, AvailabilityResult> | undefined
   >()
   const [auth, setAuth] = useState<{ signedIn: boolean; gamertag?: string }>({ signedIn: false })
+  /**
+   * Starts as "encrypted" rather than as unknown.
+   *
+   * The note is a warning, and a warning that flickers on for the length of
+   * an IPC round trip on every machine — including every Windows one, where
+   * DPAPI always answers yes — would be worse than a note that appears a
+   * moment late on the few machines it applies to.
+   */
+  const [encrypted, setEncrypted] = useState(true)
   const [pending, setPending] = useState<{ userCode: string; verificationUri: string } | undefined>()
   const [authError, setAuthError] = useState<string | undefined>()
 
@@ -37,6 +46,17 @@ export function StoreSelection({ enabled, onChange }: Props): ReactElement {
       // Swallowed on purpose: not knowing whether a store is installed is no
       // reason to stop someone choosing it. The row keeps saying "checking".
       .catch((error: unknown) => console.error('Stores could not be probed:', error))
+
+    window.arcadia
+      .isSecureStorageAvailable()
+      .then((available) => {
+        if (!cancelled) setEncrypted(available)
+      })
+      // Swallowed for the same reason as the probe above, and with the same
+      // consequence: the note stays hidden rather than being shown on a
+      // guess.
+      .catch((error: unknown) => console.error('Secure storage could not be probed:', error))
+
     return () => {
       cancelled = true
     }
@@ -148,6 +168,13 @@ export function StoreSelection({ enabled, onChange }: Props): ReactElement {
                 </>
               )}
               {authError !== undefined && <span className="modal__error">{authError}</span>}
+              {/* Where the system has no keyring the refresh token is
+                  written to the database as it is. Worth doing rather than
+                  refusing to store one at all — but not worth doing
+                  silently. */}
+              {!encrypted && (
+                <span className="modal__sublabel">{t().setup.microsoftNoEncryption}</span>
+              )}
             </span>
           )}
         </div>

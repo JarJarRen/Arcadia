@@ -270,6 +270,10 @@ app.whenReady().then(() => {
     fetchDetails: fetchAppDetails,
     getWindow: () => mainWindow,
     onArtworkGap: () => artworkGaps.request(),
+    // Asked at the moment the screen asks, not captured here: a keyring can
+    // be unlocked while Arcadia runs, and a cached "no" would go on warning
+    // about a file that is encrypted by then.
+    secureStorageAvailable: () => safeStorage.isEncryptionAvailable(),
     microsoft: {
       session: microsoftSession,
       requestDeviceCode: () => requestDeviceCode(),

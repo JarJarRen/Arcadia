@@ -119,6 +119,26 @@ describe('IPC enabled-store channels', () => {
     })
   })
 
+  /**
+   * The configuration screen warns on this, and `main/index.ts` has always
+   * claimed it did — "The configuration screen says so" — while nothing
+   * carried the answer across. Where safeStorage cannot encrypt, the
+   * Microsoft refresh token goes into arcadia.db in the clear.
+   */
+  it('reports that the system cannot encrypt what is stored', async () => {
+    const plaintext = makeHarness({ secureStorageAvailable: () => false })
+    handlers.clear()
+    registerIpcHandlers(plaintext.context)
+
+    expect(await invoke(IPC.storesSecureStorage)).toBe(false)
+  })
+
+  it('reports encryption as available when nothing says otherwise', async () => {
+    // A warning shown on no evidence would be worse than none, so an absent
+    // probe counts as "encrypted".
+    expect(await invoke(IPC.storesSecureStorage)).toBe(true)
+  })
+
   it('turns an adapter that throws while probing into an unavailable answer', async () => {
     // A probe is not worth crashing the dialog over: the store simply
     // reports itself unavailable, with the reason it threw.

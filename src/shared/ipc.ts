@@ -32,6 +32,16 @@ export const IPC = {
   settingsGetStores: 'settings:get-stores',
   settingsSetStores: 'settings:set-stores',
   storesAvailability: 'stores:availability',
+  /**
+   * Whether the operating system can encrypt what Arcadia stores.
+   *
+   * Its own channel rather than a field on `stores:availability`: that probe
+   * answers per store and only for a store that exists here, and the case
+   * this reports — a Linux desktop with no keyring — is precisely one where
+   * the Microsoft adapter calls itself unavailable while the sign-in and its
+   * refresh token are still perfectly reachable.
+   */
+  storesSecureStorage: 'stores:secure-storage',
   envConfigGet: 'env-config:get',
   envConfigSave: 'env-config:save',
   libraryAddManual: 'library:add-manual',
@@ -149,6 +159,16 @@ export interface ArcadiaApi {
    * whether switching a store on would find anything.
    */
   getStoreAvailability(): Promise<Record<string, AvailabilityResult>>
+  /**
+   * Whether `safeStorage` can encrypt on this machine.
+   *
+   * False on a desktop with no keyring, where the Microsoft refresh token
+   * is written to `arcadia.db` as it is. Storing it anyway is the right
+   * trade — the file sits in the user's own profile, and the alternative is
+   * signing in again on every start — but it must be said rather than
+   * assumed, which is what the configuration screen uses this for.
+   */
+  isSecureStorageAvailable(): Promise<boolean>
   /**
    * The API keys as the `.env` currently holds them, plus whether the
    * configuration question has been answered.

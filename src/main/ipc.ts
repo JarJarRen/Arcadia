@@ -71,6 +71,15 @@ export interface IpcContext {
    */
   onArtworkGap?: () => void
   /**
+   * Whether `safeStorage` can encrypt on this machine.
+   *
+   * Injected rather than read here, because `safeStorage` is Electron's and
+   * these handlers are tested without it. Absent counts as available: the
+   * only caller is a warning, and a warning shown on no evidence would be
+   * worse than none.
+   */
+  secureStorageAvailable?: () => boolean
+  /**
    * The Microsoft account, where one can exist.
    *
    * Optional because everything else works without it — on Linux there is
@@ -525,6 +534,15 @@ export function registerIpcHandlers(context: IpcContext): void {
     )
     return Object.fromEntries(probes)
   })
+
+  /**
+   * Whether the Microsoft refresh token can be encrypted where it is kept.
+   *
+   * The configuration screen says so on the Microsoft row when it cannot —
+   * the token then sits in `arcadia.db` in the clear, and the user is
+   * entitled to know that before connecting an account.
+   */
+  ipcMain.handle(IPC.storesSecureStorage, () => context.secureStorageAvailable?.() ?? true)
 
   ipcMain.handle(IPC.envConfigGet, () => readEnvConfig(context.envFilePaths))
 

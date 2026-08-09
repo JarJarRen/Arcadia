@@ -42,6 +42,7 @@ export function stubArcadia(overrides: Partial<ArcadiaApi> = {}): ArcadiaApi {
     getEnabledStores: async () => [...STORE_IDS],
     setEnabledStores: async () => undefined,
     getStoreAvailability: async () => ({}),
+    isSecureStorageAvailable: async () => true,
     getEnvConfig: async () =>
       ({
         values: { STEAM_WEB_API_KEY: '', STEAM_ID64: '', STEAMGRIDDB_API_KEY: '' },
