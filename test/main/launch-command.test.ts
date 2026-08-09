@@ -87,4 +87,18 @@ describe('launchGame with a command', () => {
     expect(result.ok).toBe(false)
     expect(result.error).toContain('ENOENT')
   })
+
+  it('reports a clean failure instead of crashing when the real spawn cannot start', async () => {
+    // No third argument: this runs the real `defaultRun`, the only way to
+    // reach it at all. The executable does not exist on any platform, so the
+    // spawn fails immediately with ENOENT and starts nothing.
+    const adapters = [
+      adapterWith(() => ({ exe: 'arcadia-no-such-binary-4f9c2b', args: [] }))
+    ]
+
+    const result = await launchGame(adapters as never, game)
+
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain('Forza Horizon')
+  })
 })

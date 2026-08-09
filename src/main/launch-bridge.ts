@@ -15,11 +15,27 @@ export type RunCommand = (exe: string, args: string[]) => Promise<void>
  * `detached` with `unref` so the game outlives Arcadia — closing the library
  * must not take the game down with it — and `windowsHide` so `explorer.exe`
  * does not flash a console window on the way through.
+ *
+ * Settles on the spawn outcome, not on the process exiting — a launched game
+ * runs for hours, and this only needs to know whether it started. That also
+ * means the returned promise must not resolve until Node either confirms the
+ * process started or reports that it could not: an `'error'` event with no
+ * listener throws, and by the time an `async` function's body has returned,
+ * nothing is left to catch a throw that arrives after the fact. Listening
+ * for `'error'` turns that throw into a rejection `open()`'s `catch` can
+ * turn into a clean `{ ok: false }` instead of taking Arcadia down with it.
  */
-const defaultRun: RunCommand = async (exe, args) => {
-  const child = spawn(exe, args, { detached: true, stdio: 'ignore', windowsHide: true })
-  child.unref()
-}
+const defaultRun: RunCommand = (exe, args) =>
+  new Promise((resolve, reject) => {
+    const child = spawn(exe, args, { detached: true, stdio: 'ignore', windowsHide: true })
+    child.once('error', reject)
+    child.once('spawn', () => {
+      // Only after the process really started: unref'ing lets the game
+      // outlive Arcadia, which is the whole point of the detached spawn.
+      child.unref()
+      resolve()
+    })
+  })
 
 /**
  * Runs an adapter's launch URI.
