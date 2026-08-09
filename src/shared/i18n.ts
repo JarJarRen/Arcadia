@@ -234,6 +234,10 @@ export interface Strings {
     installNameFailed: (name: string, detail: string) => string
     /** The `.env` could not be written — read-only file, no permission. */
     envSaveFailed: (detail: string) => string
+    /** The database was damaged and has been set aside; a fresh one took over. */
+    databaseRecovered: (path: string) => string
+    /** The database could not be opened at all, so this run keeps nothing. */
+    databaseUnusable: (detail: string) => string
   }
 
   stores: {
@@ -511,7 +515,14 @@ const en: Strings = {
     installUriFailed: (uri, detail) => `Install via ${uri} failed: ${detail}`,
     launchNameFailed: (name, detail) => `Launching “${name}” failed: ${detail}`,
     installNameFailed: (name, detail) => `Installing “${name}” failed: ${detail}`,
-    envSaveFailed: (detail) => `The settings could not be saved: ${detail}`
+    envSaveFailed: (detail) => `The settings could not be saved: ${detail}`,
+    databaseRecovered: (path) =>
+      'Arcadia’s database was damaged and had to be started over, so the ' +
+      'library is being scanned again. Nothing was deleted — the old file is ' +
+      `still there as ${path}.`,
+    databaseUnusable: (detail) =>
+      `The database could not be opened (${detail}). Arcadia is running, but ` +
+      'nothing it finds will be kept when you close it.'
   },
 
   stores: {
@@ -838,7 +849,14 @@ const de: Strings = {
     installUriFailed: (uri, detail) => `Installation über ${uri} fehlgeschlagen: ${detail}`,
     launchNameFailed: (name, detail) => `Start von „${name}“ fehlgeschlagen: ${detail}`,
     installNameFailed: (name, detail) => `Installation von „${name}“ fehlgeschlagen: ${detail}`,
-    envSaveFailed: (detail) => `Die Einstellungen konnten nicht gespeichert werden: ${detail}`
+    envSaveFailed: (detail) => `Die Einstellungen konnten nicht gespeichert werden: ${detail}`,
+    databaseRecovered: (path) =>
+      'Arcadias Datenbank war beschädigt und musste neu angelegt werden, daher ' +
+      'wird die Bibliothek erneut eingelesen. Gelöscht wurde nichts — die alte ' +
+      `Datei liegt weiterhin unter ${path}.`,
+    databaseUnusable: (detail) =>
+      `Die Datenbank konnte nicht geöffnet werden (${detail}). Arcadia läuft, ` +
+      'aber nichts davon wird beim Beenden gespeichert.'
   },
 
   stores: {

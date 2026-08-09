@@ -213,9 +213,37 @@ export function App(): ReactElement {
     void window.arcadia.cancelInstall()
   }, [])
 
-  const visibleError = launchError ?? error
+  /**
+   * Whatever startup could not report at the time.
+   *
+   * Asked once on mount. It outranks the other two in the banner because it
+   * explains them: a library that came up empty because its database had to
+   * be replaced would otherwise look like a scan that found nothing.
+   *
+   * A failure to ask is swallowed — being unable to read a notice is no
+   * reason to put a different error in its place.
+   */
+  const [startupNotice, setStartupNotice] = useState<string | undefined>()
+
+  useEffect(() => {
+    let cancelled = false
+    window.arcadia
+      .getStartupNotice()
+      .then((notice) => {
+        if (!cancelled) setStartupNotice(notice)
+      })
+      .catch((caught: unknown) => console.error('Startup notice could not be read:', caught))
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const visibleError = startupNotice ?? launchError ?? error
 
   const dismissError = (): void => {
+    // The startup notice too, or the banner could never be closed: nothing
+    // re-fetches it, so it would sit there for the life of the window.
+    setStartupNotice(undefined)
     setLaunchError(undefined)
     clearError()
   }

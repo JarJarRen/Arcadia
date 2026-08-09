@@ -16,6 +16,13 @@ export const IPC = {
    * what closes that window.
    */
   libraryScanState: 'library:scan-state',
+  /**
+   * Anything that went wrong before the window could show it.
+   *
+   * Startup runs before the renderer exists, so a failure there has nowhere
+   * to go but the console. This is how it reaches the banner instead.
+   */
+  startupNotice: 'app:startup-notice',
   /** Sent with `true` when a scan starts and `false` when it ends. */
   libraryScanning: 'library:scanning',
   gameLaunch: 'game:launch',
@@ -221,6 +228,14 @@ export interface ArcadiaApi {
    * while it is still being filled.
    */
   isScanning(): Promise<boolean>
+  /**
+   * What startup could not tell anyone at the time, or undefined.
+   *
+   * So far only the database: a damaged file is set aside and replaced,
+   * which empties the library, and an unexplained empty library is its own
+   * kind of bug.
+   */
+  getStartupNotice(): Promise<string | undefined>
   /** Fires whenever a scan starts or ends, from whichever source. */
   onScanningChanged(callback: (scanning: boolean) => void): () => void
   onLibraryChanged(callback: () => void): () => void

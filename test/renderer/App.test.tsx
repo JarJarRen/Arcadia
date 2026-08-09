@@ -36,6 +36,34 @@ describe('App', () => {
   })
 
   /**
+   * A damaged database is replaced rather than allowed to be fatal, which
+   * empties the library. Without this the user would be shown an empty
+   * library and told a scan found nothing — the reset that actually caused
+   * it having happened before the window existed.
+   */
+  it('shows what startup could not report at the time', async () => {
+    stubArcadia({
+      getGames: async () => [],
+      getStartupNotice: async () => 'the database was replaced'
+    })
+    render(<App />)
+
+    expect(await screen.findByText('the database was replaced')).toBeDefined()
+  })
+
+  it('lets the startup notice be dismissed', async () => {
+    // Nothing re-fetches it, so a banner that could not be closed would sit
+    // there for the life of the window.
+    stubArcadia({ getGames: async () => [], getStartupNotice: async () => 'database replaced' })
+    render(<App />)
+
+    const banner = await screen.findByText('database replaced')
+    fireEvent.click(screen.getByLabelText(t().common.dismissMessage))
+
+    await waitFor(() => expect(banner.isConnected).toBe(false))
+  })
+
+  /**
    * The first start. The database is empty and stays empty until the scan
    * the main process began returns, so this is the screen someone sees for
    * the several seconds that takes — and it used to tell them there were no

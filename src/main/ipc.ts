@@ -80,6 +80,15 @@ export interface IpcContext {
    */
   secureStorageAvailable?: () => boolean
   /**
+   * Something that went wrong before the window could report it.
+   *
+   * Startup happens before the renderer exists, so its failures have nowhere
+   * to go. A damaged database is the case this was built for: it is replaced
+   * rather than allowed to be fatal, which empties the library, and that
+   * needs saying.
+   */
+  startupNotice?: string
+  /**
    * The Microsoft account, where one can exist.
    *
    * Optional because everything else works without it — on Linux there is
@@ -230,6 +239,8 @@ export function registerIpcHandlers(context: IpcContext): void {
   ipcMain.handle(IPC.libraryGet, () => visibleLibrary())
 
   ipcMain.handle(IPC.libraryScanState, () => context.scan.isScanning())
+
+  ipcMain.handle(IPC.startupNotice, () => context.startupNotice)
 
   ipcMain.handle(IPC.librarySync, async () => {
     const adapters = enabledAdapters(context.adapters, context.settings.get('enabled-stores'))

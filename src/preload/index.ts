@@ -27,6 +27,7 @@ const api: ArcadiaApi = {
   removeManualGame: (gameId) => ipcRenderer.invoke(IPC.libraryRemoveManual, gameId),
   reportBrokenArtwork: (mergeKey, kind) => ipcRenderer.invoke(IPC.artworkBroken, mergeKey, kind),
   isScanning: () => ipcRenderer.invoke(IPC.libraryScanState),
+  getStartupNotice: () => ipcRenderer.invoke(IPC.startupNotice),
   onScanningChanged: (callback) => {
     const listener = (_event: unknown, scanning: boolean): void => callback(scanning)
     ipcRenderer.on(IPC.libraryScanning, listener)

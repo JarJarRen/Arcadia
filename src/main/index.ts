@@ -1,5 +1,6 @@
 import { app, BrowserWindow, safeStorage, shell } from 'electron'
 import { join } from 'node:path'
+import type { DatabaseSync } from 'node:sqlite'
 import { config as loadDotenv } from 'dotenv'
 import { openDatabase } from '@main/db/schema'
 import { GameRepository } from '@main/db/repository'
@@ -14,7 +15,7 @@ import { SteamAppList } from '@main/metadata/steamAppList'
 import { fetchAppDetails } from '@main/metadata/steamStore'
 import { SECURE_WEB_PREFERENCES } from '@main/window-options'
 import { IPC } from '@shared/ipc'
-import { parseLanguage, setLanguage } from '@shared/i18n'
+import { parseLanguage, setLanguage, t } from '@shared/i18n'
 import { envFileCandidates } from '@main/env-file'
 import { createScanState } from '@main/scan-state'
 import { enabledAdapters } from '@main/stores/enabled'
@@ -192,7 +193,37 @@ app.whenReady().then(() => {
   // Before anything reads process.env — the adapters below do.
   loadApiKeys(envFilePaths)
 
-  const db = openDatabase(join(app.getPath('userData'), 'arcadia.db'))
+  /**
+   * Opening the database must not be able to stop the app from starting.
+   *
+   * This used to be a bare `openDatabase`, and a corrupt file made it throw
+   * — partway through this function, so `registerIpcHandlers` below never
+   * ran. Arcadia then came up with a window, a rendered library and every
+   * IPC channel missing, reporting "No handler registered for
+   * 'library:sync'": a message that names the wrong subsystem and gives no
+   * hint that a file on disk is at fault.
+   *
+   * `openDatabase` now sets a damaged file aside by itself, so the common
+   * case never reaches this catch. What is left for it is everything a
+   * retry cannot mend — no permission, a full disk, a path that is a
+   * directory. Those fall back to an in-memory database: the app is
+   * useless-but-honest for that run rather than dead and inexplicable, and
+   * `startupNotice` carries the reason to the banner.
+   */
+  let startupNotice: string | undefined
+  let db: DatabaseSync
+  try {
+    db = openDatabase(join(app.getPath('userData'), 'arcadia.db'), ({ movedTo }) => {
+      console.warn(`Database was damaged; kept the old file as ${movedTo}`)
+      startupNotice = t().errors.databaseRecovered(movedTo)
+    })
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    console.error('Database could not be opened:', error)
+    startupNotice = t().errors.databaseUnusable(detail)
+    db = openDatabase(':memory:')
+  }
+
   const repo = new GameRepository(db)
   const metadata = new MetadataRepository(db)
   const settings = new SettingsRepository(db)
@@ -267,6 +298,10 @@ app.whenReady().then(() => {
     adapters,
     scan,
     appList,
+    // Built above in whatever language the module currently holds, which is
+    // English: the stored language lives in the very database that failed,
+    // so there is nothing else it could truthfully be.
+    ...(startupNotice === undefined ? {} : { startupNotice }),
     fetchDetails: fetchAppDetails,
     getWindow: () => mainWindow,
     onArtworkGap: () => artworkGaps.request(),

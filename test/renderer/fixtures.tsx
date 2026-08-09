@@ -54,6 +54,7 @@ export function stubArcadia(overrides: Partial<ArcadiaApi> = {}): ArcadiaApi {
     removeManualGame: async () => ({ ok: true }),
     reportBrokenArtwork: async () => undefined,
     isScanning: async () => false,
+    getStartupNotice: async () => undefined,
     onScanningChanged: () => () => undefined,
     onLibraryChanged: () => () => undefined,
     onNavigateBack: () => () => undefined,

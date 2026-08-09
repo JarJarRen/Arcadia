@@ -201,6 +201,7 @@ contextBridge.exposeInMainWorld('arcadia', {
   // here would put the "searching…" hint on screen in place of the tiles
   // every measurement below depends on.
   isScanning: async () => false,
+  getStartupNotice: async () => undefined,
   onScanningChanged: () => () => undefined,
   onLibraryChanged: () => () => undefined,
   onNavigateBack: () => () => undefined,

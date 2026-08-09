@@ -213,7 +213,13 @@ describe('preload bridge', () => {
       args: [],
       call: () => api.isSecureStorageAvailable()
     },
-    { name: 'isScanning', channel: IPC.libraryScanState, args: [], call: () => api.isScanning() }
+    { name: 'isScanning', channel: IPC.libraryScanState, args: [], call: () => api.isScanning() },
+    {
+      name: 'getStartupNotice',
+      channel: IPC.startupNotice,
+      args: [],
+      call: () => api.getStartupNotice()
+    }
   ]
 
   beforeEach(() => {
@@ -230,9 +236,9 @@ describe('preload bridge', () => {
     expect(invokeCalls[0]?.args).toEqual(row.args)
   })
 
-  it('covers every invoke-based method exactly once, with twenty-six distinct channels', () => {
-    expect(INVOKE_TABLE).toHaveLength(26)
-    expect(new Set(INVOKE_TABLE.map((row) => row.name)).size).toBe(26)
+  it('covers every invoke-based method exactly once, with twenty-seven distinct channels', () => {
+    expect(INVOKE_TABLE).toHaveLength(27)
+    expect(new Set(INVOKE_TABLE.map((row) => row.name)).size).toBe(27)
     // Exhaustive for real, rather than by assertion: every method on the
     // bridge is either in the table above or one of the five listeners.
     const listenerMethods = [
@@ -260,7 +266,7 @@ describe('preload bridge', () => {
     ]
 
     expect(new Set(allChannels).size).toBe(allChannels.length)
-    expect(allChannels).toHaveLength(30)
+    expect(allChannels).toHaveLength(31)
   })
 
   /**
