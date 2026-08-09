@@ -270,6 +270,10 @@ export interface Strings {
       signedOutOnlyXboxApp: string
       notInstalledCannotLaunch: (name: string) => string
       noProductId: (name: string) => string
+      signInFailed: (reason: string) => string
+      signInExpired: string
+      signInDeclined: string
+      signInCancelled: string
     }
   }
 }
@@ -555,7 +559,11 @@ const en: Strings = {
       noProductId: (name) =>
         `Arcadia does not know the Store product for ${name}, so it cannot ` +
         `open its page. Sign in with a Microsoft account, or install it from ` +
-        `the Xbox app.`
+        `the Xbox app.`,
+      signInFailed: (reason) => `The Microsoft sign-in failed: ${reason}`,
+      signInExpired: 'The sign-in code expired before it was used. Please try again.',
+      signInDeclined: 'The sign-in was declined.',
+      signInCancelled: 'The sign-in was cancelled.'
     }
   }
 }
@@ -856,7 +864,11 @@ const de: Strings = {
       noProductId: (name) =>
         `Arcadia kennt das Store-Produkt zu ${name} nicht und kann die Seite ` +
         `daher nicht öffnen. Melde dich mit einem Microsoft-Konto an oder ` +
-        `installiere es über die Xbox-App.`
+        `installiere es über die Xbox-App.`,
+      signInFailed: (reason) => `Die Microsoft-Anmeldung ist fehlgeschlagen: ${reason}`,
+      signInExpired: 'Der Anmeldecode ist abgelaufen, bevor er benutzt wurde. Bitte erneut versuchen.',
+      signInDeclined: 'Die Anmeldung wurde abgelehnt.',
+      signInCancelled: 'Die Anmeldung wurde abgebrochen.'
     }
   }
 }

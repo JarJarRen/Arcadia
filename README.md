@@ -72,6 +72,18 @@ npm approve-scripts --allow-scripts-pending
 
 **Both are optional.** Without them Arcadia starts and finds whatever is discoverable locally — 105 of 263 games on the development machine. What they add and where to get them is in [`.env.example`](.env.example).
 
+### Microsoft sign-in
+
+`MICROSOFT_CLIENT_ID` in [`src/main/stores/microsoft/auth.ts`](src/main/stores/microsoft/auth.ts)
+is currently the placeholder `00000000-0000-0000-0000-000000000000`. Every
+sign-in fails with `invalid_client` until it is replaced with a real
+Application (client) ID from a public-client app registration in the [Azure
+portal](https://portal.azure.com/): supported account types **"Personal
+Microsoft accounts only"**, platform **"Mobile and desktop applications"**,
+and **Allow public client flows** enabled. Nothing else changes — the
+device-code flow, the polling and the token exchange are already built and
+tested against injected HTTP; only that constant is a stand-in.
+
 ---
 
 ## Usage
