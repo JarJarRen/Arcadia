@@ -124,13 +124,30 @@ describe('MicrosoftAdapter scanInstalled', () => {
 })
 
 describe('MicrosoftAdapter default dependencies', () => {
-  it('falls back to process.platform and the real readers when no deps are given', () => {
-    // Exercises the `??` defaults in the constructor without ever calling a
-    // method that would invoke the real (Windows-only) readers.
-    const real = new MicrosoftAdapter()
+  it('defaults the platform to process.platform', async () => {
+    // Readers are still stubbed — only `platform` is left to its default —
+    // so this never touches the real (Windows-only) registry or PowerShell.
+    // Comparing against an adapter with the platform passed explicitly
+    // proves the omitted value actually resolves to process.platform,
+    // whatever that happens to be on the machine running the test.
+    const withDefaultPlatform = new MicrosoftAdapter({
+      readXboxAppPackages: async () => [],
+      readInstalledPackages: async () => new Map(),
+      readStartAppIds: async () => new Map()
+    })
+    const withExplicitPlatform = adapter({ platform: process.platform })
 
-    expect(real.id).toBe('microsoft')
-    expect(real.displayName).toBe('Microsoft Store')
+    expect(await withDefaultPlatform.isAvailable()).toEqual(await withExplicitPlatform.isAvailable())
+  })
+
+  it('never reaches the real readers off Windows, even when none are stubbed', async () => {
+    // With no reader overrides, scanInstalled would use the genuine
+    // registry/PowerShell-backed implementations — which must never run in
+    // a test. Forcing platform off Windows proves the guard on line 1 of
+    // scanInstalled short-circuits before any of them are called.
+    const games = await new MicrosoftAdapter({ platform: 'linux' }).scanInstalled()
+
+    expect(games).toEqual([])
   })
 })
 
