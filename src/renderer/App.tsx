@@ -57,7 +57,7 @@ export function App(): ReactElement {
   // merge key, not the entry itself — the entry is rebuilt on every refresh,
   // and a captured copy would keep showing the old state once the metadata
   // arrives.
-  const { overlay, openDetail, openFreebies, close, back, forward } = useOverlay()
+  const { overlay, openDetail, openFreebies, close, dismiss, back, forward } = useOverlay()
   const [addOpen, setAddOpen] = useState(false)
   /**
    * The `.env` as the main process reads it, or undefined until it answers.
@@ -286,11 +286,16 @@ export function App(): ReactElement {
   // The entry can disappear — a scan splits a merged game apart and the key
   // points nowhere. Forget the key then, otherwise the view would jump back
   // to the page later, the moment that key happens to exist again.
+  //
+  // `dismiss`, not `close`: the user never asked to leave this page, so
+  // forward must not offer to bring it back. It also keeps this effect,
+  // which re-fires for as long as the key stays missing, from repeatedly
+  // overwriting whatever a real `back()` had stored.
   useEffect(() => {
     if (overlay?.kind === 'detail' && opened === undefined && entries.length > 0) {
-      close()
+      dismiss()
     }
-  }, [overlay, opened, entries.length, close])
+  }, [overlay, opened, entries.length, dismiss])
 
   /**
    * Opens a newly added game once the library has actually reloaded.
@@ -397,8 +402,10 @@ export function App(): ReactElement {
           // Drop the selection when the mode changes. The same key means
           // "selected row" in the list and "this page fills the window" in
           // the grid — carrying it over would drop the user into a full-page
-          // detail they never opened.
-          close()
+          // detail they never opened. `dismiss`, not `close`: switching view
+          // modes is not the user closing a page, so forward must not offer
+          // to reopen it.
+          dismiss()
           setView(next)
         }}
         onAddGame={() => setAddOpen(true)}

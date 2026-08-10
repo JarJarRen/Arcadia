@@ -62,4 +62,34 @@ describe('useOverlay', () => {
     act(() => result.current.forward())
     expect(result.current.overlay).toEqual({ kind: 'detail', key: 'a' })
   })
+
+  it('closes the overlay with dismiss', () => {
+    const { result } = renderHook(() => useOverlay())
+    act(() => result.current.openDetail('far cry 4'))
+    act(() => result.current.dismiss())
+    expect(result.current.overlay).toBeUndefined()
+  })
+
+  it('does not let forward reopen what dismiss closed', () => {
+    // dismiss is for closes the user did not make — a view-mode switch, a
+    // library entry that vanished — so forward must have nothing to offer
+    // afterwards.
+    const { result } = renderHook(() => useOverlay())
+    act(() => result.current.openDetail('far cry 4'))
+    act(() => result.current.dismiss())
+    act(() => result.current.forward())
+    expect(result.current.overlay).toBeUndefined()
+  })
+
+  it('leaves a real back() memory alone when dismiss runs afterwards', () => {
+    // dismiss must only clear what is currently open, never overwrite
+    // forward's memory of a page the user actually closed with back().
+    const { result } = renderHook(() => useOverlay())
+    act(() => result.current.openDetail('a'))
+    act(() => result.current.back())
+    act(() => result.current.openDetail('b'))
+    act(() => result.current.dismiss())
+    act(() => result.current.forward())
+    expect(result.current.overlay).toEqual({ kind: 'detail', key: 'a' })
+  })
 })
