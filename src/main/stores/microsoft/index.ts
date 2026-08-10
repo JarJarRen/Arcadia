@@ -5,9 +5,12 @@ import type { ExecFn } from '@main/platform/registry'
 import { readXboxAppPackages } from './gamingServices'
 import { readInstalledPackages, type InstalledPackage } from './packages'
 import { readStartAppIds } from './startApps'
-import { readOwnedProductIds } from './collections'
 import { readPlayedTitles, type PlayedTitle } from './titlehub'
-import { readCatalogCache, resolveProducts, type CatalogEntry } from './displayCatalog'
+import {
+  readCatalogCache,
+  resolveByPackageFamilyName,
+  type CatalogEntry
+} from './displayCatalog'
 import type { MicrosoftSession } from './session'
 import type { XboxToken } from './xbox'
 
@@ -29,8 +32,7 @@ export interface MicrosoftAdapterDeps {
   readXboxAppPackages?: (exec?: ExecFn) => Promise<string[]>
   readInstalledPackages?: (exec?: ExecFn) => Promise<Map<string, InstalledPackage>>
   readStartAppIds?: (exec?: ExecFn) => Promise<Map<string, string>>
-  readOwnedProductIds?: (token: XboxToken) => Promise<string[]>
-  resolveProducts?: (productIds: string[]) => Promise<CatalogEntry[]>
+  resolveByPackageFamilyName?: (packageFamilyNames: string[]) => Promise<CatalogEntry[]>
   readPlayedTitles?: (token: XboxToken) => Promise<PlayedTitle[]>
 }
 
@@ -54,9 +56,8 @@ export class MicrosoftAdapter implements StoreAdapter {
   private readonly readFamilies: NonNullable<MicrosoftAdapterDeps['readXboxAppPackages']>
   private readonly readPackages: NonNullable<MicrosoftAdapterDeps['readInstalledPackages']>
   private readonly readAumids: NonNullable<MicrosoftAdapterDeps['readStartAppIds']>
-  private readonly readOwned: NonNullable<MicrosoftAdapterDeps['readOwnedProductIds']>
   private readonly readPlayed: NonNullable<MicrosoftAdapterDeps['readPlayedTitles']>
-  private readonly resolve: NonNullable<MicrosoftAdapterDeps['resolveProducts']>
+  private readonly resolve: NonNullable<MicrosoftAdapterDeps['resolveByPackageFamilyName']>
 
   /**
    * Package family name → ProductId, for `installUri`.
@@ -78,13 +79,12 @@ export class MicrosoftAdapter implements StoreAdapter {
     this.readFamilies = deps.readXboxAppPackages ?? readXboxAppPackages
     this.readPackages = deps.readInstalledPackages ?? readInstalledPackages
     this.readAumids = deps.readStartAppIds ?? readStartAppIds
-    this.readOwned = deps.readOwnedProductIds ?? ((token) => readOwnedProductIds(token))
     this.readPlayed = deps.readPlayedTitles ?? ((token) => readPlayedTitles(token))
     this.resolve =
-      deps.resolveProducts ??
-      ((productIds): Promise<CatalogEntry[]> =>
-        resolveProducts(
-          productIds,
+      deps.resolveByPackageFamilyName ??
+      ((packageFamilyNames): Promise<CatalogEntry[]> =>
+        resolveByPackageFamilyName(
+          packageFamilyNames,
           this.config.catalogCachePath === undefined
             ? {}
             : { cachePath: this.config.catalogCachePath }
@@ -192,14 +192,28 @@ export class MicrosoftAdapter implements StoreAdapter {
   }
 
   /**
-   * The owned library, including games not installed here.
+   * The account's games, including ones not installed here.
    *
-   * Three sources, joined on the package family name. The entitlement
-   * service decides what is owned — a title in the history that it does not
-   * list is a Game Pass title, playable for now but not owned, and it
-   * appears through `scanInstalled` for as long as it is on disk. The
-   * catalogue supplies the names, the history the last-played dates and a
-   * name for anything the catalogue could not put one to.
+   * **This is the title history, not an ownership record, and the difference
+   * is not a shortcut.** The design called for the entitlement service to
+   * decide what is owned, so that a Game Pass title played but not bought
+   * would be left out. That turned out to be unbuildable: measured against
+   * the live services with a real account, `collections.mp.microsoft.com`
+   * is the *partner* API — a publisher asking whether a user owns *its*
+   * product — and it answers a well-formed empty list for a third party no
+   * matter how the request is shaped. The consumer equivalent,
+   * `inventory.xboxlive.com`, refuses any token that is not first-party.
+   * There is no ownership API an application like this can reach, so the
+   * choice was between the title history and an empty library for ever.
+   *
+   * What that costs, stated plainly: a game bought and never launched does
+   * not appear, because the history only knows what has been played; and a
+   * Game Pass title that has been played does appear, because nothing
+   * available can tell it from a purchase.
+   *
+   * The catalogue is still consulted, for what only it knows — the
+   * ProductId that `installUri` needs, and the ProductKind that keeps an
+   * application the account happens to have launched out of a game library.
    *
    * Signed out this is empty rather than an error: not being signed in is a
    * state, not a failure. Everything else throws, which `sync.ts` records as
@@ -212,36 +226,34 @@ export class MicrosoftAdapter implements StoreAdapter {
     const tokens = await this.session.tokens()
     if (tokens === undefined) return []
 
-    const productIds = await this.readOwned(tokens.marketplace)
-    if (productIds.length === 0) return []
+    const played = await this.readPlayed(tokens.xboxLive)
+    if (played.length === 0) return []
 
-    const catalog = await this.resolve(productIds)
+    // The catalogue classifies and identifies; it does not decide membership.
+    // A package it has never heard of is skipped by the lookup, and one it
+    // calls something other than a Game — the Xbox app itself, a media
+    // app — is dropped here.
+    const catalog = await this.resolve(played.map((title) => title.packageFamilyName))
     this.remember(catalog)
-
-    const history = new Map(
-      (await this.readPlayed(tokens.xboxLive)).map((title) => [title.packageFamilyName, title])
-    )
+    const products = new Map(catalog.map((entry) => [entry.packageFamilyName, entry]))
 
     const games: RawGame[] = []
-    for (const entry of catalog) {
-      const played = history.get(entry.packageFamilyName)
-      // The history names what the catalogue could not: a product with no
-      // localisation for the interface language comes back titleless, and
-      // dropping it would lose an owned game the user can see in the Xbox
-      // app. Iterating the catalogue and not the history is what keeps
-      // ownership a matter for the entitlement service alone — a played
-      // title nobody owns is a Game Pass title and is listed only while it
-      // is installed.
-      const name = entry.name !== '' ? entry.name : (played?.name ?? '')
-      if (name === '') continue
+    for (const title of played) {
+      const product = products.get(title.packageFamilyName)
+      if (product === undefined) continue
 
       games.push({
-        storeGameId: entry.packageFamilyName,
-        name,
+        storeGameId: title.packageFamilyName,
+        // The catalogue's title is the canonical one; the history's is the
+        // fallback for a product with no localisation in this language,
+        // which comes back titleless rather than absent.
+        name: product.name !== '' ? product.name : title.name,
+        // Whether a copy sits on this disk is `scanInstalled`'s answer, and
+        // `merge` in sync.ts lets the local scan win on exactly this field.
         installed: false,
         // Xbox exposes achievements and a date, never minutes. A fabricated
         // number would be worse than an empty field.
-        ...(played?.lastPlayed === undefined ? {} : { lastPlayed: played.lastPlayed })
+        ...(title.lastPlayed === undefined ? {} : { lastPlayed: title.lastPlayed })
       })
     }
     return games

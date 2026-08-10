@@ -292,7 +292,6 @@ export interface Strings {
       xboxAuthFailed: (reason: string) => string
       noXboxProfile: string
       childAccount: string
-      collectionsFailed: (reason: string) => string
       titleHistoryFailed: (reason: string) => string
       missingXuid: string
       catalogFailed: (reason: string) => string
@@ -613,8 +612,6 @@ const en: Strings = {
       childAccount:
         'This account is a child account and has to be added to a family ' +
         'before it can use Xbox Live.',
-      collectionsFailed: (reason) =>
-        `The owned Microsoft Store games could not be read: ${reason}`,
       titleHistoryFailed: (reason) => `The Xbox title history could not be read: ${reason}`,
       missingXuid:
         'Xbox Live did not return a player ID for this account, so the title history ' +
@@ -953,8 +950,6 @@ const de: Strings = {
       childAccount:
         'Dieses Konto ist ein Kinderkonto und muss erst einer Familie ' +
         'hinzugefügt werden, bevor es Xbox Live nutzen kann.',
-      collectionsFailed: (reason) =>
-        `Die gekauften Microsoft-Store-Spiele konnten nicht gelesen werden: ${reason}`,
       titleHistoryFailed: (reason) =>
         `Der Xbox-Spielverlauf konnte nicht gelesen werden: ${reason}`,
       missingXuid:

@@ -4,15 +4,6 @@ import { defaultHttp, type HttpFn } from './http'
 
 const ENDPOINT = 'https://displaycatalog.mp.microsoft.com/v7.0/products'
 
-/**
- * Products per request.
- *
- * The service takes the ids in the query string, so an unbatched library
- * would build a URL of unbounded length. Twenty is comfortably inside every
- * limit involved.
- */
-const BATCH_SIZE = 20
-
 export interface CatalogEntry {
   productId: string
   /**
@@ -43,56 +34,74 @@ interface Deps {
 }
 
 /**
- * Names and packages for owned products.
+ * The Store product behind each package, by package family name.
  *
- * Needs no authentication at all, which is why it is separate from the two
- * token-bearing modules: the entitlement service says *what* is owned, and
- * this says what any of it is called.
+ * Needs no authentication at all, which is why it is separate from the
+ * token-bearing modules: the title history says which packages the account
+ * has, and this says what each one is in the Store.
+ *
+ * Two things come back that nothing else can supply. The ProductId, which is
+ * the only identifier `ms-windows-store://pdp/` accepts, so without this
+ * there is no Install. And the ProductKind, which is how an application that
+ * happens to be in a game library gets left out — the title history reports
+ * what was launched and does not classify it.
+ *
+ * One request per package, because `alternateId` takes a single value; the
+ * `bigIds` form that batched twenty at a time only accepts ProductIds, which
+ * is the thing we are trying to obtain. The cache is what keeps that from
+ * mattering: a library only pays it once.
  */
-export async function resolveProducts(
-  productIds: string[],
+export async function resolveByPackageFamilyName(
+  packageFamilyNames: string[],
   deps: Deps = {}
 ): Promise<CatalogEntry[]> {
-  if (productIds.length === 0) return []
+  if (packageFamilyNames.length === 0) return []
 
   const cached =
     deps.cachePath === undefined ? [] : await readCatalogCache(deps.cachePath)
-  const known = new Map(cached.map((entry) => [entry.productId, entry]))
+  const known = new Map(cached.map((entry) => [entry.packageFamilyName, entry]))
 
-  const missing = productIds.filter((id) => !known.has(id))
+  const missing = packageFamilyNames.filter((name) => !known.has(name))
   if (missing.length > 0) {
-    for (const entry of await fetchProducts(missing, deps)) {
-      known.set(entry.productId, entry)
+    for (const entry of await lookUpPackages(missing, deps)) {
+      known.set(entry.packageFamilyName, entry)
     }
     if (deps.cachePath !== undefined) await writeCatalogCache(deps.cachePath, [...known.values()])
   }
 
   // Only what was asked for, in the order it was asked for.
   const resolved: CatalogEntry[] = []
-  for (const id of productIds) {
-    const entry = known.get(id)
+  for (const name of packageFamilyNames) {
+    const entry = known.get(name)
     if (entry !== undefined) resolved.push(entry)
   }
   return resolved
 }
 
-async function fetchProducts(productIds: string[], deps: Deps): Promise<CatalogEntry[]> {
+async function lookUpPackages(
+  packageFamilyNames: string[],
+  deps: Deps
+): Promise<CatalogEntry[]> {
   const http = deps.http ?? defaultHttp
   const locale = deps.locale ?? t().format.locale
   const entries: CatalogEntry[] = []
 
-  for (let start = 0; start < productIds.length; start += BATCH_SIZE) {
-    const batch = productIds.slice(start, start + BATCH_SIZE)
+  for (const packageFamilyName of packageFamilyNames) {
     const query = new URLSearchParams({
-      bigIds: batch.join(','),
       market: 'US',
       languages: locale,
-      fieldsTemplate: 'details'
+      alternateId: 'PackageFamilyName',
+      value: packageFamilyName
     })
 
-    const response = await http(`${ENDPOINT}?${query.toString()}`, {
+    const response = await http(`${ENDPOINT}/lookup?${query.toString()}`, {
       headers: { Accept: 'application/json' }
     })
+    // A package the catalogue has never heard of answers 404. That is a
+    // gap in what can be shown, not a failure of the scan, so it is skipped
+    // rather than thrown — one delisted title must not cost the whole
+    // library.
+    if (response.status === 404) continue
     if (!response.ok) {
       throw new Error(t().stores.microsoft.catalogFailed(String(response.status)))
     }
@@ -102,7 +111,6 @@ async function fetchProducts(productIds: string[], deps: Deps): Promise<CatalogE
         ProductId?: unknown
         ProductKind?: unknown
         LocalizedProperties?: Array<{ ProductTitle?: unknown }>
-        Properties?: { PackageFamilyName?: unknown }
       }>
     }
 
@@ -112,15 +120,19 @@ async function fetchProducts(productIds: string[], deps: Deps): Promise<CatalogE
 
       const productId = product.ProductId
       const name = product.LocalizedProperties?.[0]?.ProductTitle
-      const packageFamilyName = product.Properties?.PackageFamilyName
       if (typeof productId !== 'string' || productId === '') continue
-      // No package: a console title, which cannot run on this machine.
-      if (typeof packageFamilyName !== 'string' || packageFamilyName === '') continue
 
-      // A missing title is not a reason to drop the product. `languages` is
-      // the interface language, and a product with no localisation for it
-      // comes back with an empty LocalizedProperties — dropping it lost an
-      // owned game outright, where the title history can still name it.
+      // The package name is the one we asked with, not one read back out of
+      // the answer. The lookup form does not return `Properties` at all —
+      // that came with the `bigIds` query's `fieldsTemplate=details` — so
+      // reading it back dropped every single product on the floor. It was
+      // redundant besides: a lookup by package family name can only answer
+      // about that package.
+      //
+      // A missing title is not a reason to drop the product either.
+      // `languages` is the interface language, and a product with no
+      // localisation for it comes back with an empty LocalizedProperties;
+      // the title history can still name it.
       entries.push({
         productId,
         name: typeof name === 'string' ? name : '',
@@ -134,9 +146,9 @@ async function fetchProducts(productIds: string[], deps: Deps): Promise<CatalogE
 /**
  * The cache on its own.
  *
- * Read by `installUri` as well as by `resolveProducts`: opening a product
- * page needs the ProductId, and the game row carries only the package
- * family name.
+ * Read by `installUri` as well as by `resolveByPackageFamilyName`: opening a
+ * product page needs the ProductId, and the game row carries only the
+ * package family name.
  */
 export async function readCatalogCache(cachePath: string): Promise<CatalogEntry[]> {
   try {
