@@ -240,6 +240,11 @@ export interface Strings {
     databaseUnusable: (detail: string) => string
   }
 
+  freebies: {
+    /** e.g. "GamerPower's list could not be fetched." */
+    sourceFailed: (source: string) => string
+  }
+
   stores: {
     steam: {
       notFound: string
@@ -522,6 +527,10 @@ const en: Strings = {
     databaseUnusable: (detail) =>
       `The database could not be opened (${detail}). Arcadia is running, but ` +
       'nothing it finds will be kept when you close it.'
+  },
+
+  freebies: {
+    sourceFailed: (source) => `${source}'s list could not be fetched.`
   },
 
   stores: {
@@ -854,6 +863,10 @@ const de: Strings = {
     databaseUnusable: (detail) =>
       `Die Datenbank konnte nicht geöffnet werden (${detail}). Arcadia läuft, ` +
       'aber nichts davon wird beim Beenden gespeichert.'
+  },
+
+  freebies: {
+    sourceFailed: (source) => `Die Liste von ${source} konnte nicht geladen werden.`
   },
 
   stores: {
