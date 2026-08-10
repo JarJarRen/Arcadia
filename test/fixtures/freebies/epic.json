@@ -89,6 +89,27 @@
               ],
               "upcomingPromotionalOffers": []
             }
+          },
+          {
+            "title": "Already Ended",
+            "id": "c5",
+            "namespace": "ns-ended",
+            "keyImages": [],
+            "catalogNs": { "mappings": [{ "pageSlug": "already-ended", "pageType": "productHome" }] },
+            "promotions": {
+              "promotionalOffers": [
+                {
+                  "promotionalOffers": [
+                    {
+                      "startDate": "2026-08-01T15:00:00.000Z",
+                      "endDate": "2026-08-05T15:00:00.000Z",
+                      "discountSetting": { "discountType": "PERCENTAGE", "discountPercentage": 0 }
+                    }
+                  ]
+                }
+              ],
+              "upcomingPromotionalOffers": []
+            }
           }
         ]
       }

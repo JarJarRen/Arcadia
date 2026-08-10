@@ -52,6 +52,12 @@ describe('parseEpicFreebies', () => {
     expect(slugless?.claimUrl).toBe('https://store.epicgames.com/')
   })
 
+  it('drops a promotion that has already ended', async () => {
+    // A stale response must not resurrect a promotion that has already closed.
+    const rows = parseEpicFreebies(await fixture(), NOW)
+    expect(rows.map((row) => row.title)).not.toContain('Already Ended')
+  })
+
   it('survives a response that is not shaped as expected', () => {
     // The endpoint is undocumented; a shape change must degrade to an empty
     // list, never to a throw that takes the other two sources down with it.
