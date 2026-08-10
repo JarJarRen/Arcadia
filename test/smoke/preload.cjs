@@ -213,9 +213,25 @@ contextBridge.exposeInMainWorld('arcadia', {
   signInToMicrosoft: async () => ({ ok: false, error: 'The Microsoft Store only exists on Windows.' }),
   signOutOfMicrosoft: async () => undefined,
   onMicrosoftAuthChanged: () => () => undefined,
-  // No freebies in the smoke stub: an empty list keeps the screen this
-  // test does not open from having anything to render.
-  getFreebies: async () => ({ current: [], upcoming: [], failures: [] }),
+  // One current row, so the free-games page — opened and measured by the
+  // smoke test — has something to render.
+  getFreebies: async () => ({
+    current: [
+      {
+        id: 'epic:smoke test game',
+        storeId: 'epic',
+        title: 'Smoke Test Game',
+        kind: 'game',
+        storeGameId: 'smoke-test-game',
+        source: 'epic',
+        claim: 'unclaimed',
+        endsAt: Date.now() + 172800000
+      }
+    ],
+    upcoming: [],
+    fetchedAt: Date.now(),
+    failures: []
+  }),
   refreshFreebies: async () => ({ current: [], upcoming: [], failures: [] }),
   claimFreebie: async () => ({ ok: true }),
   onFreebiesChanged: () => () => undefined

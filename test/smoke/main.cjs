@@ -102,6 +102,21 @@ function check(result) {
         'or the test address is out of date.'
     )
   }
+
+  // The free-games grid. A closed overlay and an open-but-empty one are
+  // different bugs — the first means the toolbar button did nothing, the
+  // second means the page itself is broken — so they get different
+  // messages rather than both reading as "no cards".
+  if (!result.freebiesOpened) {
+    problems.push('The freebies button did nothing — the free-games page never opened.')
+  } else if (result.freebieCount === 0) {
+    problems.push('The free-games page rendered no cards.')
+  } else if (result.freebieHeight < MIN_CARD_HEIGHT) {
+    problems.push(
+      `Free-games card height ${result.freebieHeight}px is below ${MIN_CARD_HEIGHT}px — ` +
+        'the cards have collapsed.'
+    )
+  }
   return problems
 }
 
@@ -174,13 +189,34 @@ app.whenReady().then(async () => {
   // React has to run once before anything can be measured.
   await new Promise((resolve) => setTimeout(resolve, 1500))
 
-  const result = await win.webContents.executeJavaScript(`(() => {
+  const result = await win.webContents.executeJavaScript(`(async () => {
     const card = document.querySelector('.card')
     const art = card && card.querySelector('.card__art')
     const title = card && card.querySelector('.card__title')
     const button = card && card.querySelector('.button--primary')
     const box = (el) => (el ? el.getBoundingClientRect() : { height: 0, width: 0 })
     const sw = card && card.querySelector('.storeswitch')
+
+    // The free-games grid. Measured for the same reason as the library
+    // tiles above: a CSS bug once collapsed all 193 of them to 6 pixels
+    // with every unit test green, and jsdom computes no layout.
+    //
+    // Whether the overlay opened at all is checked separately from whether
+    // it holds any cards. A button that silently does nothing and a page
+    // that opens onto an empty grid are different bugs; a bare
+    // \`cardCount === 0\` could not tell them apart, and would blame "no
+    // cards" on a click that never landed.
+    document.querySelector('.toolbar__freebies')?.click()
+    let freebiesOpened = false
+    let freebie = null
+    for (let waited = 0; waited < 2000; waited += 50) {
+      freebiesOpened = document.querySelector('.freebies') !== null
+      freebie = document.querySelector('.freebie')
+      if (freebie !== null) break
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    const freebieCard = freebie === null ? null : freebie.getBoundingClientRect()
+
     return {
       stylesheets: document.styleSheets.length,
       cardCount: document.querySelectorAll('.card').length,
@@ -230,7 +266,11 @@ app.whenReady().then(async () => {
             ? installed.querySelector('.badge--shared') !== null
             : true
         }
-      })()
+      })(),
+
+      freebiesOpened,
+      freebieCount: document.querySelectorAll('.freebie').length,
+      freebieHeight: freebieCard === null ? 0 : Math.round(freebieCard.height)
     }
   })()`)
 
