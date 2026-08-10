@@ -247,4 +247,89 @@ describe('FreebieService', () => {
     const steamCall = fetchFn.mock.calls.find(([url]) => url.includes('steampowered'))
     expect(steamCall?.[0]).toContain('l=english')
   })
+
+  describe('an offline machine that has never fetched successfully', () => {
+    function allDown() {
+      return router({
+        epicgames: async () => new Error('down'),
+        steampowered: async () => new Error('down'),
+        gamerpower: async () => new Error('down')
+      })
+    }
+
+    it('attempts once, then stays quiet inside the TTL instead of re-hitting the network', async () => {
+      // fetchedAt never gets written on this machine, so the TTL guard must
+      // read attempted-at instead — otherwise "last !== undefined" is
+      // forever false and every call re-fetches.
+      const fetchFn = allDown()
+      const svc = service(fetchFn)
+      await svc.refresh(NOW, false)
+      expect(fetchFn.mock.calls.length).toBe(3)
+
+      await svc.refresh(NOW + 60_000, false)
+      expect(fetchFn.mock.calls.length).toBe(3)
+    })
+
+    it('returns true on that first failing refresh, because failures went from none to some', async () => {
+      const svc = service(allDown())
+      expect(await svc.refresh(NOW, false)).toBe(true)
+    })
+
+    it('returns false on a second consecutive total failure once the TTL has passed', async () => {
+      // Same three messages as last time: nothing new for the renderer to
+      // show, so no second event should fire.
+      const svc = service(allDown())
+      await svc.refresh(NOW, false)
+      expect(await svc.refresh(NOW + 7 * 3_600_000, false)).toBe(false)
+    })
+
+    it('returns true once a source recovers, because the cache gets written again', async () => {
+      const options = {
+        repo,
+        settings,
+        locale: () => ({ language: 'en', country: 'US' }),
+        fetchFn: allDown()
+      }
+      const svc = new FreebieService(options)
+      await svc.refresh(NOW, false)
+      expect(svc.getList([...STORE_IDS], NOW).failures).toHaveLength(3)
+
+      options.fetchFn = router()
+      expect(await svc.refresh(NOW + 7 * 3_600_000, false)).toBe(true)
+      expect(svc.getList([...STORE_IDS], NOW + 7 * 3_600_000).failures).toEqual([])
+    })
+
+    it('leaves fetchedAt unset after a total failure, and sets it only once a fetch actually succeeds', async () => {
+      const svc = service(allDown())
+      await svc.refresh(NOW, false)
+      expect(svc.getList([...STORE_IDS], NOW).fetchedAt).toBeUndefined()
+
+      // A fresh instance sharing the same settings/repo, standing in for the
+      // next successful attempt on this machine.
+      const recovered = service(router())
+      await recovered.refresh(NOW + 1000, true)
+      expect(recovered.getList([...STORE_IDS], NOW + 1000).fetchedAt).toBe(NOW + 1000)
+    })
+
+    it('still lets force bypass the TTL guard even though attempted-at was just written', async () => {
+      const fetchFn = router()
+      const svc = service(fetchFn)
+      await svc.refresh(NOW, false)
+      const callsAfterFirst = fetchFn.mock.calls.length
+
+      await svc.refresh(NOW + 1000, true)
+      expect(fetchFn.mock.calls.length).toBeGreaterThan(callsAfterFirst)
+    })
+
+    it('treats an unparseable stored attempted-at as unset, so an unforced call still fetches', async () => {
+      // Mirrors the existing fetchedAt garbage-value test: the settings
+      // table is a plain file that a user or an old app version could have
+      // written anything into.
+      settings.set('freebies-attempted-at', 'not-a-number')
+      const fetchFn = router()
+      const svc = service(fetchFn)
+      expect(await svc.refresh(NOW, false)).toBe(true)
+      expect(fetchFn.mock.calls.length).toBeGreaterThan(0)
+    })
+  })
 })
