@@ -12,7 +12,34 @@ const alias = {
   '@renderer': resolve(__dirname, 'src/renderer')
 }
 
-export default defineConfig({
+/**
+ * Whether the handful of tests that start a real process may run.
+ *
+ * Three of them shell out for real — EA's WMI query, `Get-StartApps`, and the
+ * launcher's own spawn — to catch what a stub cannot: Electron and Node do
+ * not offer the same crypto, and a command that parses fine can still be
+ * refused by the shell that runs it.
+ *
+ * The cost is that Windows pops a console window for each one. `exec` runs
+ * its command through `cmd.exe`, and PowerShell then opens a console of its
+ * own, so `windowsHide` — which all three already pass — cannot suppress
+ * them. Windows flashing across the screen during every `npm test` is a poor
+ * trade for a developer running the suite dozens of times a day.
+ *
+ * So they are off by default and on in `--mode full`, which
+ * `npm run test:coverage` uses. That is not a way of quietly dropping them:
+ * CI runs `npm test` on Linux, where there is no PowerShell for them to
+ * exercise, and `npm run test:coverage` on Windows, where they matter — so
+ * the platform that can actually run them still does, on every push.
+ *
+ * Set per project rather than only here, for the same reason `alias` and
+ * `restoreMocks` are: a project inherits neither from the top level.
+ */
+const subprocessTests = (mode: string): Record<string, string> => ({
+  ARCADIA_SUBPROCESS_TESTS: mode === 'full' ? '1' : ''
+})
+
+export default defineConfig(({ mode }) => ({
   test: {
     // Every spy and fn mock is restored to its original implementation
     // after each test, so a stub set up in one test (e.g. `window.confirm`)
@@ -41,7 +68,8 @@ export default defineConfig({
           name: 'node',
           environment: 'node',
           include: ['test/**/*.test.ts'],
-          restoreMocks: true
+          restoreMocks: true,
+          env: subprocessTests(mode)
         }
       },
       {
@@ -52,7 +80,8 @@ export default defineConfig({
           environment: 'jsdom',
           include: ['test/**/*.test.tsx'],
           setupFiles: ['test/renderer/setup.ts'],
-          restoreMocks: true
+          restoreMocks: true,
+          env: subprocessTests(mode)
         }
       }
     ],
@@ -78,4 +107,4 @@ export default defineConfig({
     }
   },
   resolve: { alias }
-})
+}))

@@ -9,6 +9,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { readStartAppIds } from '@main/stores/microsoft/startApps'
+import { RUNS_SUBPROCESSES } from '../../subprocess'
 
 const JSON_ARRAY = JSON.stringify([
   { Name: 'Roblox', AppID: 'ROBLOXCORPORATION.ROBLOX_55nm5eh3cm0pr!App' },
@@ -59,7 +60,11 @@ describe('readStartAppIds', () => {
     expect(ids.size).toBe(0)
   })
 
-  it('reads real AUMIDs through the default PowerShell runner', async () => {
+  it.skipIf(!RUNS_SUBPROCESSES)('reads real AUMIDs through the default PowerShell runner', async () => {
+    // Skipped unless `--mode full`: PowerShell opens a console window that no
+    // `windowsHide` can suppress. `npm run test:coverage` runs it, which is
+    // what Windows CI uses. See test/subprocess.ts.
+    //
     // The only test in this file that exercises `defaultExec` rather than an
     // injected fake — it runs the real Get-StartApps command against this
     // machine's own Start menu. The exact entries are unverifiable (they
