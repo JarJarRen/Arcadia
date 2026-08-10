@@ -93,7 +93,7 @@ describe('EA hardware fingerprint', () => {
     expect(await readHardwareString(async () => 'baseBoardManufacturer=')).toBeUndefined()
   })
 
-  it.skipIf(!RUNS_SUBPROCESSES)('reads the string through the real PowerShell/WMI runner by default', async () => {
+  it.skipIf(!RUNS_SUBPROCESSES || process.platform !== 'win32')('reads the string through the real PowerShell/WMI runner by default', async () => {
     // The only test in this file that exercises `defaultExec` rather than
     // an injected fake — it runs the real HARDWARE_COMMAND against this
     // machine's own WMI data. The exact values are unverifiable (they
@@ -104,6 +104,12 @@ describe('EA hardware fingerprint', () => {
     // Skipped unless `--mode full`: PowerShell opens a console window that
     // no `windowsHide` can suppress. `npm run test:coverage` runs it, which
     // is what Windows CI uses. See test/subprocess.ts.
+    //
+    // And Windows-only on top of that. `RUNS_SUBPROCESSES` says whether a
+    // real process may be started, not whether this particular one exists:
+    // elsewhere there is no PowerShell, `readHardwareString` answers
+    // `undefined` exactly as documented, and the assertions below would
+    // report a broken fingerprint on a machine that simply is not Windows.
     const value = await readHardwareString()
     expect(value).toBeDefined()
     expect(value?.endsWith(';')).toBe(true)
