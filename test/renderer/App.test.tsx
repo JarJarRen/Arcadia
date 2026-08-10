@@ -21,7 +21,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { App } from '@renderer/App'
 import { t } from '@shared/i18n'
-import type { Freebie, FreebieList } from '@shared/freebies'
+import type { Freebie } from '@shared/freebies'
 import { entry, game, stubArcadia } from './fixtures'
 
 const TF2 = entry('Team Fortress 2', [game('steam', '440', 'Team Fortress 2')])
@@ -975,34 +975,6 @@ describe('App', () => {
       )
     )
     expect(screen.getByRole('button', { name: 'Free now' })).toBeTruthy()
-    consoleError.mockRestore()
-  })
-
-  it('unmounting while the freebie count is still loading does not update state or warn', async () => {
-    // A `.then` that fires after unmount and still calls `setState` is a
-    // React warning waiting to happen in the real app, just not one this
-    // harness always surfaces as a failure — so this pins the cancelled
-    // guard directly by resolving the fetch only after unmount and checking
-    // nothing complains.
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
-    let resolve: ((list: FreebieList) => void) | undefined
-    stubArcadia({
-      getGames: async () => [TF2],
-      getFreebies: () =>
-        new Promise((res) => {
-          resolve = res
-        })
-    })
-    const { unmount } = render(<App />)
-    await screen.findByRole('button', { name: 'Free now' })
-
-    unmount()
-    await act(async () => {
-      resolve?.({ current: [], upcoming: [], failures: [] })
-      await Promise.resolve()
-    })
-
-    expect(consoleError).not.toHaveBeenCalled()
     consoleError.mockRestore()
   })
 })

@@ -180,7 +180,7 @@ export function LibraryToolbar(props: Props): ReactElement {
 
       <button
         type="button"
-        className="toolbar__freebies"
+        className="button toolbar__freebies"
         onClick={props.onOpenFreebies}
       >
         {props.freebieCount > 0
