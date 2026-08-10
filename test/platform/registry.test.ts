@@ -196,12 +196,18 @@ describe('readRegistryTree', () => {
   })
 })
 
-describe('the default runner', () => {
+describe.skipIf(process.platform !== 'win32')('the default runner', () => {
   // The only tests in this file that exercise `defaultExec` rather than an
   // injected fake. This module only ever runs on Windows, so a real
   // `reg.exe` call against a key that is guaranteed to exist on any Windows
   // installation is the honest way to pin it — a mock here would just
   // re-assert that `promisify` wires up the way the Node docs say it does.
+  //
+  // Windows-only for exactly that reason. Elsewhere there is no `reg.exe`,
+  // `exec` rejects, and `readRegistryValue` answers `undefined` by design —
+  // so the first test fails and the second one passes without proving
+  // anything, both on a machine with nothing wrong with it. Neither outcome
+  // says a word about the parsing this file exists to protect.
   it('reads a real, always-present registry value through reg.exe', async () => {
     const value = await readRegistryValue(
       'HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion',

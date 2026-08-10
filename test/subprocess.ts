@@ -15,5 +15,12 @@
  * So they are skipped unless vitest runs in `--mode full`, which
  * `npm run test:coverage` uses. See `vitest.config.ts` for how that reaches
  * here, and why this does not amount to quietly dropping them.
+ *
+ * This answers "may a process be started", never "does *this* command
+ * exist". A test that runs `reg.exe`, PowerShell or any other Windows
+ * binary needs `process.platform === 'win32'` as well — in `--mode full` on
+ * Linux this flag is on, the command is missing, and the call under test
+ * returns its documented "cannot be had" answer, which reads as a failure
+ * on a machine that is merely not Windows.
  */
 export const RUNS_SUBPROCESSES = process.env.ARCADIA_SUBPROCESS_TESTS === '1'
