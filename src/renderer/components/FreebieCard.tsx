@@ -27,7 +27,10 @@ function deadline(freebie: Freebie, now: number): string | undefined {
   // Under a day is "today" rather than "in 1 day": the rounding would
   // otherwise report six hours as a whole day of breathing room.
   if (left < DAY_MS) return t().freebies.endsToday
-  return t().freebies.endsIn(Math.ceil(left / DAY_MS))
+  // Floor, not ceil: rounding up would tell someone with 25 hours left
+  // that they have two days, and overstating time left on a deadline is
+  // the direction that costs them the offer.
+  return t().freebies.endsIn(Math.floor(left / DAY_MS))
 }
 
 function kindLabel(freebie: Freebie): string {
@@ -48,10 +51,15 @@ function ClaimButton({ freebie, onClaim }: Omit<Props, 'now'>): ReactElement {
     )
   }
 
+  // A pending row is only ever written with an openedAt (see
+  // src/main/db/freebies.ts), but the type allows its absence. Without a
+  // recorded time there is nothing truthful to say about when it was
+  // opened, so fall back to the same "not yet opened" label the unclaimed
+  // branch uses rather than inventing a clock time.
   const label =
-    freebie.claim === 'pending'
+    freebie.claim === 'pending' && freebie.openedAt !== undefined
       ? strings.pending(
-          new Date(freebie.openedAt ?? 0).toLocaleTimeString(t().format.locale, {
+          new Date(freebie.openedAt).toLocaleTimeString(t().format.locale, {
             hour: '2-digit',
             minute: '2-digit'
           })

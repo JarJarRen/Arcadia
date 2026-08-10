@@ -11,6 +11,7 @@ import { FreebieCard } from '@renderer/components/FreebieCard'
 import type { Freebie } from '@shared/freebies'
 
 const NOW = Date.parse('2026-08-10T12:00:00.000Z')
+const DAY_MS = 86_400_000
 
 function freebie(overrides: Partial<Freebie> = {}): Freebie {
   return {
@@ -128,13 +129,83 @@ describe('FreebieCard', () => {
     expect(screen.getByText('Loot')).toBeTruthy()
   })
 
-  it('still offers to open again when no opened time was recorded', () => {
+  it('falls back to the unclaimed label when no opened time was recorded', () => {
     // Defensive fallback: a pending row is only ever written with an
-    // openedAt, but the type allows its absence and the button must not
-    // crash rendering a time out of nothing.
+    // openedAt, but the type allows its absence. There is nothing truthful
+    // to say about when it was opened, so this must read exactly like the
+    // unclaimed case rather than inventing a clock time.
+    render(<FreebieCard freebie={freebie({ claim: 'pending' })} now={NOW} onClaim={vi.fn()} />)
+    const button = screen.getByRole('button', { name: /Claim in Epic/ })
+    expect(button).toBeTruthy()
+    expect(button.textContent).not.toMatch(/\d{1,2}:\d{2}/)
+  })
+
+  it('shows exactly the opened time and nothing else when a claim is genuinely pending', () => {
+    // The old bug was masked by a test that only checked for "open again"
+    // as a substring, which passes even when nonsense precedes it.
     render(
-      <FreebieCard freebie={freebie({ claim: 'pending' })} now={NOW} onClaim={vi.fn()} />
+      <FreebieCard
+        freebie={freebie({ claim: 'pending', openedAt: NOW - 60_000 })}
+        now={NOW}
+        onClaim={vi.fn()}
+      />
     )
-    expect(screen.getByRole('button', { name: /open again/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /^Opened \d{1,2}:\d{2} · open again$/ })).toBeTruthy()
+  })
+
+  it('says today just under the day boundary', () => {
+    render(
+      <FreebieCard
+        freebie={freebie({ endsAt: NOW + DAY_MS - 1 })}
+        now={NOW}
+        onClaim={vi.fn()}
+      />
+    )
+    expect(screen.getByText(/ends today/)).toBeTruthy()
+  })
+
+  it('says tomorrow at exactly one day left', () => {
+    // The < DAY_MS guard only catches strictly less than a day; at exactly
+    // 24h left the floor is a whole 1, so this is the tomorrow case, not today.
+    render(
+      <FreebieCard freebie={freebie({ endsAt: NOW + DAY_MS })} now={NOW} onClaim={vi.fn()} />
+    )
+    expect(screen.getByText(/ends tomorrow/)).toBeTruthy()
+  })
+
+  it('says tomorrow just over one day left', () => {
+    render(
+      <FreebieCard
+        freebie={freebie({ endsAt: NOW + DAY_MS + 1 })}
+        now={NOW}
+        onClaim={vi.fn()}
+      />
+    )
+    expect(screen.getByText(/ends tomorrow/)).toBeTruthy()
+  })
+
+  it('says tomorrow just under two days left, not two days', () => {
+    render(
+      <FreebieCard
+        freebie={freebie({ endsAt: NOW + 2 * DAY_MS - 1 })}
+        now={NOW}
+        onClaim={vi.fn()}
+      />
+    )
+    expect(screen.getByText(/ends tomorrow/)).toBeTruthy()
+  })
+
+  it('says 2 days at exactly two days left', () => {
+    render(
+      <FreebieCard freebie={freebie({ endsAt: NOW + 2 * DAY_MS })} now={NOW} onClaim={vi.fn()} />
+    )
+    expect(screen.getByText(/ends in 2 days/)).toBeTruthy()
+  })
+
+  it('says today for a deadline that has already passed', () => {
+    render(
+      <FreebieCard freebie={freebie({ endsAt: NOW - 60_000 })} now={NOW} onClaim={vi.fn()} />
+    )
+    expect(screen.getByText(/ends today/)).toBeTruthy()
   })
 })
