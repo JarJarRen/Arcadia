@@ -2,15 +2,20 @@ import type { FreebieKind, RawFreebie } from '@shared/freebies'
 import type { StoreId } from '@shared/types'
 import type { FetchFn } from '@main/metadata/steamAppList'
 
+// Unfiltered, rather than the platform- or type-filtered variants the API
+// also offers: Arcadia already does its own store mapping and kind
+// filtering, and the filtered variants would have to be requested once per
+// platform to get the same coverage.
 const ENDPOINT = 'https://www.gamerpower.com/api/giveaways'
 
 /**
  * The aggregator's platform names, mapped onto Arcadia's stores.
  *
- * Order matters: the field is a comma-separated string and "Epic Games
- * Store" contains no other key, but a longer name must be tested before a
- * shorter one it contains. Anything unmapped — GOG, itch.io, DRM-free — is
- * dropped, because Arcadia can neither deep-link nor confirm it.
+ * The field is a comma-separated string matched by substring, and the first
+ * match wins. The table is ordered most-specific-first as a guard against
+ * a future entry whose key is a substring of one already here. Anything
+ * unmapped — GOG, itch.io, DRM-free — is dropped, because Arcadia can
+ * neither deep-link nor confirm it.
  */
 const PLATFORMS: ReadonlyArray<[string, StoreId]> = [
   ['epic games store', 'epic'],

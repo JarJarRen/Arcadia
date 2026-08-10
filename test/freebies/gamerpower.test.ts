@@ -90,9 +90,59 @@ describe('parseGamerPowerFreebies', () => {
     expect(parseGamerPowerFreebies(null, NOW)).toEqual([])
     expect(parseGamerPowerFreebies(['nonsense'], NOW)).toEqual([])
   })
+
+  it('drops an active, mapped entry with no title', () => {
+    // Reaches the title guard specifically: status and platform both pass,
+    // so this fails on the missing title rather than on an earlier check.
+    const rows = parseGamerPowerFreebies(
+      [
+        {
+          id: 7,
+          open_giveaway_url: 'https://www.gamerpower.com/open/no-title',
+          type: 'Game',
+          platforms: 'PC, Steam',
+          status: 'Active'
+        }
+      ],
+      NOW
+    )
+    expect(rows).toEqual([])
+  })
+
+  it('drops an active, mapped entry with no giveaway URL', () => {
+    // Reaches the URL guard specifically: status, title and platform all
+    // pass, so this fails on the missing URL rather than on an earlier check.
+    const rows = parseGamerPowerFreebies(
+      [
+        {
+          id: 8,
+          title: 'No URL Game',
+          type: 'Game',
+          platforms: 'PC, Steam',
+          status: 'Active'
+        }
+      ],
+      NOW
+    )
+    expect(rows).toEqual([])
+  })
 })
 
 describe('fetchGamerPowerFreebies', () => {
+  it('requests the giveaways endpoint and returns the parsed rows', async () => {
+    const seen: string[] = []
+    const json = await fixture()
+    const rows = await fetchGamerPowerFreebies({
+      now: NOW,
+      fetchFn: async (url) => {
+        seen.push(url)
+        return { ok: true, status: 200, json: async () => json }
+      }
+    })
+    expect(seen[0]).toBe('https://www.gamerpower.com/api/giveaways')
+    expect(rows.find((row) => row.title === 'Ubisoft Giveaway Game')).toBeDefined()
+  })
+
   it('throws when the endpoint refuses', async () => {
     await expect(
       fetchGamerPowerFreebies({
