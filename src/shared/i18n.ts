@@ -243,8 +243,36 @@ export interface Strings {
   }
 
   freebies: {
-    /** e.g. "GamerPower's list could not be fetched." */
+    /** The toolbar button. */
+    title: string
+    /** e.g. "Free now · 3" — the count is of unclaimed current offers. */
+    buttonWithCount: (count: number) => string
+    currentHeading: string
+    upcomingHeading: string
+    /** Shown in place of the list when there is nothing free anywhere. */
+    empty: string
+    /** Shown when every source failed and there is no cache either. */
+    unavailable: string
+    refresh: string
+    /** e.g. "as of 10 Aug, 14:02" */
+    asOf: (when: string) => string
     sourceFailed: (source: string) => string
+    kind: { all: string; game: string; dlc: string; loot: string }
+    /** e.g. "ends in 2 days" */
+    endsIn: (days: number) => string
+    endsToday: string
+    /** e.g. "from 14 August" */
+    startsOn: (date: string) => string
+    claim: {
+      /** e.g. "Claim in Epic" */
+      inStore: (store: string) => string
+      inBrowser: string
+      /** e.g. "Opened 14:32 · open again" */
+      pending: (time: string) => string
+      confirmed: string
+      /** The tooltip on a pending row. */
+      pendingHint: string
+    }
   }
 
   stores: {
@@ -533,7 +561,27 @@ const en: Strings = {
   },
 
   freebies: {
-    sourceFailed: (source) => `${source}'s list could not be fetched.`
+    title: 'Free now',
+    buttonWithCount: (count: number) => `Free now · ${count}`,
+    currentHeading: 'Free to keep',
+    upcomingHeading: 'Coming soon',
+    empty: 'Nothing is free to keep in your stores right now.',
+    unavailable: 'The free-games lists could not be reached.',
+    refresh: 'Refresh',
+    asOf: (when: string) => `as of ${when}`,
+    sourceFailed: (source: string) => `${source}'s list could not be fetched.`,
+    kind: { all: 'All', game: 'Games', dlc: 'DLC', loot: 'Loot' },
+    endsIn: (days: number) => (days === 1 ? 'ends tomorrow' : `ends in ${days} days`),
+    endsToday: 'ends today',
+    startsOn: (date: string) => `from ${date}`,
+    claim: {
+      inStore: (store: string) => `Claim in ${store}`,
+      inBrowser: 'Open in browser',
+      pending: (time: string) => `Opened ${time} · open again`,
+      confirmed: '✓ In your library',
+      pendingHint:
+        'Arcadia opened the store page. It marks this as claimed once the game turns up in a scan.'
+    }
   },
 
   stores: {
@@ -870,7 +918,27 @@ const de: Strings = {
   },
 
   freebies: {
-    sourceFailed: (source) => `Die Liste von ${source} konnte nicht geladen werden.`
+    title: 'Gerade gratis',
+    buttonWithCount: (count: number) => `Gerade gratis · ${count}`,
+    currentHeading: 'Dauerhaft gratis',
+    upcomingHeading: 'Demnächst',
+    empty: 'In deinen Stores ist gerade nichts dauerhaft gratis.',
+    unavailable: 'Die Gratis-Listen waren nicht erreichbar.',
+    refresh: 'Aktualisieren',
+    asOf: (when: string) => `Stand ${when}`,
+    sourceFailed: (source: string) => `Die Liste von ${source} konnte nicht geladen werden.`,
+    kind: { all: 'Alle', game: 'Spiele', dlc: 'DLC', loot: 'Extras' },
+    endsIn: (days: number) => (days === 1 ? 'endet morgen' : `endet in ${days} Tagen`),
+    endsToday: 'endet heute',
+    startsOn: (date: string) => `ab ${date}`,
+    claim: {
+      inStore: (store: string) => `In ${store} holen`,
+      inBrowser: 'Im Browser öffnen',
+      pending: (time: string) => `Um ${time} geöffnet · erneut öffnen`,
+      confirmed: '✓ In deiner Bibliothek',
+      pendingHint:
+        'Arcadia hat die Store-Seite geöffnet. Als geholt gilt das Spiel, sobald ein Scan es findet.'
+    }
   },
 
   stores: {
