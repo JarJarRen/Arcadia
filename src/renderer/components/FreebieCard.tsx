@@ -1,0 +1,97 @@
+import type { ReactElement } from 'react'
+import type { Freebie } from '@shared/freebies'
+import { t } from '@shared/i18n'
+import { STORE_LABELS } from './storeLabels'
+
+interface Props {
+  freebie: Freebie
+  /** Passed in rather than read here, so the countdown is testable. */
+  now: number
+  onClaim: (freebie: Freebie) => void
+}
+
+const DAY_MS = 86_400_000
+
+function deadline(freebie: Freebie, now: number): string | undefined {
+  if (freebie.startsAt !== undefined && freebie.startsAt > now) {
+    return t().freebies.startsOn(
+      new Date(freebie.startsAt).toLocaleDateString(t().format.locale, {
+        day: 'numeric',
+        month: 'long'
+      })
+    )
+  }
+  if (freebie.endsAt === undefined) return undefined
+
+  const left = freebie.endsAt - now
+  // Under a day is "today" rather than "in 1 day": the rounding would
+  // otherwise report six hours as a whole day of breathing room.
+  if (left < DAY_MS) return t().freebies.endsToday
+  return t().freebies.endsIn(Math.ceil(left / DAY_MS))
+}
+
+function kindLabel(freebie: Freebie): string {
+  const labels = t().freebies.kind
+  if (freebie.kind === 'dlc') return labels.dlc
+  if (freebie.kind === 'loot') return labels.loot
+  return labels.game
+}
+
+function ClaimButton({ freebie, onClaim }: Omit<Props, 'now'>): ReactElement {
+  const strings = t().freebies.claim
+
+  if (freebie.claim === 'confirmed') {
+    return (
+      <p className="freebie__claimed" role="status">
+        {strings.confirmed}
+      </p>
+    )
+  }
+
+  const label =
+    freebie.claim === 'pending'
+      ? strings.pending(
+          new Date(freebie.openedAt ?? 0).toLocaleTimeString(t().format.locale, {
+            hour: '2-digit',
+            minute: '2-digit'
+          })
+        )
+      : freebie.storeGameId === undefined
+        ? strings.inBrowser
+        : strings.inStore(STORE_LABELS[freebie.storeId])
+
+  return (
+    <button
+      type="button"
+      className="freebie__claim"
+      title={freebie.claim === 'pending' ? strings.pendingHint : undefined}
+      onClick={() => onClaim(freebie)}
+    >
+      {label}
+    </button>
+  )
+}
+
+export function FreebieCard({ freebie, now, onClaim }: Props): ReactElement {
+  // An offer that has not started yet gets no button: there is nothing to
+  // claim, and a button that did nothing would be worse than none.
+  const upcoming = freebie.startsAt !== undefined && freebie.startsAt > now
+  const when = deadline(freebie, now)
+
+  return (
+    <article className="freebie">
+      {freebie.imageUrl !== undefined && (
+        <img className="freebie__art" src={freebie.imageUrl} alt="" loading="lazy" />
+      )}
+      <div className="freebie__body">
+        <h3 className="freebie__title">{freebie.title}</h3>
+        <p className="freebie__meta">
+          <span className="freebie__store">{STORE_LABELS[freebie.storeId]}</span>
+          <span className="freebie__kind">{kindLabel(freebie)}</span>
+          {when !== undefined && <span className="freebie__when">{when}</span>}
+        </p>
+        {!upcoming && <ClaimButton freebie={freebie} onClaim={onClaim} />}
+      </div>
+    </article>
+  )
+}

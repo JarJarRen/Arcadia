@@ -503,6 +503,57 @@ button:focus-visible {
   position: relative;
 }
 
+/* ── Freebie card ─────────────────────────────────────────────────────
+   min-height is deliberate, not decorative: jsdom computes no layout, so
+   nothing in the test suite would catch this collapsing to a sliver the
+   way the library grid once did. */
+.freebie {
+  display: flex;
+  flex-direction: column;
+  min-height: 220px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.freebie__art {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}
+
+.freebie__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.6rem 0.7rem 0.7rem;
+}
+
+.freebie__title {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.25;
+}
+
+.freebie__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0;
+  font-size: 0.78rem;
+  opacity: 0.8;
+}
+
+.freebie__claim {
+  margin-top: auto;
+}
+
+.freebies__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
 /* ── Details page ────────────────────────────────────────────────────── */
 .detail {
   flex: 1;
