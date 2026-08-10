@@ -96,7 +96,16 @@ export class FreebieRepository {
       }
       this.db.exec('COMMIT')
     } catch (error) {
-      this.db.exec('ROLLBACK')
+      // Best effort: a failing ROLLBACK must not overwrite the actual
+      // cause. Without this inner try its exception would replace `error`,
+      // and the connection would be left inside an open transaction — the
+      // next scan would then break immediately at `BEGIN`, with a message
+      // bearing no relation to the cause.
+      try {
+        this.db.exec('ROLLBACK')
+      } catch {
+        // deliberately swallowed
+      }
       throw error
     }
   }
@@ -113,8 +122,11 @@ export class FreebieRepository {
   }
 
   markOpened(id: string, now: number): void {
-    // Pressing the button again resets the time and clears any earlier
-    // confirmation: the user is telling us they are claiming it now.
+    // ON CONFLICT exists for re-opening a still-pending claim, e.g. the
+    // first click did not actually complete the claim on the store's site.
+    // A confirmed row is never reachable here: the UI renders it as static
+    // "✓ In your library" text with no button, so there is no path back
+    // into this query once confirmed_at is set, and none is needed.
     this.db
       .prepare(
         `INSERT INTO freebie_claims (freebie_id, opened_at, confirmed_at)

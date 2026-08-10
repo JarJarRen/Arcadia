@@ -5,7 +5,7 @@
  * rewritten on every refresh, the claims survive it. Testing them together
  * is what pins that difference down.
  */
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DatabaseSync } from 'node:sqlite'
 import { openDatabase } from '@main/db/schema'
 import { FreebieRepository } from '@main/db/freebies'
@@ -92,6 +92,22 @@ describe('FreebieRepository', () => {
     expect(repo.find('epic:ghostrunner')?.openedAt).toBe(NOW + 60_000)
   })
 
+  it('does not un-confirm a claim if markOpened runs again for it', () => {
+    // markOpened cannot actually be reached once a claim is confirmed — the
+    // UI renders a confirmed row as static "✓ In your library" text with no
+    // button — but this pins the ON CONFLICT clause to only ever touch
+    // opened_at, so a future UI change cannot silently revoke a
+    // confirmation the app never asked the user about.
+    repo.replaceAll([ghost], NOW)
+    repo.markOpened('epic:ghostrunner', NOW)
+    repo.markConfirmed('epic:ghostrunner', NOW + 5000)
+    repo.markOpened('epic:ghostrunner', NOW + 10_000)
+
+    const row = repo.find('epic:ghostrunner')
+    expect(row?.claim).toBe('confirmed')
+    expect(row?.openedAt).toBe(NOW + 10_000)
+  })
+
   it('lists only the claims still waiting for confirmation', () => {
     repo.replaceAll([ghost, skin], NOW)
     repo.markOpened('epic:ghostrunner', NOW)
@@ -110,6 +126,24 @@ describe('FreebieRepository', () => {
     const broken = { ...skin, kind: undefined } as unknown as RawFreebie
     expect(() => repo.replaceAll([broken], NOW + 1000)).toThrow()
     expect(repo.list().map((row) => row.title)).toEqual(['Ghostrunner'])
+  })
+
+  it('surfaces the original failure even when the rollback itself fails', () => {
+    repo.replaceAll([ghost], NOW)
+    const realExec = db.exec.bind(db)
+    // Only ROLLBACK is made to fail; BEGIN, DELETE and the inserts still run
+    // for real, so the transaction reaches the catch block on its own.
+    vi.spyOn(db, 'exec').mockImplementation((sql: string) => {
+      if (sql === 'ROLLBACK') throw new Error('disk I/O error')
+      return realExec(sql)
+    })
+
+    const broken = { ...skin, kind: undefined } as unknown as RawFreebie
+    // Without the inner try/catch in replaceAll, this would throw "disk I/O
+    // error" instead — the rollback failure hiding the real cause.
+    expect(() => repo.replaceAll([broken], NOW + 1000)).toThrow(
+      /cannot be bound to SQLite parameter/
+    )
   })
 
   it('omits storeGameId from a pending claim whose freebie has none', () => {
