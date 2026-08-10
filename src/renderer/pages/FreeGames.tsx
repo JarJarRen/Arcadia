@@ -116,7 +116,12 @@ export function FreeGames({ onClose }: { onClose: () => void }): ReactElement {
       )}
 
       {unreachable && <p className="freebies__empty">{t().freebies.unavailable}</p>}
-      {!unreachable && empty && !loading && (
+      {/* A thrown initial load leaves `list` at the empty default (no
+          failures recorded, so `unreachable` is false) while `error` holds
+          the real reason. Without this guard the empty message and the
+          error banner above would both render, giving two different
+          explanations for the same bare page. */}
+      {!unreachable && empty && !loading && error === undefined && (
         <p className="freebies__empty">{t().freebies.empty}</p>
       )}
 

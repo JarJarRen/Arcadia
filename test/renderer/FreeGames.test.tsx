@@ -195,5 +195,63 @@ describe('FreeGames', () => {
     await waitFor(() =>
       expect(screen.getByRole('alert').textContent).toBe('Database is locked')
     )
+    // The error already explains the blank page; the empty message would
+    // contradict it by offering a second, different reason.
+    expect(screen.queryByText(/Nothing is free to keep/)).toBeNull()
+  })
+
+  it('lets the newer of two in-flight loads win, even if it resolves first', async () => {
+    // The mount effect starts a load; onFreebiesChanged can start another
+    // before the first settles. If the older one resolves last, it must not
+    // overwrite the newer answer.
+    let resolveSlow: ((value: FreebieList) => void) | undefined
+    const slow = new Promise<FreebieList>((resolve) => {
+      resolveSlow = resolve
+    })
+    const fastList: FreebieList = {
+      ...LIST,
+      current: [
+        {
+          id: 'epic:fresh-arrival',
+          storeId: 'epic',
+          title: 'Fresh Arrival',
+          kind: 'game',
+          storeGameId: 'fresh-arrival',
+          source: 'epic',
+          claim: 'unclaimed',
+          endsAt: NOW + 2 * 86_400_000
+        }
+      ]
+    }
+    let notify: (() => void) | undefined
+    let getFreebiesCalls = 0
+    const api = {
+      getFreebies: vi.fn(() => {
+        getFreebiesCalls += 1
+        // First call (mount) is the slow, stale one; the second call
+        // (triggered below) resolves immediately with fresher data.
+        return getFreebiesCalls === 1 ? slow : Promise.resolve(fastList)
+      }),
+      refreshFreebies: vi.fn(async () => LIST),
+      claimFreebie: vi.fn(),
+      onFreebiesChanged: vi.fn((callback: () => void) => {
+        notify = callback
+        return () => {}
+      })
+    }
+    ;(window as unknown as { arcadia: unknown }).arcadia = api
+
+    render(<FreeGames onClose={vi.fn()} />)
+    await waitFor(() => expect(api.getFreebies).toHaveBeenCalledTimes(1))
+
+    // Start the second, faster load while the first is still pending.
+    notify?.()
+    await waitFor(() => expect(api.getFreebies).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(screen.getByText('Fresh Arrival')).toBeTruthy())
+
+    // Now let the slow, older load settle with the stale list.
+    resolveSlow?.(LIST)
+    await waitFor(() => expect(screen.getByText('Fresh Arrival')).toBeTruthy())
+    expect(screen.queryByText('Ghostrunner')).toBeNull()
   })
 })
