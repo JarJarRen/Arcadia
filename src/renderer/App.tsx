@@ -22,6 +22,7 @@ import { STORE_LABELS } from './components/storeLabels'
 import { isMouseBackButton, isMouseForwardButton } from './navigation'
 import { LibraryToolbar } from './components/LibraryToolbar'
 import { GameDetail } from './pages/GameDetail'
+import { FreeGames } from './pages/FreeGames'
 import './styles.css'
 
 const INITIAL_FILTER: LibraryFilter = {
@@ -88,6 +89,32 @@ export function App(): ReactElement {
    * that beat.
    */
   const [enabledStores, setEnabledStores] = useState<StoreId[]>([...STORE_IDS])
+  /**
+   * How many offers are unclaimed right now.
+   *
+   * Kept in App rather than in the page: the badge has to be right before
+   * anybody opens the page, which is the whole reason the list is cached.
+   */
+  const [freebieCount, setFreebieCount] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+    const load = (): void => {
+      window.arcadia
+        .getFreebies()
+        .then((list) => {
+          if (cancelled) return
+          setFreebieCount(list.current.filter((row) => row.claim === 'unclaimed').length)
+        })
+        .catch((error: unknown) => console.error('The freebies could not be read:', error))
+    }
+    load()
+    const stop = window.arcadia.onFreebiesChanged(load)
+    return () => {
+      cancelled = true
+      stop()
+    }
+  }, [])
 
   const visible = useMemo(
     () => sortGames(filterGames(entries, filter), sort, sortDirection),
@@ -384,6 +411,13 @@ export function App(): ReactElement {
       </div>
     ) : null
 
+  const freebiesOverlay =
+    overlay?.kind === 'freebies' ? (
+      <div className="detailoverlay">
+        <FreeGames onClose={close} />
+      </div>
+    ) : null
+
   return (
     <div className="app">
       <LibraryToolbar
@@ -411,6 +445,8 @@ export function App(): ReactElement {
         onAddGame={() => setAddOpen(true)}
         onSync={() => void sync()}
         onOpenSetup={() => void openSetup()}
+        freebieCount={freebieCount}
+        onOpenFreebies={openFreebies}
       />
 
       {errorBanner}
@@ -471,6 +507,7 @@ export function App(): ReactElement {
       />
 
       {detailOverlay}
+      {freebiesOverlay}
     </div>
   )
 }
