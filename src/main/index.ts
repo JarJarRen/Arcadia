@@ -15,12 +15,15 @@ import { SteamAppList } from '@main/metadata/steamAppList'
 import { fetchAppDetails } from '@main/metadata/steamStore'
 import { SECURE_WEB_PREFERENCES } from '@main/window-options'
 import { IPC } from '@shared/ipc'
-import { parseLanguage, setLanguage, t } from '@shared/i18n'
+import { getLanguage, parseLanguage, setLanguage, t } from '@shared/i18n'
 import { envFileCandidates } from '@main/env-file'
 import { createScanState } from '@main/scan-state'
 import { enabledAdapters } from '@main/stores/enabled'
 import { MicrosoftSession, type TokenStore } from '@main/stores/microsoft/session'
 import { pollForTokens, requestDeviceCode } from '@main/stores/microsoft/auth'
+import { FreebieRepository } from '@main/db/freebies'
+import { FreebieService } from '@main/freebies/service'
+import { confirmClaims } from '@main/freebies/confirm'
 
 let mainWindow: BrowserWindow | undefined
 
@@ -228,6 +231,21 @@ app.whenReady().then(() => {
   const metadata = new MetadataRepository(db)
   const settings = new SettingsRepository(db)
 
+  // Held in its own name rather than inlined: the confirmation hook below
+  // needs the repository, not the service.
+  const freebieRepo = new FreebieRepository(db)
+
+  const freebies = new FreebieService({
+    repo: freebieRepo,
+    settings,
+    // The store country comes from the system locale — "de-DE" → "DE".
+    // Falls back to US, which is the region Epic's feed defaults to.
+    locale: () => ({
+      language: getLanguage(),
+      country: app.getLocale().split('-')[1]?.toUpperCase() ?? 'US'
+    })
+  })
+
   const microsoftSession = new MicrosoftSession({
     store: microsoftTokenStore(settings),
     // A scan can sign itself out: a refresh token the service has refused
@@ -296,6 +314,8 @@ app.whenReady().then(() => {
     metadata,
     settings,
     adapters,
+    freebies,
+    freebiesRepo: freebieRepo,
     scan,
     appList,
     // Built above in whatever language the module currently holds, which is
@@ -326,6 +346,10 @@ app.whenReady().then(() => {
     }
   })
 
+  // A year. The table is tiny; this exists so it cannot grow without bound
+  // over the life of an installation.
+  freebieRepo.pruneClaims(Date.now() - 365 * 86_400_000)
+
   // First scan in the background: the UI shows the cache immediately and
   // refreshes once the scan is through.
   //
@@ -344,7 +368,12 @@ app.whenReady().then(() => {
       return runSync(
         enabledAdapters(adapters, settings.get('enabled-stores')),
         repo,
-        Math.floor(Date.now() / 1000)
+        Math.floor(Date.now() / 1000),
+        (games) => {
+          if (confirmClaims(freebieRepo, games, Date.now()).length > 0) {
+            mainWindow?.webContents.send(IPC.freebiesChanged)
+          }
+        }
       )
     })
     .then((result) => {
@@ -365,6 +394,15 @@ app.whenReady().then(() => {
       })
     })
     .catch((error: unknown) => console.error('Scan failed:', error))
+
+  // Kicked off after the window exists, so the event this can send has
+  // somewhere to go.
+  void freebies
+    .refresh(Date.now(), false)
+    .then((changed) => {
+      if (changed) mainWindow?.webContents.send(IPC.freebiesChanged)
+    })
+    .catch((error: unknown) => console.error('The freebies could not be fetched:', error))
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) mainWindow = createWindow()

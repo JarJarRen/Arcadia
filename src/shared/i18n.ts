@@ -238,6 +238,8 @@ export interface Strings {
     databaseRecovered: (path: string) => string
     /** The database could not be opened at all, so this run keeps nothing. */
     databaseUnusable: (detail: string) => string
+    /** e.g. "The offer could not be opened: …" */
+    claimFailed: (reason: string) => string
   }
 
   freebies: {
@@ -526,7 +528,8 @@ const en: Strings = {
       `still there as ${path}.`,
     databaseUnusable: (detail) =>
       `The database could not be opened (${detail}). Arcadia is running, but ` +
-      'nothing it finds will be kept when you close it.'
+      'nothing it finds will be kept when you close it.',
+    claimFailed: (reason) => `The offer could not be opened: ${reason}`
   },
 
   freebies: {
@@ -862,7 +865,8 @@ const de: Strings = {
       `Datei liegt weiterhin unter ${path}.`,
     databaseUnusable: (detail) =>
       `Die Datenbank konnte nicht geöffnet werden (${detail}). Arcadia läuft, ` +
-      'aber nichts davon wird beim Beenden gespeichert.'
+      'aber nichts davon wird beim Beenden gespeichert.',
+    claimFailed: (reason) => `Das Angebot konnte nicht geöffnet werden: ${reason}`
   },
 
   freebies: {

@@ -212,5 +212,11 @@ contextBridge.exposeInMainWorld('arcadia', {
   getMicrosoftAuth: async () => ({ signedIn: false }),
   signInToMicrosoft: async () => ({ ok: false, error: 'The Microsoft Store only exists on Windows.' }),
   signOutOfMicrosoft: async () => undefined,
-  onMicrosoftAuthChanged: () => () => undefined
+  onMicrosoftAuthChanged: () => () => undefined,
+  // No freebies in the smoke stub: an empty list keeps the screen this
+  // test does not open from having anything to render.
+  getFreebies: async () => ({ current: [], upcoming: [], failures: [] }),
+  refreshFreebies: async () => ({ current: [], upcoming: [], failures: [] }),
+  claimFreebie: async () => ({ ok: true }),
+  onFreebiesChanged: () => () => undefined
 })

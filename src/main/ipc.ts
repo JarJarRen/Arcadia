@@ -1,10 +1,11 @@
 import { ipcMain, screen, shell, type BrowserWindow } from 'electron'
 import { stat } from 'node:fs/promises'
-import { IPC } from '@shared/ipc'
+import { IPC, type LaunchResult } from '@shared/ipc'
 import { getLanguage, parseLanguage, setLanguage, t } from '@shared/i18n'
-import { STORE_IDS, type StoreId } from '@shared/types'
+import { STORE_IDS, type Game, type StoreId } from '@shared/types'
 import type { LibraryEntry } from '@shared/library'
 import type { ArtworkRef, GameMetadata } from '@shared/metadata'
+import type { FreebieList } from '@shared/freebies'
 import type { GameRepository } from '@main/db/repository'
 import { MetadataRepository } from '@main/db/metadata'
 import type { SettingsRepository } from '@main/db/settings'
@@ -23,12 +24,22 @@ import { envValueIsWritable } from '@main/env-file'
 import { ENV_CONFIG_KEYS, type EnvConfigValues } from '@shared/env-config'
 import type { MicrosoftSession } from '@main/stores/microsoft/session'
 import type { DeviceCode, MicrosoftTokens } from '@main/stores/microsoft/auth'
+import type { FreebieService } from '@main/freebies/service'
+import { confirmClaims } from '@main/freebies/confirm'
+import type { FreebieRepository } from '@main/db/freebies'
 
 export interface IpcContext {
   repo: GameRepository
   metadata: MetadataRepository
   settings: SettingsRepository
   adapters: StoreAdapter[]
+  freebies: FreebieService
+  /**
+   * Held separately from `freebies` because `confirmClaims` — run after
+   * every scan, here and in `main/index.ts` — takes the repository
+   * directly; the service does not expose it.
+   */
+  freebiesRepo: FreebieRepository
   getWindow: () => BrowserWindow | undefined
   /**
    * The shared record of whether a scan is running.
@@ -223,6 +234,20 @@ export function registerIpcHandlers(context: IpcContext): void {
   }
 
   /**
+   * Runs after every scan, here and at startup in `main/index.ts`.
+   *
+   * A claim made before a scan is only ever confirmed by this hook — there
+   * is no other point in the app that revisits it — so every `runSync` call
+   * site needs it, not only the button that started the scan the user was
+   * looking at.
+   */
+  const confirmFreebieClaims = (games: Game[]): void => {
+    if (confirmClaims(context.freebiesRepo, games, Date.now()).length > 0) {
+      context.getWindow()?.webContents.send(IPC.freebiesChanged)
+    }
+  }
+
+  /**
    * The library as the user has asked to see it.
    *
    * Read fresh each time rather than captured: the setting can change while
@@ -245,7 +270,7 @@ export function registerIpcHandlers(context: IpcContext): void {
   ipcMain.handle(IPC.librarySync, async () => {
     const adapters = enabledAdapters(context.adapters, context.settings.get('enabled-stores'))
     const result = await context.scan.track(() =>
-      runSync(adapters, context.repo, Math.floor(Date.now() / 1000))
+      runSync(adapters, context.repo, Math.floor(Date.now() / 1000), confirmFreebieClaims)
     )
     notifyChanged()
     return result
@@ -708,7 +733,8 @@ export function registerIpcHandlers(context: IpcContext): void {
           runSync(
             enabledAdapters(context.adapters, context.settings.get('enabled-stores')),
             context.repo,
-            Math.floor(Date.now() / 1000)
+            Math.floor(Date.now() / 1000),
+            confirmFreebieClaims
           )
         )
         notifyChanged()
@@ -754,10 +780,53 @@ export function registerIpcHandlers(context: IpcContext): void {
       runSync(
         enabledAdapters(context.adapters, context.settings.get('enabled-stores')),
         context.repo,
-        Math.floor(Date.now() / 1000)
+        Math.floor(Date.now() / 1000),
+        confirmFreebieClaims
       )
     )
     notifyChanged()
+  })
+
+  ipcMain.handle(IPC.freebiesGet, async (): Promise<FreebieList> => {
+    const stores = parseEnabledStores(context.settings.get('enabled-stores'))
+    // Refreshed behind the answer rather than before it: the page opens on
+    // the cache at once, and the event that follows updates it.
+    //
+    // The event fires only when `refresh` reports that something the
+    // renderer can see actually changed — the cache was written, or the
+    // failure list differs. Firing it unconditionally would loop: the
+    // renderer reloads on the event and the reload lands back in this
+    // handler. See the two-timestamp note in `service.ts` for why a TTL
+    // skip alone was not a sufficient guard.
+    void context.freebies
+      .refresh(Date.now(), false)
+      .then((changed) => {
+        if (changed) context.getWindow()?.webContents.send(IPC.freebiesChanged)
+      })
+      .catch((error: unknown) => console.error('The freebies could not be refreshed:', error))
+    return context.freebies.getList(stores, Date.now())
+  })
+
+  ipcMain.handle(IPC.freebiesRefresh, async (): Promise<FreebieList> => {
+    const stores = parseEnabledStores(context.settings.get('enabled-stores'))
+    await context.freebies.refresh(Date.now(), true)
+    return context.freebies.getList(stores, Date.now())
+  })
+
+  ipcMain.handle(IPC.freebiesClaim, async (_event, id: unknown): Promise<LaunchResult> => {
+    if (typeof id !== 'string') return { ok: false, error: t().errors.claimFailed('bad id') }
+    try {
+      // Building the target validates the address and throws on anything
+      // it cannot vouch for.
+      const target = context.freebies.claimById(id)
+      await shell.openExternal(target)
+      context.freebies.markOpened(id, Date.now())
+      context.getWindow()?.webContents.send(IPC.freebiesChanged)
+      return { ok: true }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      return { ok: false, error: t().errors.claimFailed(message) }
+    }
   })
 }
 
