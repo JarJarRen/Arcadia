@@ -21,7 +21,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { App } from '@renderer/App'
 import { t } from '@shared/i18n'
-import type { Freebie } from '@shared/freebies'
+import type { Freebie, FreebieList } from '@shared/freebies'
 import { entry, game, stubArcadia } from './fixtures'
 
 const TF2 = entry('Team Fortress 2', [game('steam', '440', 'Team Fortress 2')])
@@ -985,7 +985,7 @@ describe('App', () => {
     // guard directly by resolving the fetch only after unmount and checking
     // nothing complains.
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
-    let resolve: ((list: { current: never[]; upcoming: never[]; failures: never[] }) => void) | undefined
+    let resolve: ((list: FreebieList) => void) | undefined
     stubArcadia({
       getGames: async () => [TF2],
       getFreebies: () =>
