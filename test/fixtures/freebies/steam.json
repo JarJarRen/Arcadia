@@ -32,6 +32,15 @@
         "final_price": 0,
         "currency": "EUR",
         "header_image": "https://shared.akamai.steamstatic.com/apps/570/header.jpg"
+      },
+      {
+        "id": 271590,
+        "discounted": true,
+        "discount_percent": 100,
+        "original_price": 1000,
+        "final_price": 0,
+        "currency": "EUR",
+        "header_image": "https://shared.akamai.steamstatic.com/apps/271590/header.jpg"
       }
     ]
   },

@@ -1,6 +1,14 @@
 import type { RawFreebie } from '@shared/freebies'
 import type { FetchFn } from '@main/metadata/steamAppList'
 
+/**
+ * Steam's featured categories.
+ *
+ * Chosen over the search endpoint because it returns the AppID as a field.
+ * The search endpoint hides the AppID inside a capsule image URL, and the
+ * AppID is what makes the claim a deep link into the client rather than a
+ * browser tab.
+ */
 const ENDPOINT = 'https://store.steampowered.com/api/featuredcategories'
 
 export interface SteamFreebieOptions {

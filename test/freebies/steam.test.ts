@@ -1,11 +1,3 @@
-/**
- * Steam's featured categories.
- *
- * Chosen over the search endpoint because it returns the AppID as a field.
- * The search endpoint hides the AppID inside a capsule image URL, and the
- * AppID is what makes the claim a deep link into the client rather than a
- * browser tab.
- */
 import { describe, expect, it } from 'vitest'
 import { readFile } from 'node:fs/promises'
 import { parseSteamFreebies, fetchSteamFreebies } from '@main/freebies/sources/steam'
@@ -35,6 +27,26 @@ describe('parseSteamFreebies', () => {
     // checks exist; this is the cheaper one.
     const rows = parseSteamFreebies(await fixture())
     expect(rows.map((row) => row.title)).not.toContain('No Id Game')
+  })
+
+  it('drops an item with no name', async () => {
+    const rows = parseSteamFreebies(await fixture())
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.title).toBe('Free Forever Game')
+  })
+
+  it('drops items whose id is not a valid positive integer', () => {
+    const rows = parseSteamFreebies({
+      specials: {
+        items: [
+          { discount_percent: 100, id: 1.5, name: 'Decimal Id Game', header_image: 'https://example.com/1.jpg' },
+          { discount_percent: 100, id: -1, name: 'Negative Id Game', header_image: 'https://example.com/2.jpg' },
+          { discount_percent: 100, id: 1234, name: 'Valid Id Game', header_image: 'https://example.com/3.jpg' }
+        ]
+      }
+    })
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.title).toBe('Valid Id Game')
   })
 
   it('sets no end date, because the endpoint reports none', async () => {
