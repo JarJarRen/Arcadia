@@ -1,0 +1,39 @@
+{
+  "specials": {
+    "id": "cat_specials",
+    "name": "Special Offers",
+    "items": [
+      {
+        "id": 1145360,
+        "name": "Free Forever Game",
+        "discounted": true,
+        "discount_percent": 100,
+        "original_price": 2499,
+        "final_price": 0,
+        "currency": "EUR",
+        "header_image": "https://shared.akamai.steamstatic.com/apps/1145360/header.jpg"
+      },
+      {
+        "id": 730,
+        "name": "Half Off Game",
+        "discounted": true,
+        "discount_percent": 50,
+        "original_price": 2000,
+        "final_price": 1000,
+        "currency": "EUR",
+        "header_image": "https://shared.akamai.steamstatic.com/apps/730/header.jpg"
+      },
+      {
+        "id": "570",
+        "name": "No Id Game",
+        "discounted": true,
+        "discount_percent": 100,
+        "original_price": 1000,
+        "final_price": 0,
+        "currency": "EUR",
+        "header_image": "https://shared.akamai.steamstatic.com/apps/570/header.jpg"
+      }
+    ]
+  },
+  "coming_soon": { "items": [] }
+}
