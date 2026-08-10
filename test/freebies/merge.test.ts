@@ -121,6 +121,17 @@ describe('splitFreebies', () => {
     const { upcoming } = splitFreebies([second, first], NOW)
     expect(upcoming.map((row) => row.id)).toEqual(['first', 'second'])
   })
+
+  it('maintains stable order when two rows have no deadline', () => {
+    // Two rows with no deadline are equally un-urgent, so neither should
+    // be promoted over the other.
+    const first = freebie({ id: 'first' })
+    const second = freebie({ id: 'second' })
+    const { current } = splitFreebies([first, second], NOW)
+    expect(current).toHaveLength(2)
+    expect(current[0]?.id).toBe('first')
+    expect(current[1]?.id).toBe('second')
+  })
 })
 
 describe('filterByStores', () => {
