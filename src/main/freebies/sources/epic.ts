@@ -115,7 +115,7 @@ export function parseEpicFreebies(json: unknown, now: number): RawFreebie[] {
 }
 
 export async function fetchEpicFreebies(options: EpicFreebieOptions): Promise<RawFreebie[]> {
-  const fetchFn = options.fetchFn ?? fetch
+  const fetchFn = options.fetchFn ?? (globalThis.fetch as unknown as FetchFn)
   const url = `${ENDPOINT}?locale=${encodeURIComponent(options.locale)}&country=${encodeURIComponent(options.country)}&allowCountries=${encodeURIComponent(options.country)}`
   const response = await fetchFn(url)
   if (!response.ok) throw new Error(`Epic answered ${response.status}`)
