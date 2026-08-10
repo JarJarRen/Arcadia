@@ -27,7 +27,13 @@ export function confirmClaims(
 
   const confirmed: string[] = []
   for (const claim of pending) {
+    // Steam only: its AppID is the same string on both sides. Everywhere
+    // else the promotion's ID and the library's ID come from different
+    // namespaces (see the Epic example above) and comparing them is
+    // meaningless, not merely redundant — a coincidental match would
+    // confirm the wrong game.
     const idMatch =
+      claim.storeId === 'steam' &&
       claim.storeGameId !== undefined &&
       byStoreGameId.has(`${claim.storeId}:${claim.storeGameId}`)
     const titleMatch = byTitle.has(`${claim.storeId}:${mergeKey(claim.title)}`)
