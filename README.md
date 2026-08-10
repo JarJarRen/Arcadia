@@ -72,6 +72,36 @@ npm approve-scripts --allow-scripts-pending
 
 **Both are optional.** Without them Arcadia starts and finds whatever is discoverable locally — 105 of 263 games on the development machine. What they add and where to get them is in [`.env.example`](.env.example).
 
+### Microsoft sign-in
+
+**Nothing to set up.** Connecting a Microsoft account is a button in the
+configuration screen: Arcadia shows an eight-character code, you type it at
+[microsoft.com/link](https://www.microsoft.com/link) in your own browser, and
+that is the whole of it. No password ever passes through Arcadia, and there
+is no key to obtain.
+
+The account is optional, like the two above it. Without one Arcadia lists the
+Store games the Xbox app installed; with one it also lists games you own but
+have not installed here.
+
+<details>
+<summary>For anyone forking this</summary>
+
+`MICROSOFT_CLIENT_ID` in [`src/main/stores/microsoft/auth.ts`](src/main/stores/microsoft/auth.ts)
+is Arcadia's own registration, and it is committed on purpose: a public client
+has no secret, and the value identifies the application rather than any user.
+One registration serves everybody — users do **not** need their own.
+
+Should you want your own anyway, register a public client in the [Azure
+portal](https://portal.azure.com/) with supported account types **"Personal
+Microsoft accounts only"** (the endpoints are the `/consumers/` ones) and
+**Allow public client flows** set to **Yes** under Authentication → Advanced
+settings. That last switch is not optional: without it the device-code grant
+is refused with `AADSTS70002: the client application must be marked as
+'mobile'`. No redirect URI or platform entry is needed.
+
+</details>
+
 ---
 
 ## Usage

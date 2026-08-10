@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react'
 import { t } from '@shared/i18n'
 import { emptyEnvConfig, type EnvConfigKey, type EnvConfigValues } from '@shared/env-config'
+import type { StoreId } from '@shared/types'
+import { StoreSelection } from './StoreSelection'
 
 interface Props {
   values: EnvConfigValues
@@ -13,6 +15,10 @@ interface Props {
    * to be possible.
    */
   firstRun: boolean
+  /** The stores switched on right now, held by App so the filter sees them too. */
+  enabledStores: StoreId[]
+  /** Saves at once — no restart, unlike the keys below it. */
+  onEnabledStoresChange: (stores: StoreId[]) => void
   onClose: () => void
 }
 
@@ -59,7 +65,14 @@ function fields(): Field[] {
  * keys really are optional, and the marker is written either way so the
  * question is asked exactly once.
  */
-export function SetupDialog({ values, path, firstRun, onClose }: Props): ReactElement {
+export function SetupDialog({
+  values,
+  path,
+  firstRun,
+  enabledStores,
+  onEnabledStoresChange,
+  onClose
+}: Props): ReactElement {
   const [edited, setEdited] = useState<EnvConfigValues>({ ...emptyEnvConfig(), ...values })
   const [skip, setSkip] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -118,6 +131,8 @@ export function SetupDialog({ values, path, firstRun, onClose }: Props): ReactEl
         <p className="modal__hint">{t().setup.intro}</p>
         {firstRun && <p className="modal__hint">{t().setup.firstRunHint}</p>}
 
+        <StoreSelection enabled={enabledStores} onChange={onEnabledStoresChange} />
+
         {fields().map((field, index) => (
           <label className="modal__field" key={field.key}>
             <span className="modal__label">{field.label}</span>
@@ -143,7 +158,7 @@ export function SetupDialog({ values, path, firstRun, onClose }: Props): ReactEl
           </label>
         ))}
 
-        <label className="modal__toggle">
+        <label className="modal__toggle modal__toggle--skip">
           <input
             type="checkbox"
             checked={skip}

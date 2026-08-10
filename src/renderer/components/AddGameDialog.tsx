@@ -1,14 +1,27 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react'
-import { STORE_IDS, type StoreId } from '@shared/types'
+import { type StoreId } from '@shared/types'
 import { storeGameIdLooksValid } from '@shared/manual'
 import { t } from '@shared/i18n'
 import { STORE_LABELS } from './storeLabels'
 
 interface Props {
+  /**
+   * The stores that are switched on, exactly as the toolbar's filter takes
+   * them.
+   *
+   * Offering the rest would let somebody file a game under a store the
+   * visible library filters straight back out: the row exists, nothing
+   * shows it, removal is only reachable from a grid row, and adding it
+   * again fails as a duplicate.
+   */
+  availableStores: StoreId[]
   onClose: () => void
   /** Called with the new entry's id, so the caller can select it. */
   onAdded: (gameId: string) => void
 }
+
+/** The store this exists for, when it is on the list. */
+const PREFERRED: StoreId = 'ea'
 
 /**
  * Records a game no adapter can see.
@@ -19,9 +32,13 @@ interface Props {
  * description through the usual Steam matching; it just cannot be launched,
  * because no store knows the generated identifier.
  */
-export function AddGameDialog({ onClose, onAdded }: Props): ReactElement {
+export function AddGameDialog({ availableStores, onClose, onAdded }: Props): ReactElement {
   const [name, setName] = useState('')
-  const [storeId, setStoreId] = useState<StoreId>('ea')
+  // Undefined only when every store is switched off, which the dialog says
+  // rather than offering a choice that cannot be honoured.
+  const [storeId, setStoreId] = useState<StoreId | undefined>(
+    availableStores.includes(PREFERRED) ? PREFERRED : availableStores[0]
+  )
   const [storeGameId, setStoreGameId] = useState('')
   const [error, setError] = useState<string | undefined>()
   const [saving, setSaving] = useState(false)
@@ -42,11 +59,12 @@ export function AddGameDialog({ onClose, onAdded }: Props): ReactElement {
   const trimmedId = storeGameId.trim()
   // Checked while typing rather than on submit: the store decides the shape,
   // and switching the store can invalidate an identifier already entered.
-  const idLooksWrong = trimmedId !== '' && !storeGameIdLooksValid(storeId, trimmedId)
-  const canSubmit = name.trim() !== '' && !idLooksWrong && !saving
+  const idLooksWrong =
+    storeId !== undefined && trimmedId !== '' && !storeGameIdLooksValid(storeId, trimmedId)
+  const canSubmit = storeId !== undefined && name.trim() !== '' && !idLooksWrong && !saving
 
   const submit = async (): Promise<void> => {
-    if (!canSubmit) return
+    if (!canSubmit || storeId === undefined) return
     setSaving(true)
     setError(undefined)
     try {
@@ -92,17 +110,21 @@ export function AddGameDialog({ onClose, onAdded }: Props): ReactElement {
 
         <label className="modal__field">
           <span className="modal__label">{t().addDialog.storeLabel}</span>
-          <select
-            className="modal__search"
-            value={storeId}
-            onChange={(event) => setStoreId(event.target.value as StoreId)}
-          >
-            {STORE_IDS.map((id) => (
-              <option key={id} value={id}>
-                {STORE_LABELS[id] ?? id}
-              </option>
-            ))}
-          </select>
+          {storeId === undefined ? (
+            <span className="modal__sublabel">{t().addDialog.noStores}</span>
+          ) : (
+            <select
+              className="modal__search"
+              value={storeId}
+              onChange={(event) => setStoreId(event.target.value as StoreId)}
+            >
+              {availableStores.map((id) => (
+                <option key={id} value={id}>
+                  {STORE_LABELS[id] ?? id}
+                </option>
+              ))}
+            </select>
+          )}
         </label>
 
         <label className="modal__field">

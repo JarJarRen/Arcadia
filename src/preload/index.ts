@@ -17,12 +17,17 @@ const api: ArcadiaApi = {
     ipcRenderer.invoke(IPC.metadataSetMatch, mergeKey, steamAppId),
   getLanguage: () => ipcRenderer.invoke(IPC.settingsGetLanguage),
   setLanguage: (language) => ipcRenderer.invoke(IPC.settingsSetLanguage, language),
+  getEnabledStores: () => ipcRenderer.invoke(IPC.settingsGetStores),
+  setEnabledStores: (stores) => ipcRenderer.invoke(IPC.settingsSetStores, stores),
+  getStoreAvailability: () => ipcRenderer.invoke(IPC.storesAvailability),
+  isSecureStorageAvailable: () => ipcRenderer.invoke(IPC.storesSecureStorage),
   getEnvConfig: () => ipcRenderer.invoke(IPC.envConfigGet),
   saveEnvConfig: (values) => ipcRenderer.invoke(IPC.envConfigSave, values),
   addManualGame: (game) => ipcRenderer.invoke(IPC.libraryAddManual, game),
   removeManualGame: (gameId) => ipcRenderer.invoke(IPC.libraryRemoveManual, gameId),
   reportBrokenArtwork: (mergeKey, kind) => ipcRenderer.invoke(IPC.artworkBroken, mergeKey, kind),
   isScanning: () => ipcRenderer.invoke(IPC.libraryScanState),
+  getStartupNotice: () => ipcRenderer.invoke(IPC.startupNotice),
   onScanningChanged: (callback) => {
     const listener = (_event: unknown, scanning: boolean): void => callback(scanning)
     ipcRenderer.on(IPC.libraryScanning, listener)
@@ -44,6 +49,14 @@ const api: ArcadiaApi = {
     const listener = (): void => callback()
     ipcRenderer.on(IPC.navigateForward, listener)
     return () => ipcRenderer.removeListener(IPC.navigateForward, listener)
+  },
+  getMicrosoftAuth: () => ipcRenderer.invoke(IPC.microsoftAuthState),
+  signInToMicrosoft: () => ipcRenderer.invoke(IPC.microsoftSignIn),
+  signOutOfMicrosoft: () => ipcRenderer.invoke(IPC.microsoftSignOut),
+  onMicrosoftAuthChanged: (callback) => {
+    const listener = (_event: unknown, error?: string): void => callback(error)
+    ipcRenderer.on(IPC.microsoftAuthChanged, listener)
+    return () => ipcRenderer.removeListener(IPC.microsoftAuthChanged, listener)
   }
 }
 

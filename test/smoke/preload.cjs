@@ -174,6 +174,22 @@ contextBridge.exposeInMainWorld('arcadia', {
   // The language menu calls this on every switch. Missing, the click would
   // throw inside the handler and the popover would simply not close.
   setLanguage: async () => undefined,
+  // Every store enabled: matches the real default when nothing has been
+  // chosen, which is what a first-run smoke test always is.
+  getEnabledStores: async () => ['steam', 'epic', 'ea', 'ubisoft'],
+  setEnabledStores: async () => undefined,
+  // Every store reports available with no limitations: the smoke test's
+  // fake bridge has no real adapters behind it, and "checking…" forever
+  // would be a false failure signal for a screen this test does not open.
+  getStoreAvailability: async () => ({
+    steam: { available: true },
+    epic: { available: true },
+    ea: { available: true },
+    ubisoft: { available: true }
+  }),
+  // DPAPI on the machine this smoke test runs on; the configuration
+  // screen only warns when this is false.
+  isSecureStorageAvailable: async () => true,
   // Sent when the install overlay is dismissed.
   cancelInstall: async () => undefined,
   // Adding does not really change the stub's list; the smoke test only
@@ -185,8 +201,16 @@ contextBridge.exposeInMainWorld('arcadia', {
   // here would put the "searching…" hint on screen in place of the tiles
   // every measurement below depends on.
   isScanning: async () => false,
+  getStartupNotice: async () => undefined,
   onScanningChanged: () => () => undefined,
   onLibraryChanged: () => () => undefined,
   onNavigateBack: () => () => undefined,
-  onNavigateForward: () => () => undefined
+  onNavigateForward: () => () => undefined,
+  // No Microsoft session in the smoke stub: signed out, and a sign-in
+  // attempt reports the platform reason a real handler would give when no
+  // session was built.
+  getMicrosoftAuth: async () => ({ signedIn: false }),
+  signInToMicrosoft: async () => ({ ok: false, error: 'The Microsoft Store only exists on Windows.' }),
+  signOutOfMicrosoft: async () => undefined,
+  onMicrosoftAuthChanged: () => () => undefined
 })

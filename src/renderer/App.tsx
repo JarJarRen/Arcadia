@@ -2,10 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } 
 import type { LibraryEntry } from '@shared/library'
 import { t } from '@shared/i18n'
 import type { EnvConfigState } from '@shared/env-config'
-import type { StoreId } from '@shared/types'
+import { STORE_IDS, type StoreId } from '@shared/types'
 import { useLibrary } from './hooks/useLibrary'
 import {
   filterGames,
+  pruneStores,
   sortGames,
   type LibraryFilter,
   type SortDirection,
@@ -80,6 +81,14 @@ export function App(): ReactElement {
    * the older answer close the newer overlay.
    */
   const installSequence = useRef(0)
+  /**
+   * The stores switched on in the configuration screen.
+   *
+   * Starts as all of them rather than empty: the answer arrives over IPC a
+   * beat after mount, and an empty list would blank the store filter for
+   * that beat.
+   */
+  const [enabledStores, setEnabledStores] = useState<StoreId[]>([...STORE_IDS])
 
   const visible = useMemo(
     () => sortGames(filterGames(entries, filter), sort, sortDirection),
@@ -111,6 +120,35 @@ export function App(): ReactElement {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    window.arcadia
+      .getEnabledStores()
+      .then((stores) => {
+        if (!cancelled) setEnabledStores(stores)
+      })
+      .catch((error: unknown) => console.error('Store selection could not be read:', error))
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  /**
+   * Drops a switched-off store from the active filter.
+   *
+   * Left alone, the selection would still name a store the menu no longer
+   * offers: the grid would filter on it, the library would look empty, and
+   * nothing on screen would say why.
+   */
+  useEffect(() => {
+    setFilter((current) => {
+      const pruned = pruneStores(current.stores, enabledStores)
+      // Same array back means nothing changed — returning `current` keeps
+      // this from queueing a render on every enabled-store update.
+      return pruned === current.stores ? current : { ...current, stores: pruned }
+    })
+  }, [enabledStores])
 
   /** Reopens the screen from the gear, with what the file says right now. */
   const openSetup = useCallback(async (): Promise<void> => {
@@ -175,9 +213,37 @@ export function App(): ReactElement {
     void window.arcadia.cancelInstall()
   }, [])
 
-  const visibleError = launchError ?? error
+  /**
+   * Whatever startup could not report at the time.
+   *
+   * Asked once on mount. It outranks the other two in the banner because it
+   * explains them: a library that came up empty because its database had to
+   * be replaced would otherwise look like a scan that found nothing.
+   *
+   * A failure to ask is swallowed — being unable to read a notice is no
+   * reason to put a different error in its place.
+   */
+  const [startupNotice, setStartupNotice] = useState<string | undefined>()
+
+  useEffect(() => {
+    let cancelled = false
+    window.arcadia
+      .getStartupNotice()
+      .then((notice) => {
+        if (!cancelled) setStartupNotice(notice)
+      })
+      .catch((caught: unknown) => console.error('Startup notice could not be read:', caught))
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const visibleError = startupNotice ?? launchError ?? error
 
   const dismissError = (): void => {
+    // The startup notice too, or the banner could never be closed: nothing
+    // re-fetches it, so it would sit there for the life of the window.
+    setStartupNotice(undefined)
     setLaunchError(undefined)
     clearError()
   }
@@ -339,6 +405,7 @@ export function App(): ReactElement {
         total={entries.length}
         shown={visible.length}
         syncing={syncing}
+        availableStores={enabledStores}
         onFilterChange={setFilter}
         onSortChange={setSort}
         onSortDirectionChange={setSortDirection}
@@ -363,12 +430,28 @@ export function App(): ReactElement {
           values={envConfig.values}
           path={envConfig.path}
           firstRun={setupIsGate}
+          enabledStores={enabledStores}
+          onEnabledStoresChange={(stores) => {
+            // Optimistic: the checkbox reacts at once and the library
+            // reloads when main sends library:changed. A failed write is
+            // logged, and the next start reads what is actually stored.
+            setEnabledStores(stores)
+            window.arcadia
+              .setEnabledStores(stores)
+              .catch((error: unknown) =>
+                console.error('Store selection could not be saved:', error)
+              )
+          }}
           onClose={() => setSetupOpen(false)}
         />
       )}
 
       {addOpen && (
         <AddGameDialog
+          // The same list the store filter offers. A game filed under a
+          // switched-off store would be written and then filtered straight
+          // back out of the visible library, with no way to reach it again.
+          availableStores={enabledStores}
           onClose={() => setAddOpen(false)}
           // Only remembered here, not selected: the library reloads through
           // an IPC event, so at this moment `entries` is still the list from

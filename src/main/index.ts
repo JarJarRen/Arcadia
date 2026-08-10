@@ -1,5 +1,6 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, safeStorage, shell } from 'electron'
 import { join } from 'node:path'
+import type { DatabaseSync } from 'node:sqlite'
 import { config as loadDotenv } from 'dotenv'
 import { openDatabase } from '@main/db/schema'
 import { GameRepository } from '@main/db/repository'
@@ -14,9 +15,12 @@ import { SteamAppList } from '@main/metadata/steamAppList'
 import { fetchAppDetails } from '@main/metadata/steamStore'
 import { SECURE_WEB_PREFERENCES } from '@main/window-options'
 import { IPC } from '@shared/ipc'
-import { parseLanguage, setLanguage } from '@shared/i18n'
+import { parseLanguage, setLanguage, t } from '@shared/i18n'
 import { envFileCandidates } from '@main/env-file'
 import { createScanState } from '@main/scan-state'
+import { enabledAdapters } from '@main/stores/enabled'
+import { MicrosoftSession, type TokenStore } from '@main/stores/microsoft/session'
+import { pollForTokens, requestDeviceCode } from '@main/stores/microsoft/auth'
 
 let mainWindow: BrowserWindow | undefined
 
@@ -110,6 +114,55 @@ function createWindow(): BrowserWindow {
   return win
 }
 
+const MICROSOFT_TOKEN_KEY = 'microsoft-refresh-token'
+/** Marks a value as encrypted, so a plaintext fallback stays readable. */
+const ENCRYPTED_PREFIX = 'enc:'
+
+/**
+ * Where the Microsoft refresh token is kept.
+ *
+ * In the database rather than the `.env`: that file holds keys the user
+ * typed, and Arcadia writing a rotating credential into it would be a
+ * surprise. Encrypted through safeStorage, which is DPAPI on Windows.
+ *
+ * Where encryption is unavailable — some Linux desktops have no keyring —
+ * the token is stored as it is. That is worth doing rather than refusing:
+ * the file already sits in the user's own profile, and the alternative is
+ * signing in again on every start. The configuration screen says so.
+ */
+function microsoftTokenStore(settings: SettingsRepository): TokenStore {
+  return {
+    read: () => {
+      const stored = settings.get(MICROSOFT_TOKEN_KEY)
+      if (stored === undefined || stored === '') return undefined
+      if (!stored.startsWith(ENCRYPTED_PREFIX)) return stored
+      try {
+        return safeStorage.decryptString(
+          Buffer.from(stored.slice(ENCRYPTED_PREFIX.length), 'base64')
+        )
+      } catch {
+        // Encrypted by another machine or another user account. The token is
+        // unusable, and reporting it as absent asks for a fresh sign-in.
+        return undefined
+      }
+    },
+    write: (value) => {
+      if (value === undefined) {
+        settings.set(MICROSOFT_TOKEN_KEY, '')
+        return
+      }
+      if (!safeStorage.isEncryptionAvailable()) {
+        settings.set(MICROSOFT_TOKEN_KEY, value)
+        return
+      }
+      settings.set(
+        MICROSOFT_TOKEN_KEY,
+        ENCRYPTED_PREFIX + safeStorage.encryptString(value).toString('base64')
+      )
+    }
+  }
+}
+
 app.whenReady().then(() => {
   // The window before the setup, not after it.
   //
@@ -140,10 +193,49 @@ app.whenReady().then(() => {
   // Before anything reads process.env — the adapters below do.
   loadApiKeys(envFilePaths)
 
-  const db = openDatabase(join(app.getPath('userData'), 'arcadia.db'))
+  /**
+   * Opening the database must not be able to stop the app from starting.
+   *
+   * This used to be a bare `openDatabase`, and a corrupt file made it throw
+   * — partway through this function, so `registerIpcHandlers` below never
+   * ran. Arcadia then came up with a window, a rendered library and every
+   * IPC channel missing, reporting "No handler registered for
+   * 'library:sync'": a message that names the wrong subsystem and gives no
+   * hint that a file on disk is at fault.
+   *
+   * `openDatabase` now sets a damaged file aside by itself, so the common
+   * case never reaches this catch. What is left for it is everything a
+   * retry cannot mend — no permission, a full disk, a path that is a
+   * directory. Those fall back to an in-memory database: the app is
+   * useless-but-honest for that run rather than dead and inexplicable, and
+   * `startupNotice` carries the reason to the banner.
+   */
+  let startupNotice: string | undefined
+  let db: DatabaseSync
+  try {
+    db = openDatabase(join(app.getPath('userData'), 'arcadia.db'), ({ movedTo }) => {
+      console.warn(`Database was damaged; kept the old file as ${movedTo}`)
+      startupNotice = t().errors.databaseRecovered(movedTo)
+    })
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    console.error('Database could not be opened:', error)
+    startupNotice = t().errors.databaseUnusable(detail)
+    db = openDatabase(':memory:')
+  }
+
   const repo = new GameRepository(db)
   const metadata = new MetadataRepository(db)
   const settings = new SettingsRepository(db)
+
+  const microsoftSession = new MicrosoftSession({
+    store: microsoftTokenStore(settings),
+    // A scan can sign itself out: a refresh token the service has refused
+    // is discarded on the spot, with no IPC handler involved to announce
+    // it. Without this the configuration screen would keep showing
+    // "Signed in as …" until it was closed and reopened.
+    onChanged: () => mainWindow?.webContents.send(IPC.microsoftAuthChanged)
+  })
 
   // Still before the renderer can ask, which is what actually matters: the
   // window is created above, but the language reaches the interface through
@@ -173,7 +265,9 @@ app.whenReady().then(() => {
     ea: { catalogCachePath: join(app.getPath('userData'), 'ea-catalog.json') },
     // Names for the games from localconfig.vdf. The local file knows only
     // identifiers; without a name a game is skipped.
-    resolveSteamName: (appId) => appList.nameFor(appId)
+    resolveSteamName: (appId) => appList.nameFor(appId),
+    microsoft: { catalogCachePath: join(app.getPath('userData'), 'microsoft-catalog.json') },
+    microsoftSession
   })
 
   // Closes gaps the app opens itself. The renderer reports images that fail
@@ -204,9 +298,25 @@ app.whenReady().then(() => {
     adapters,
     scan,
     appList,
+    // Built above in whatever language the module currently holds, which is
+    // English: the stored language lives in the very database that failed,
+    // so there is nothing else it could truthfully be.
+    ...(startupNotice === undefined ? {} : { startupNotice }),
     fetchDetails: fetchAppDetails,
     getWindow: () => mainWindow,
     onArtworkGap: () => artworkGaps.request(),
+    // Asked at the moment the screen asks, not captured here: a keyring can
+    // be unlocked while Arcadia runs, and a cached "no" would go on warning
+    // about a file that is encrypted by then.
+    secureStorageAvailable: () => safeStorage.isEncryptionAvailable(),
+    microsoft: {
+      session: microsoftSession,
+      requestDeviceCode: () => requestDeviceCode(),
+      // `cancelled` was declared and checked in pollForTokens but never
+      // supplied, so a started poll ran to the server's expiry with nothing
+      // able to stop it. The handler owns the flow and decides.
+      pollForTokens: (code, cancelled) => pollForTokens(code, { cancelled })
+    },
     envFilePaths,
     // The keys reach the adapters at startup and nowhere else, so a changed
     // key only takes effect in a process that starts after it was written.
@@ -231,7 +341,11 @@ app.whenReady().then(() => {
   void scan
     .track(async () => {
       await appList.loadCache(join(app.getPath('userData'), 'steam-apps.json'))
-      return runSync(adapters, repo, Math.floor(Date.now() / 1000))
+      return runSync(
+        enabledAdapters(adapters, settings.get('enabled-stores')),
+        repo,
+        Math.floor(Date.now() / 1000)
+      )
     })
     .then((result) => {
       console.log(`Scan finished: ${result.totalGames} games`)

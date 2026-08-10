@@ -17,6 +17,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { SetupDialog } from '@renderer/components/SetupDialog'
 import { stubArcadia } from './fixtures'
 import type { EnvConfigValues } from '@shared/env-config'
+import { STORE_IDS } from '@shared/types'
 
 const VALUES: EnvConfigValues = {
   STEAM_WEB_API_KEY: 'existing-web-key',
@@ -29,6 +30,8 @@ function renderSetup(overrides: Partial<Parameters<typeof SetupDialog>[0]> = {})
     values: VALUES,
     path: 'C:\\Users\\test\\.env',
     firstRun: false,
+    enabledStores: [...STORE_IDS],
+    onEnabledStoresChange: vi.fn(),
     onClose: vi.fn(),
     ...overrides
   }

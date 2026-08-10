@@ -167,6 +167,58 @@ describe('preload bridge', () => {
       channel: IPC.artworkBroken,
       args: ['merge-artwork', 'grid'],
       call: () => api.reportBrokenArtwork('merge-artwork', 'grid')
+    },
+    {
+      name: 'getMicrosoftAuth',
+      channel: IPC.microsoftAuthState,
+      args: [],
+      call: () => api.getMicrosoftAuth()
+    },
+    {
+      name: 'signInToMicrosoft',
+      channel: IPC.microsoftSignIn,
+      args: [],
+      call: () => api.signInToMicrosoft()
+    },
+    {
+      name: 'signOutOfMicrosoft',
+      channel: IPC.microsoftSignOut,
+      args: [],
+      call: () => api.signOutOfMicrosoft()
+    },
+    // The five the table used to miss, despite claiming to cover every
+    // invoke-based method. Each is a channel mapping like any other, and
+    // each would have been just as capable of pointing at the wrong one.
+    {
+      name: 'getEnabledStores',
+      channel: IPC.settingsGetStores,
+      args: [],
+      call: () => api.getEnabledStores()
+    },
+    {
+      name: 'setEnabledStores',
+      channel: IPC.settingsSetStores,
+      args: [['steam', 'microsoft']],
+      call: () => api.setEnabledStores(['steam', 'microsoft'])
+    },
+    {
+      name: 'getStoreAvailability',
+      channel: IPC.storesAvailability,
+      args: [],
+      call: () => api.getStoreAvailability()
+    },
+    {
+      name: 'isSecureStorageAvailable',
+      channel: IPC.storesSecureStorage,
+      args: [],
+      call: () => api.isSecureStorageAvailable()
+    },
+    { name: 'isScanning', channel: IPC.libraryScanState, args: [], call: () => api.isScanning() },
+    {
+      name: 'getStartupNotice',
+      channel: IPC.startupNotice,
+      args: [],
+      call: () => api.getStartupNotice()
     }
   ]
 
@@ -184,13 +236,24 @@ describe('preload bridge', () => {
     expect(invokeCalls[0]?.args).toEqual(row.args)
   })
 
-  it('covers every invoke-based method exactly once, with eighteen distinct channels', () => {
-    expect(INVOKE_TABLE).toHaveLength(18)
-    expect(new Set(INVOKE_TABLE.map((row) => row.name)).size).toBe(18)
+  it('covers every invoke-based method exactly once, with twenty-seven distinct channels', () => {
+    expect(INVOKE_TABLE).toHaveLength(27)
+    expect(new Set(INVOKE_TABLE.map((row) => row.name)).size).toBe(27)
+    // Exhaustive for real, rather than by assertion: every method on the
+    // bridge is either in the table above or one of the five listeners.
+    const listenerMethods = [
+      'onScanningChanged',
+      'onLibraryChanged',
+      'onNavigateBack',
+      'onNavigateForward',
+      'onMicrosoftAuthChanged'
+    ]
+    const covered = new Set([...INVOKE_TABLE.map((row) => row.name), ...listenerMethods])
+    expect(Object.keys(api).filter((name) => !covered.has(name))).toEqual([])
   })
 
   it('never sends two methods down the same channel', () => {
-    // Includes the three listener channels too: a copy-paste could just as
+    // Includes the four listener channels too: a copy-paste could just as
     // easily point a listener method at an invoke channel, or at another
     // listener's channel, and this is the one assertion that would catch
     // that shape of mistake as well as the invoke-only one.
@@ -198,11 +261,12 @@ describe('preload bridge', () => {
       ...INVOKE_TABLE.map((row) => row.channel),
       IPC.libraryChanged,
       IPC.navigateBack,
-      IPC.navigateForward
+      IPC.navigateForward,
+      IPC.microsoftAuthChanged
     ]
 
     expect(new Set(allChannels).size).toBe(allChannels.length)
-    expect(allChannels).toHaveLength(21)
+    expect(allChannels).toHaveLength(31)
   })
 
   /**
@@ -220,7 +284,12 @@ describe('preload bridge', () => {
   }> = [
     { name: 'onLibraryChanged', channel: IPC.libraryChanged, subscribe: (cb) => api.onLibraryChanged(cb) },
     { name: 'onNavigateBack', channel: IPC.navigateBack, subscribe: (cb) => api.onNavigateBack(cb) },
-    { name: 'onNavigateForward', channel: IPC.navigateForward, subscribe: (cb) => api.onNavigateForward(cb) }
+    { name: 'onNavigateForward', channel: IPC.navigateForward, subscribe: (cb) => api.onNavigateForward(cb) },
+    {
+      name: 'onMicrosoftAuthChanged',
+      channel: IPC.microsoftAuthChanged,
+      subscribe: (cb) => api.onMicrosoftAuthChanged(cb)
+    }
   ]
 
   it.each(LISTENER_TABLE)(
@@ -252,6 +321,6 @@ describe('preload bridge', () => {
 
   it('gives each listener method its own distinct channel', () => {
     const channels = LISTENER_TABLE.map((row) => row.channel)
-    expect(new Set(channels).size).toBe(3)
+    expect(new Set(channels).size).toBe(4)
   })
 })

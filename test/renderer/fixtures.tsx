@@ -12,6 +12,7 @@
  * needs one import rather than two.
  */
 import type { ArcadiaApi } from '@shared/ipc'
+import { STORE_IDS } from '@shared/types'
 
 export { entry, game } from '../fixtures/library'
 
@@ -38,6 +39,10 @@ export function stubArcadia(overrides: Partial<ArcadiaApi> = {}): ArcadiaApi {
     setMatch: async () => ({ ok: true }),
     getLanguage: async () => 'en',
     setLanguage: async () => undefined,
+    getEnabledStores: async () => [...STORE_IDS],
+    setEnabledStores: async () => undefined,
+    getStoreAvailability: async () => ({}),
+    isSecureStorageAvailable: async () => true,
     getEnvConfig: async () =>
       ({
         values: { STEAM_WEB_API_KEY: '', STEAM_ID64: '', STEAMGRIDDB_API_KEY: '' },
@@ -49,10 +54,15 @@ export function stubArcadia(overrides: Partial<ArcadiaApi> = {}): ArcadiaApi {
     removeManualGame: async () => ({ ok: true }),
     reportBrokenArtwork: async () => undefined,
     isScanning: async () => false,
+    getStartupNotice: async () => undefined,
     onScanningChanged: () => () => undefined,
     onLibraryChanged: () => () => undefined,
     onNavigateBack: () => () => undefined,
     onNavigateForward: () => () => undefined,
+    getMicrosoftAuth: async () => ({ signedIn: false }),
+    signInToMicrosoft: async () => ({ ok: false, error: 'not configured' }),
+    signOutOfMicrosoft: async () => undefined,
+    onMicrosoftAuthChanged: () => () => undefined,
     ...overrides
   }
 

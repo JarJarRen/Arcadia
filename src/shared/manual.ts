@@ -22,7 +22,12 @@ const PATTERNS: Record<StoreId, RegExp> = {
   steam: /^\d+$/,
   ea: /^\d+$/,
   ubisoft: /^\d+$/,
-  epic: /^[A-Za-z0-9_.-]+$/
+  epic: /^[A-Za-z0-9_.-]+$/,
+  // Package family name: `<name>_<publisherId>`, the same shape
+  // packages.ts derives from the registry. MSIX allows only
+  // alphanumerics, periods and dashes in the name half; the publisher ID
+  // half is always alphanumeric.
+  microsoft: /^[A-Za-z0-9.-]+_[A-Za-z0-9]+$/
 }
 
 export function storeGameIdLooksValid(storeId: StoreId, storeGameId: string): boolean {

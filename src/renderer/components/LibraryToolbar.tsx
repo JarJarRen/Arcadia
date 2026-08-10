@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react'
 import { t } from '@shared/i18n'
+import type { StoreId } from '@shared/types'
 import type { LibraryFilter, SharedFilter, SortDirection, SortKey, ViewMode } from '../filter'
 import { SettingsMenu } from './SettingsMenu'
 import { StoreFilterMenu } from './StoreFilterMenu'
@@ -12,6 +13,8 @@ interface Props {
   total: number
   shown: number
   syncing: boolean
+  /** The stores switched on in the configuration screen. */
+  availableStores: StoreId[]
   onFilterChange: (filter: LibraryFilter) => void
   onSortChange: (sort: SortKey) => void
   onSortDirectionChange: (direction: SortDirection) => void
@@ -44,6 +47,7 @@ export function LibraryToolbar(props: Props): ReactElement {
 
       <StoreFilterMenu
         stores={filter.stores}
+        available={props.availableStores}
         onChange={(stores) => onFilterChange({ ...filter, stores })}
       />
 

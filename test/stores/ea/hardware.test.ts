@@ -6,6 +6,7 @@ import {
   parseHardwareOutput,
   readHardwareString
 } from '@main/stores/ea/hardware'
+import { RUNS_SUBPROCESSES } from '../../subprocess'
 
 const OUTPUT = [
   'baseBoardManufacturer=Micro-Star International Co., Ltd.',
@@ -92,13 +93,17 @@ describe('EA hardware fingerprint', () => {
     expect(await readHardwareString(async () => 'baseBoardManufacturer=')).toBeUndefined()
   })
 
-  it('reads the string through the real PowerShell/WMI runner by default', async () => {
+  it.skipIf(!RUNS_SUBPROCESSES)('reads the string through the real PowerShell/WMI runner by default', async () => {
     // The only test in this file that exercises `defaultExec` rather than
     // an injected fake — it runs the real HARDWARE_COMMAND against this
     // machine's own WMI data. The exact values are unverifiable (they
     // depend on the machine this runs on), so this only pins the shape: a
     // real fingerprint comes back, in the format buildHardwareString
     // produces.
+    //
+    // Skipped unless `--mode full`: PowerShell opens a console window that
+    // no `windowsHide` can suppress. `npm run test:coverage` runs it, which
+    // is what Windows CI uses. See test/subprocess.ts.
     const value = await readHardwareString()
     expect(value).toBeDefined()
     expect(value?.endsWith(';')).toBe(true)

@@ -1,9 +1,41 @@
+import { spawn } from 'node:child_process'
 import { shell } from 'electron'
 import type { Game } from '@shared/types'
 import type { LaunchResult } from '@shared/ipc'
 import { t } from '@shared/i18n'
 import type { GuidedInstall, StoreAdapter } from '@main/stores/types'
 import { runWindowAgent, type AgentHandle, type AgentTarget } from '@main/platform/windows'
+
+/** Starts a program. Injected in tests; in production a detached spawn. */
+export type RunCommand = (exe: string, args: string[]) => Promise<void>
+
+/**
+ * Starts the command and stops caring about it.
+ *
+ * `detached` with `unref` so the game outlives Arcadia — closing the library
+ * must not take the game down with it — and `windowsHide` so `explorer.exe`
+ * does not flash a console window on the way through.
+ *
+ * Settles on the spawn outcome, not on the process exiting — a launched game
+ * runs for hours, and this only needs to know whether it started. That also
+ * means the returned promise must not resolve until Node either confirms the
+ * process started or reports that it could not: an `'error'` event with no
+ * listener throws, and by the time an `async` function's body has returned,
+ * nothing is left to catch a throw that arrives after the fact. Listening
+ * for `'error'` turns that throw into a rejection `open()`'s `catch` can
+ * turn into a clean `{ ok: false }` instead of taking Arcadia down with it.
+ */
+const defaultRun: RunCommand = (exe, args) =>
+  new Promise((resolve, reject) => {
+    const child = spawn(exe, args, { detached: true, stdio: 'ignore', windowsHide: true })
+    child.once('error', reject)
+    child.once('spawn', () => {
+      // Only after the process really started: unref'ing lets the game
+      // outlive Arcadia, which is the whole point of the detached spawn.
+      child.unref()
+      resolve()
+    })
+  })
 
 /**
  * Runs an adapter's launch URI.
@@ -14,9 +46,10 @@ import { runWindowAgent, type AgentHandle, type AgentTarget } from '@main/platfo
  */
 export async function launchGame(
   adapters: StoreAdapter[],
-  game: Game
+  game: Game,
+  run: RunCommand = defaultRun
 ): Promise<LaunchResult> {
-  return open(adapters, game, 'launch')
+  return open(adapters, game, 'launch', run)
 }
 
 /** Arcadia's own window, as the agent needs to see it. */
@@ -209,11 +242,26 @@ async function guided(
 async function open(
   adapters: StoreAdapter[],
   game: Game,
-  action: 'launch' | 'install'
+  action: 'launch' | 'install',
+  run: RunCommand = defaultRun
 ): Promise<LaunchResult> {
   const adapter = adapters.find((candidate) => candidate.id === game.storeId)
   if (adapter === undefined) {
     return { ok: false, error: t().errors.noAdapter(game.storeId) }
+  }
+
+  // A command where the adapter has one, a URI otherwise. Installing always
+  // goes through a URI: every store, Microsoft included, has a protocol for
+  // opening a product page.
+  if (action === 'launch' && adapter.launchCommand !== undefined) {
+    try {
+      const command = adapter.launchCommand(game)
+      await run(command.exe, command.args)
+      return { ok: true }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      return { ok: false, error: t().errors.launchNameFailed(game.name, message) }
+    }
   }
 
   // Building the URI validates the game ID and throws on invalid values —
