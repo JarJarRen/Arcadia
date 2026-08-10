@@ -113,4 +113,70 @@ describe('claimTarget', () => {
       )
     ).toBe('https://store.ubisoft.com/x')
   })
+
+  it('refuses a storeGameId on a store with no URI scheme when the claim URL is hostile', () => {
+    // Same shape as above, but the fallthrough must not treat a foreign
+    // storeGameId as a pass for whatever claimUrl happens to be attached.
+    expect(() =>
+      claimTarget(
+        row({
+          storeId: 'ubisoft',
+          source: 'gamerpower',
+          storeGameId: 'some-ubisoft-id',
+          claimUrl: 'https://evil.example.com/x'
+        })
+      )
+    ).toThrow()
+  })
+
+  it('refuses a claim address that carries credentials in its authority', () => {
+    // evil.com@gamerpower.com resolves to hostname gamerpower.com, so this
+    // is not an open redirect — but the userinfo is attacker-controlled
+    // text that must not reach shell.openExternal unexamined.
+    expect(() =>
+      claimTarget(row({ source: 'gamerpower', claimUrl: 'https://evil.com@gamerpower.com/x' }))
+    ).toThrow()
+  })
+
+  it('refuses a non-string claimUrl instead of crashing', () => {
+    // The third-party JSON this file's header warns about can hand back
+    // null for a field the type says is a string. Refuse deliberately
+    // rather than fail on `.length` with an unrelated TypeError.
+    expect(() =>
+      claimTarget(row({ source: 'gamerpower', claimUrl: null as unknown as string }))
+    ).toThrow()
+  })
+
+  it('refuses a claim host with a trailing dot', () => {
+    // gamerpower.com. is a different hostname string than gamerpower.com
+    // and must not slip past either the exact-match or suffix-match arm.
+    expect(() =>
+      claimTarget(row({ source: 'gamerpower', claimUrl: 'https://gamerpower.com./x' }))
+    ).toThrow()
+  })
+
+  it('refuses a claim host spoofed with a homoglyph', () => {
+    // U+0430 (Cyrillic а) looks like ASCII a but punycode-encodes to a
+    // different hostname entirely, so it is not on the allow-list.
+    expect(() =>
+      claimTarget(row({ source: 'gamerpower', claimUrl: 'https://gаmerpower.com/x' }))
+    ).toThrow()
+  })
+
+  it('refuses a claim host hidden behind a percent-encoded dot', () => {
+    expect(() =>
+      claimTarget(row({ source: 'gamerpower', claimUrl: 'https://gamerpower.com%2eevil.com/x' }))
+    ).toThrow()
+  })
+
+  it('accepts a backslash-mangled claim URL because the hostname still resolves to gamerpower.com', () => {
+    // A literal backslash before @ normalises to a forward slash, so
+    // @evil.com becomes part of the path rather than the authority and the
+    // parsed hostname is still gamerpower.com. Pinning the exact accepted
+    // value here so a future change to this behaviour is a visible diff,
+    // not a silent one.
+    expect(
+      claimTarget(row({ source: 'gamerpower', claimUrl: 'https://gamerpower.com\\@evil.com/x' }))
+    ).toBe('https://gamerpower.com/@evil.com/x')
+  })
 })

@@ -8,7 +8,6 @@ import type { Freebie } from '@shared/freebies'
  */
 const ALLOWED_HOSTS: readonly string[] = [
   'gamerpower.com',
-  'store.epicgames.com',
   'epicgames.com',
   'steampowered.com',
   'ubisoft.com',
@@ -52,6 +51,12 @@ function checkedUrl(claimUrl: string): string {
   if (parsed.protocol !== 'https:') {
     throw new Error(`Refusing a claim address that is not https: ${claimUrl}`)
   }
+  // Userinfo is never needed by a legitimate store link, and it is exactly
+  // the kind of attacker-controlled text this file exists to keep out of
+  // whatever consumes the returned string — reject rather than strip it.
+  if (parsed.username !== '' || parsed.password !== '') {
+    throw new Error(`Refusing a claim address that carries credentials: ${claimUrl}`)
+  }
   if (!hostIsAllowed(parsed.hostname)) {
     throw new Error(`Refusing a claim address on an unknown host: ${parsed.hostname}`)
   }
@@ -78,7 +83,10 @@ export function claimTarget(row: Freebie): string {
     }
   }
 
-  if (row.claimUrl !== undefined && row.claimUrl.length > 0) return checkedUrl(row.claimUrl)
+  // The row's claimUrl comes from third-party JSON this file's own header
+  // warns is never validated upstream, so a non-string value (null, a
+  // number) must be refused deliberately rather than crash on `.length`.
+  if (typeof row.claimUrl === 'string' && row.claimUrl.length > 0) return checkedUrl(row.claimUrl)
 
   throw new Error(`Nothing to open for ${row.title}`)
 }
