@@ -167,6 +167,8 @@ export interface Strings {
     removeFavorite: string
     sharedOrFree: string
     sharedOrFreeTitle: string
+    /** A storeless game whose program is no longer where it was. */
+    fileNotFound: string
   }
 
   storeSwitch: {
@@ -514,7 +516,8 @@ const en: Strings = {
     addFavorite: 'Mark as favourite',
     removeFavorite: 'Remove favourite',
     sharedOrFree: 'Shared/Free',
-    sharedOrFreeTitle: 'Not licensed to your account'
+    sharedOrFreeTitle: 'Not licensed to your account',
+    fileNotFound: 'Program not found'
   },
 
   storeSwitch: {
@@ -902,7 +905,8 @@ const de: Strings = {
     addFavorite: 'Als Favorit markieren',
     removeFavorite: 'Favorit entfernen',
     sharedOrFree: 'Geteilt/Gratis',
-    sharedOrFreeTitle: 'Nicht deinem Konto lizenziert'
+    sharedOrFreeTitle: 'Nicht deinem Konto lizenziert',
+    fileNotFound: 'Programm nicht gefunden'
   },
 
   storeSwitch: {

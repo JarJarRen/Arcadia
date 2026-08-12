@@ -12,6 +12,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { GameDetail } from '@renderer/pages/GameDetail'
 import { entry, game, stubArcadia } from './fixtures'
+import { t } from '@shared/i18n'
 
 function renderDetail(overrides: Partial<Parameters<typeof GameDetail>[0]> = {}) {
   const props = {
@@ -343,5 +344,37 @@ describe('GameDetail', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Show in file manager' }))
 
     await screen.findByText('No such device')
+  })
+
+  it('offers no install for a storeless game whose program has gone', () => {
+    stubArcadia()
+    const missing = entry('Minecraft Launcher', [
+      game('other', 'mc', 'Minecraft Launcher', {
+        installed: false,
+        launchExe: 'C:\\Games\\mc.exe'
+      })
+    ])
+    renderDetail({ entry: missing })
+
+    expect(screen.queryByRole('button', { name: t().card.install })).toBeNull()
+    expect(screen.getByText(t().card.fileNotFound)).toBeTruthy()
+  })
+
+  it('still offers play for a storeless game whose program is there', () => {
+    stubArcadia()
+    const present = entry('Minecraft Launcher', [
+      game('other', 'mc', 'Minecraft Launcher', { installed: true })
+    ])
+    renderDetail({ entry: present })
+
+    expect(screen.getByRole('button', { name: t().card.play })).toBeTruthy()
+  })
+
+  it('still offers install for a real store that is not installed', () => {
+    stubArcadia()
+    const uninstalled = entry('Portal', [game('steam', '400', 'Portal', { installed: false })])
+    renderDetail({ entry: uninstalled })
+
+    expect(screen.getByRole('button', { name: t().card.install })).toBeTruthy()
   })
 })
