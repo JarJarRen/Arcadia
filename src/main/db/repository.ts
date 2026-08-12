@@ -27,6 +27,8 @@ interface GameRow {
   launch_id: string | null
   shared_or_free: number
   manual: number
+  launch_exe: string | null
+  launch_args: string | null
   last_played: number | null
   favorite: number
   hidden: number
@@ -34,7 +36,26 @@ interface GameRow {
   last_seen: number
 }
 
+/**
+ * Reads the stored argument array.
+ *
+ * A malformed value yields no arguments rather than throwing: `all()` reads
+ * the entire library through `toGame`, and one damaged row must not empty it.
+ */
+function parseLaunchArgs(value: string | null): string[] | undefined {
+  if (value === null) return undefined
+  try {
+    const parsed: unknown = JSON.parse(value)
+    return Array.isArray(parsed) && parsed.every((part) => typeof part === 'string')
+      ? (parsed as string[])
+      : []
+  } catch {
+    return []
+  }
+}
+
 function toGame(row: GameRow): Game {
+  const launchArgs = parseLaunchArgs(row.launch_args)
   return {
     id: row.id,
     storeId: row.store_id as StoreId,
@@ -47,6 +68,8 @@ function toGame(row: GameRow): Game {
     launchId: row.launch_id ?? undefined,
     ...(row.shared_or_free === 1 ? { sharedOrFree: true } : {}),
     ...(row.manual === 1 ? { manual: true } : {}),
+    ...(row.launch_exe === null ? {} : { launchExe: row.launch_exe }),
+    ...(launchArgs === undefined ? {} : { launchArgs }),
     lastPlayed: row.last_played ?? undefined,
     favorite: row.favorite === 1,
     hidden: row.hidden === 1,
@@ -70,6 +93,19 @@ export class GameRepository {
       | GameRow
       | undefined
     return row ? toGame(row) : undefined
+  }
+
+  /**
+   * The storeless rows, for the adapter that scans them.
+   *
+   * The adapter reading rows Arcadia itself wrote is not accidental: for this
+   * store the user's own list **is** the catalogue.
+   */
+  storeless(): Game[] {
+    const rows = this.db
+      .prepare("SELECT * FROM games WHERE store_id = 'other' ORDER BY name COLLATE NOCASE")
+      .all() as unknown as GameRow[]
+    return rows.map(toGame)
   }
 
   setFavorite(id: string, value: boolean): void {
@@ -229,10 +265,12 @@ export class GameRepository {
       INSERT INTO games (
         id, store_id, store_game_id, name, installed, install_path,
         install_size, playtime_minutes, last_played, launch_id, shared_or_free,
+        manual, launch_exe, launch_args,
         first_seen, last_seen
       ) VALUES (
         @id, @storeId, @storeGameId, @name, @installed, @installPath,
         @installSize, @playtime, @lastPlayed, @launchId, @sharedOrFree,
+        @manual, @launchExe, @launchArgs,
         @now, @now
       )
       ON CONFLICT(id) DO UPDATE SET
@@ -247,11 +285,14 @@ export class GameRepository {
         -- mark has to disappear again. With COALESCE it would stay forever
         -- once it had been set.
         shared_or_free   = excluded.shared_or_free,
-        -- A scan that finds the game owns the row from now on. The entry
-        -- was a placeholder for something no adapter could see; that is no
-        -- longer true, and leaving the mark would keep offering a delete
-        -- button for a row the next scan brings straight back.
-        manual           = 0,
+        -- Taken from the scanned row rather than forced to 0. A scan that
+        -- finds a game still claims the row — no adapter sets this field, so
+        -- every store but 'other' writes 0 exactly as before. The storeless
+        -- store is the one that scans its own hand-made rows, and stripping
+        -- the mark there would take away their delete button forever.
+        manual           = excluded.manual,
+        launch_exe       = COALESCE(excluded.launch_exe, games.launch_exe),
+        launch_args      = COALESCE(excluded.launch_args, games.launch_args),
         last_seen        = excluded.last_seen
     `)
 
@@ -292,6 +333,9 @@ export class GameRepository {
           lastPlayed: game.lastPlayed ?? null,
           launchId: game.launchId ?? null,
           sharedOrFree: game.sharedOrFree === true ? 1 : 0,
+          manual: game.manual === true ? 1 : 0,
+          launchExe: game.launchExe ?? null,
+          launchArgs: game.launchArgs === undefined ? null : JSON.stringify(game.launchArgs),
           now
         })
       }
