@@ -33,3 +33,24 @@ export function countryFromLocale(locale: string): string {
   const last = parts.length > 1 ? parts.at(-1) : undefined
   return last !== undefined && /^[A-Za-z]{2}$/.test(last) ? last.toUpperCase() : 'US'
 }
+
+/**
+ * The store country, preferring the OS's own answer over a locale guess.
+ *
+ * Electron's `app.getLocaleCountryCode()` reads the operating system's own
+ * two-letter ISO 3166 country code — the actual thing Steam's `cc=` and
+ * Epic's `country=` want — rather than inferring one from a BCP 47 language
+ * tag. A language tag says what language the user reads, not what store
+ * region they are in: countryFromLocale above exists only because the OS
+ * code was not being asked for.
+ *
+ * The OS can still come up empty — observed on Linux, where
+ * `getLocaleCountryCode()` returns `""` when it cannot detect one — so
+ * countryFromLocale(locale) is the fallback, and its own 'US' default is
+ * the fallback of the fallback. One function, so the order is fixed here
+ * rather than re-decided at every call site.
+ */
+export function resolveStoreCountry(osCountryCode: string, locale: string): string {
+  if (/^[A-Za-z]{2}$/.test(osCountryCode)) return osCountryCode.toUpperCase()
+  return countryFromLocale(locale)
+}

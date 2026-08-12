@@ -24,7 +24,7 @@ import { pollForTokens, requestDeviceCode } from '@main/stores/microsoft/auth'
 import { FreebieRepository } from '@main/db/freebies'
 import { FreebieService } from '@main/freebies/service'
 import { confirmClaims } from '@main/freebies/confirm'
-import { countryFromLocale } from '@main/locale-country'
+import { resolveStoreCountry } from '@main/locale-country'
 
 let mainWindow: BrowserWindow | undefined
 
@@ -239,12 +239,14 @@ app.whenReady().then(() => {
   const freebies = new FreebieService({
     repo: freebieRepo,
     settings,
-    // The store country comes from the system locale — "de-DE" → "DE". See
-    // countryFromLocale for why it is the last segment, not the second.
-    // Falls back to US, which is the region Epic's feed defaults to.
+    // The store country prefers the OS's own ISO 3166 code — the real
+    // region, not a guess parsed out of a language tag — and only falls
+    // back to the locale when the OS has none to offer. See
+    // resolveStoreCountry for the order and why. Falls back to US as a last
+    // resort, which is the region Epic's feed defaults to.
     locale: () => ({
       language: getLanguage(),
-      country: countryFromLocale(app.getLocale())
+      country: resolveStoreCountry(app.getLocaleCountryCode(), app.getLocale())
     })
   })
 

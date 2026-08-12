@@ -6,7 +6,7 @@
  * third-party feed for the wrong region's promotions.
  */
 import { describe, expect, it } from 'vitest'
-import { countryFromLocale } from '@main/locale-country'
+import { countryFromLocale, resolveStoreCountry } from '@main/locale-country'
 
 describe('countryFromLocale', () => {
   it('reads the region from a plain language-region tag', () => {
@@ -41,5 +41,25 @@ describe('countryFromLocale', () => {
 
   it('uppercases a lowercase region', () => {
     expect(countryFromLocale('en-us')).toBe('US')
+  })
+})
+
+describe('resolveStoreCountry', () => {
+  it('trusts a valid OS country code over the locale', () => {
+    // The OS code is the real answer; the locale is only ever a guess.
+    expect(resolveStoreCountry('DE', 'en-US')).toBe('DE')
+  })
+
+  it('falls through to the locale when the OS reports no country', () => {
+    // app.getLocaleCountryCode() returns "" on some Linux desktops.
+    expect(resolveStoreCountry('', 'de-DE')).toBe('DE')
+  })
+
+  it('falls back to US when neither the OS nor the locale has a usable country', () => {
+    expect(resolveStoreCountry('', 'de')).toBe('US')
+  })
+
+  it('uppercases a lowercase OS country code', () => {
+    expect(resolveStoreCountry('de', 'en-US')).toBe('DE')
   })
 })
