@@ -97,12 +97,10 @@ export function FreeGames({ onClose, onOpenSetup }: Props): ReactElement {
         {/* First in reading order, same shape as detail__back, so it reads
             as "go back" rather than "dismiss" — a bare × gave no hint that
             this returns to the library rather than closing something. */}
-        <button
-          type="button"
-          className="button freebies__back"
-          title={t().freebies.back}
-          onClick={onClose}
-        >
+        {/* No title: the toolbar's aria-label + title pairing is for
+            icon-only controls. Here the words are already on screen, and a
+            tooltip repeating them just covers them up on hover. */}
+        <button type="button" className="button freebies__back" onClick={onClose}>
           {t().freebies.back}
         </button>
         <h2>{t().freebies.title}</h2>
