@@ -373,6 +373,44 @@ describe('a storeless game', () => {
     )
   })
 
+  it('re-quotes a picked argument that contains a space, and splits it back on submit', async () => {
+    // This is what a resolved Windows shortcut produces: an argument such as
+    // a profile name can contain a space, so it has to survive the round
+    // trip through the display field's plain-text quoting and back through
+    // parseArguments() as one argument, not two.
+    const addManualGame = vi.fn(async () => ({ ok: true, id: 'other:manual-modpack' }))
+    stubArcadia({
+      addManualGame,
+      pickExecutable: async () => ({
+        ok: true,
+        exe: 'C:\\Games\\mc.exe',
+        args: ['--profile', 'My Pack'],
+        suggestedName: 'Minecraft'
+      })
+    })
+    render(<AddGameDialog availableStores={['other']} onClose={noop} onAdded={noop} />)
+
+    fireEvent.click(screen.getByRole('button', { name: t().addDialog.browse }))
+
+    await waitFor(() =>
+      expect(
+        (screen.getByLabelText(startingWith(t().addDialog.argumentsLabel)) as HTMLInputElement)
+          .value
+      ).toBe('--profile "My Pack"')
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: t().addDialog.submit }))
+
+    await waitFor(() =>
+      expect(addManualGame).toHaveBeenCalledWith({
+        storeId: 'other',
+        name: 'Minecraft',
+        launchExe: 'C:\\Games\\mc.exe',
+        launchArgs: ['--profile', 'My Pack']
+      })
+    )
+  })
+
   it('shows why a chosen file was refused', async () => {
     stubArcadia({ pickExecutable: async () => ({ ok: false, error: 'Not a program.' }) })
     render(<AddGameDialog availableStores={['other']} onClose={noop} onAdded={noop} />)

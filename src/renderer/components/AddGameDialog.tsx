@@ -201,9 +201,11 @@ export function AddGameDialog({ availableStores, onClose, onAdded }: Props): Rea
         )}
 
         {idLooksWrong && (
-          <p className="modal__error">{t().errors.invalidInput}</p>
+          <p className="modal__error" role="alert">{t().errors.invalidInput}</p>
         )}
-        {error !== undefined && <p className="modal__error">{error}</p>}
+        {error !== undefined && (
+          <p className="modal__error" role="alert">{error}</p>
+        )}
 
         <div className="modal__actions">
           <button type="button" className="button" onClick={onClose}>
