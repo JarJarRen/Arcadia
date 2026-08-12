@@ -22,6 +22,9 @@ interface Props {
   onAddGame: () => void
   onSync: () => void
   onOpenSetup: () => void
+  /** Unclaimed current offers for the enabled stores. Zero hides the badge. */
+  freebieCount: number
+  onOpenFreebies: () => void
 }
 
 export function LibraryToolbar(props: Props): ReactElement {
@@ -173,6 +176,16 @@ export function LibraryToolbar(props: Props): ReactElement {
 
       <button type="button" className="button" onClick={props.onAddGame}>
         + {t().toolbar.addGame}
+      </button>
+
+      <button
+        type="button"
+        className="button toolbar__freebies"
+        onClick={props.onOpenFreebies}
+      >
+        {props.freebieCount > 0
+          ? t().freebies.buttonWithCount(props.freebieCount)
+          : t().freebies.title}
       </button>
 
       <SettingsMenu onOpenSetup={props.onOpenSetup} />

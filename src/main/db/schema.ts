@@ -109,6 +109,40 @@ CREATE TABLE IF NOT EXISTS artwork (
   url     TEXT NOT NULL,
   PRIMARY KEY (game_id, kind)
 );
+
+/**
+ * The cached free-games list.
+ *
+ * Rewritten wholesale on every successful refresh, so an ended promotion
+ * disappears without a separate expiry job. A failed refresh leaves the
+ * previous contents alone, which is what makes the page usable offline.
+ */
+CREATE TABLE IF NOT EXISTS freebies (
+  id            TEXT PRIMARY KEY,
+  store_id      TEXT NOT NULL,
+  title         TEXT NOT NULL,
+  kind          TEXT NOT NULL,
+  store_game_id TEXT,
+  claim_url     TEXT,
+  image_url     TEXT,
+  starts_at     INTEGER,
+  ends_at       INTEGER,
+  source        TEXT NOT NULL,
+  seen_at       INTEGER NOT NULL
+);
+
+/**
+ * What the user has already opened, and what has since turned up.
+ *
+ * A separate table so a claim outlives the promotion that produced it: a
+ * game claimed last Thursday should still read as claimed after the
+ * giveaway ends and its freebies row is gone.
+ */
+CREATE TABLE IF NOT EXISTS freebie_claims (
+  freebie_id   TEXT PRIMARY KEY,
+  opened_at    INTEGER NOT NULL,
+  confirmed_at INTEGER
+);
 `
 
 /**

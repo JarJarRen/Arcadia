@@ -7,6 +7,15 @@
   --text-dim: #949bab;
   --accent: #4a8cff;
   color-scheme: dark;
+  /* The library toolbar and the free-games header are two rules with the
+     same job — a full-width control row — and drifted apart the moment one
+     of them gained an unstyled heading. One variable so a future control
+     added to either can only grow the row it is actually in, not silently
+     re-open the mismatch between the two. 66px is the toolbar's own
+     measured height (14px padding + a 37px control row) — see the
+     `toolbarHeight` figure the smoke test prints, which is the only thing
+     here that can actually measure it. */
+  --toolbar-height: 66px;
 }
 
 * {
@@ -31,6 +40,7 @@ body {
   flex-wrap: wrap;
   gap: 10px;
   align-items: center;
+  min-height: var(--toolbar-height);
   padding: 14px 20px;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
@@ -501,6 +511,155 @@ button:focus-visible {
 .card__actions,
 .storeswitch {
   position: relative;
+}
+
+/* ── Freebie card ─────────────────────────────────────────────────────
+   Border, radius and colours match .card — this grid sits one page away
+   from the library and previously looked like a different app.
+   min-height is deliberate, not decorative: jsdom computes no layout, so
+   nothing in the test suite would catch this collapsing to a sliver the
+   way the library grid once did. */
+.freebie {
+  display: flex;
+  flex-direction: column;
+  min-height: 220px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.freebie__art {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}
+
+.freebie__body {
+  display: flex;
+  flex-direction: column;
+  /* Without this, .freebie__body only ever grows to fit its own content,
+     leaving no free space inside it for .freebie__claim's margin-top: auto
+     to push into — a two-line title left the button riding well above a
+     one-line title's, even though the cards themselves stretch to equal
+     height in the grid. */
+  flex: 1;
+  gap: 6px;
+  padding: 10px 12px 12px;
+}
+
+.freebie__title {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.freebie__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.freebie__claim {
+  margin-top: auto;
+}
+
+/* Replaces the claim button once confirmed, in the same spot in the flex
+   column — margin-top: auto matches .freebie__claim so the card's footer
+   does not jump when a claim goes from pending to confirmed. margin-bottom
+   is reset for the same alignment: unlike .freebie__claim's <button>, this
+   is a bare <p>, and its default browser margin-bottom left it sitting
+   above the button's baseline in the same row. */
+.freebie__claimed {
+  margin: auto 0 0;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.freebie__store {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.freebie__kind,
+.freebie__when {
+  color: var(--text-dim);
+}
+
+.freebies__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 16px;
+  align-content: start;
+}
+
+/* ── Free games page ─────────────────────────────────────────────────── */
+/* No padding of its own: the header below is a full-width bar like
+   .toolbar, and .freebies__body carries the inset for what sits under it —
+   the same split the library uses between .toolbar and .grid. */
+.freebies__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--toolbar-height);
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+/* The browser default for a bare <h2> — 1.5em text plus 0.83em margins top
+   and bottom — was the actual cause of this header standing taller than
+   .toolbar: the margins alone outweighed the difference. Sized to sit on
+   the same baseline as the buttons beside it rather than as a document
+   heading, matching .modal__title's convention elsewhere in the app. */
+.freebies__header h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+/* The inset .freebies lost: banners, the empty state and both Section
+   blocks all sit here rather than each carrying its own padding. */
+.freebies__body {
+  padding: 20px;
+}
+
+/* Same job as .detail__back — first in reading order, ahead of everything
+   else in the header — but that one sits in a stacked hero and needs
+   margin-bottom to separate it from the title below; here the header is a
+   row, so margin-right does the equivalent spacing instead. */
+.freebies__back {
+  margin-right: 4px;
+}
+
+.freebies__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* The selected chip, via the state it already carries for accessibility —
+   the same hook `.storeswitch__option--active` and `.viewtoggle__option--
+   active` reach with a class, because these are plain .button elements
+   with nothing else to distinguish them. */
+.freebies__chips button[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.freebies__asof {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.freebies__empty {
+  padding: 40px 0;
+  text-align: center;
+  color: var(--text-dim);
 }
 
 /* ── Details page ────────────────────────────────────────────────────── */

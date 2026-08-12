@@ -212,5 +212,65 @@ contextBridge.exposeInMainWorld('arcadia', {
   getMicrosoftAuth: async () => ({ signedIn: false }),
   signInToMicrosoft: async () => ({ ok: false, error: 'The Microsoft Store only exists on Windows.' }),
   signOutOfMicrosoft: async () => undefined,
-  onMicrosoftAuthChanged: () => () => undefined
+  onMicrosoftAuthChanged: () => () => undefined,
+  // Four current rows, so the free-games page — opened and measured by the
+  // smoke test — has enough variety to catch the button alignment bug: a
+  // short one-line title, a title long enough to wrap to two lines at the
+  // grid's column width, a short title with artwork (contrasting against
+  // the one-liner with none), and a confirmed claim so the static "In your
+  // library" text is checked too, not just the button. Four is comfortably
+  // under the ~6 columns the grid fits at the smoke window's width, so all
+  // four land in the same row without any extra effort to force it.
+  getFreebies: async () => ({
+    current: [
+      {
+        id: 'epic:smoke test game',
+        storeId: 'epic',
+        title: 'Smoke Test Game',
+        kind: 'game',
+        storeGameId: 'smoke-test-game',
+        source: 'epic',
+        claim: 'unclaimed',
+        endsAt: Date.now() + 172800000
+      },
+      {
+        id: 'epic:smoke test game long title',
+        storeId: 'epic',
+        title: 'A Free Game With A Rather Long Wrapping Title',
+        kind: 'game',
+        storeGameId: 'smoke-test-game-long',
+        source: 'epic',
+        claim: 'unclaimed',
+        imageUrl: svg(320, 180, 'green'),
+        endsAt: Date.now() + 172800000
+      },
+      {
+        id: 'steam:smoke test game short',
+        storeId: 'steam',
+        title: 'Short Game',
+        kind: 'game',
+        storeGameId: 'smoke-short',
+        source: 'steam',
+        claim: 'unclaimed',
+        imageUrl: svg(320, 180, 'purple'),
+        endsAt: Date.now() + 172800000
+      },
+      {
+        id: 'epic:smoke test game confirmed',
+        storeId: 'epic',
+        title: 'Confirmed Freebie',
+        kind: 'game',
+        storeGameId: 'smoke-confirmed',
+        source: 'epic',
+        claim: 'confirmed',
+        endsAt: Date.now() + 172800000
+      }
+    ],
+    upcoming: [],
+    fetchedAt: Date.now(),
+    failures: []
+  }),
+  refreshFreebies: async () => ({ current: [], upcoming: [], failures: [] }),
+  claimFreebie: async () => ({ ok: true }),
+  onFreebiesChanged: () => () => undefined
 })

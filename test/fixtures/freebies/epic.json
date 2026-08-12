@@ -1,0 +1,118 @@
+{
+  "data": {
+    "Catalog": {
+      "searchStore": {
+        "elements": [
+          {
+            "title": "Ghostrunner",
+            "id": "c1",
+            "namespace": "ns-ghost",
+            "keyImages": [
+              { "type": "Thumbnail", "url": "https://cdn1.epicgames.com/thumb.jpg" },
+              { "type": "OfferImageWide", "url": "https://cdn1.epicgames.com/wide.jpg" }
+            ],
+            "catalogNs": { "mappings": [{ "pageSlug": "ghostrunner", "pageType": "productHome" }] },
+            "promotions": {
+              "promotionalOffers": [
+                {
+                  "promotionalOffers": [
+                    {
+                      "startDate": "2026-08-07T15:00:00.000Z",
+                      "endDate": "2026-08-14T15:00:00.000Z",
+                      "discountSetting": { "discountType": "PERCENTAGE", "discountPercentage": 0 }
+                    }
+                  ]
+                }
+              ],
+              "upcomingPromotionalOffers": []
+            }
+          },
+          {
+            "title": "Next Week Game",
+            "id": "c2",
+            "namespace": "ns-next",
+            "keyImages": [{ "type": "OfferImageWide", "url": "https://cdn1.epicgames.com/next.jpg" }],
+            "catalogNs": { "mappings": [{ "pageSlug": "next-week-game", "pageType": "productHome" }] },
+            "promotions": {
+              "promotionalOffers": [],
+              "upcomingPromotionalOffers": [
+                {
+                  "promotionalOffers": [
+                    {
+                      "startDate": "2026-08-14T15:00:00.000Z",
+                      "endDate": "2026-08-21T15:00:00.000Z",
+                      "discountSetting": { "discountType": "PERCENTAGE", "discountPercentage": 0 }
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "title": "Half Price Game",
+            "id": "c3",
+            "namespace": "ns-half",
+            "keyImages": [],
+            "catalogNs": { "mappings": [{ "pageSlug": "half-price", "pageType": "productHome" }] },
+            "promotions": {
+              "promotionalOffers": [
+                {
+                  "promotionalOffers": [
+                    {
+                      "startDate": "2026-08-07T15:00:00.000Z",
+                      "endDate": "2026-08-14T15:00:00.000Z",
+                      "discountSetting": { "discountType": "PERCENTAGE", "discountPercentage": 50 }
+                    }
+                  ]
+                }
+              ],
+              "upcomingPromotionalOffers": []
+            }
+          },
+          {
+            "title": "Slugless Game",
+            "id": "c4",
+            "namespace": "ns-slugless",
+            "keyImages": [],
+            "catalogNs": { "mappings": [] },
+            "promotions": {
+              "promotionalOffers": [
+                {
+                  "promotionalOffers": [
+                    {
+                      "startDate": "2026-08-07T15:00:00.000Z",
+                      "endDate": "2026-08-14T15:00:00.000Z",
+                      "discountSetting": { "discountType": "PERCENTAGE", "discountPercentage": 0 }
+                    }
+                  ]
+                }
+              ],
+              "upcomingPromotionalOffers": []
+            }
+          },
+          {
+            "title": "Already Ended",
+            "id": "c5",
+            "namespace": "ns-ended",
+            "keyImages": [],
+            "catalogNs": { "mappings": [{ "pageSlug": "already-ended", "pageType": "productHome" }] },
+            "promotions": {
+              "promotionalOffers": [
+                {
+                  "promotionalOffers": [
+                    {
+                      "startDate": "2026-08-01T15:00:00.000Z",
+                      "endDate": "2026-08-05T15:00:00.000Z",
+                      "discountSetting": { "discountType": "PERCENTAGE", "discountPercentage": 0 }
+                    }
+                  ]
+                }
+              ],
+              "upcomingPromotionalOffers": []
+            }
+          }
+        ]
+      }
+    }
+  }
+}

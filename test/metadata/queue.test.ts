@@ -29,7 +29,15 @@ describe('runMetadataPass', () => {
     fetchDetails: async () => undefined,
     epicArtwork: new Map(),
     pause: async () => undefined,
-    now: () => T0
+    now: () => T0,
+    // Without this the pass falls through to defaultImageExists, which
+    // issues a real HEAD request to Valve's CDN for every candidate image.
+    // That is what made two tests here take ~900ms and ~1100ms of pure
+    // network latency against a 5s timeout, and time out at random when
+    // the network was slow. Whether Valve serves a given asset is
+    // verifiedSteamArtwork's business and is tested with an injected stub
+    // in artworkVerify.test.ts; this file is about the pass around it.
+    imageExists: async () => true
   })
 
   beforeEach(() => {

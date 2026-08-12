@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DatabaseSync } from 'node:sqlite'
 import { openDatabase } from '@main/db/schema'
 import { GameRepository } from '@main/db/repository'
@@ -160,5 +160,43 @@ describe('runSync', () => {
     )
 
     expect(repo.byId('steam:440')?.installed).toBe(true)
+  })
+
+  it('calls the optional afterScan hook with the freshly written library', async () => {
+    let seen: Game[] | undefined
+    await runSync(
+      [adapter('steam', { scanInstalled: async () => [raw('440', 'TF2')] })],
+      repo,
+      NOW,
+      (games) => {
+        seen = games
+      }
+    )
+
+    expect(seen).toHaveLength(1)
+    expect(seen?.[0]!.id).toBe('steam:440')
+  })
+
+  it('does not let a broken afterScan hook fail the sync', async () => {
+    // Confirming freebie claims is a nicety riding along with a scan of
+    // hundreds of games — a bug there must not take the whole scan down.
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const result = await runSync(
+      [adapter('steam', { scanInstalled: async () => [raw('440', 'TF2')] })],
+      repo,
+      NOW,
+      () => {
+        throw new Error('boom')
+      }
+    )
+
+    expect(result.totalGames).toBe(1)
+    expect(consoleError).toHaveBeenCalledWith(
+      'The freebie claims could not be confirmed:',
+      expect.any(Error)
+    )
+
+    consoleError.mockRestore()
   })
 })

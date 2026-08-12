@@ -1,0 +1,68 @@
+[
+  {
+    "id": 1,
+    "title": "Ubisoft Giveaway Game",
+    "worth": "$19.99",
+    "thumbnail": "https://www.gamerpower.com/offers/1.jpg",
+    "open_giveaway_url": "https://www.gamerpower.com/open/ubisoft-giveaway-game",
+    "type": "Game",
+    "platforms": "PC, Ubisoft",
+    "end_date": "2026-08-20 23:59:00",
+    "status": "Active"
+  },
+  {
+    "id": 2,
+    "title": "Fall Guys Skin Pack",
+    "worth": "$4.99",
+    "thumbnail": "https://www.gamerpower.com/offers/2.jpg",
+    "open_giveaway_url": "https://www.gamerpower.com/open/fall-guys-skin",
+    "type": "DLC",
+    "platforms": "PC, Epic Games Store",
+    "end_date": "N/A",
+    "status": "Active"
+  },
+  {
+    "id": 3,
+    "title": "Beta Key Drop",
+    "worth": "N/A",
+    "thumbnail": "https://www.gamerpower.com/offers/3.jpg",
+    "open_giveaway_url": "https://www.gamerpower.com/open/beta-key",
+    "type": "Early Access",
+    "platforms": "PC, Steam",
+    "end_date": "2026-09-01 23:59:00",
+    "status": "Active"
+  },
+  {
+    "id": 4,
+    "title": "GOG Only Game",
+    "worth": "$9.99",
+    "thumbnail": "https://www.gamerpower.com/offers/4.jpg",
+    "open_giveaway_url": "https://www.gamerpower.com/open/gog-only",
+    "type": "Game",
+    "platforms": "PC, GOG",
+    "end_date": "2026-08-25 23:59:00",
+    "status": "Active"
+  },
+  {
+    "id": 5,
+    "title": "Already Over",
+    "worth": "$9.99",
+    "thumbnail": "https://www.gamerpower.com/offers/5.jpg",
+    "open_giveaway_url": "https://www.gamerpower.com/open/already-over",
+    "type": "Game",
+    "platforms": "PC, Steam",
+    "end_date": "2026-08-01 23:59:00",
+    "status": "Expired"
+  },
+  {
+    "id": 6,
+    "title": "Active But Ended",
+    "worth": "$9.99",
+    "thumbnail": "https://www.gamerpower.com/offers/6.jpg",
+    "open_giveaway_url": "https://www.gamerpower.com/open/active-but-ended",
+    "type": "Game",
+    "platforms": "PC, Steam",
+    "end_date": "2026-08-05 23:59:00",
+    "status": "Active"
+  }
+]

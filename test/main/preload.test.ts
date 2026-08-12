@@ -219,6 +219,24 @@ describe('preload bridge', () => {
       channel: IPC.startupNotice,
       args: [],
       call: () => api.getStartupNotice()
+    },
+    {
+      name: 'getFreebies',
+      channel: IPC.freebiesGet,
+      args: [],
+      call: () => api.getFreebies()
+    },
+    {
+      name: 'refreshFreebies',
+      channel: IPC.freebiesRefresh,
+      args: [],
+      call: () => api.refreshFreebies()
+    },
+    {
+      name: 'claimFreebie',
+      channel: IPC.freebiesClaim,
+      args: ['freebie-claim-id'],
+      call: () => api.claimFreebie('freebie-claim-id')
     }
   ]
 
@@ -236,24 +254,25 @@ describe('preload bridge', () => {
     expect(invokeCalls[0]?.args).toEqual(row.args)
   })
 
-  it('covers every invoke-based method exactly once, with twenty-seven distinct channels', () => {
-    expect(INVOKE_TABLE).toHaveLength(27)
-    expect(new Set(INVOKE_TABLE.map((row) => row.name)).size).toBe(27)
+  it('covers every invoke-based method exactly once, with thirty distinct channels', () => {
+    expect(INVOKE_TABLE).toHaveLength(30)
+    expect(new Set(INVOKE_TABLE.map((row) => row.name)).size).toBe(30)
     // Exhaustive for real, rather than by assertion: every method on the
-    // bridge is either in the table above or one of the five listeners.
+    // bridge is either in the table above or one of the six listeners.
     const listenerMethods = [
       'onScanningChanged',
       'onLibraryChanged',
       'onNavigateBack',
       'onNavigateForward',
-      'onMicrosoftAuthChanged'
+      'onMicrosoftAuthChanged',
+      'onFreebiesChanged'
     ]
     const covered = new Set([...INVOKE_TABLE.map((row) => row.name), ...listenerMethods])
     expect(Object.keys(api).filter((name) => !covered.has(name))).toEqual([])
   })
 
   it('never sends two methods down the same channel', () => {
-    // Includes the four listener channels too: a copy-paste could just as
+    // Includes the five listener channels too: a copy-paste could just as
     // easily point a listener method at an invoke channel, or at another
     // listener's channel, and this is the one assertion that would catch
     // that shape of mistake as well as the invoke-only one.
@@ -262,11 +281,12 @@ describe('preload bridge', () => {
       IPC.libraryChanged,
       IPC.navigateBack,
       IPC.navigateForward,
-      IPC.microsoftAuthChanged
+      IPC.microsoftAuthChanged,
+      IPC.freebiesChanged
     ]
 
     expect(new Set(allChannels).size).toBe(allChannels.length)
-    expect(allChannels).toHaveLength(31)
+    expect(allChannels).toHaveLength(35)
   })
 
   /**
@@ -289,6 +309,11 @@ describe('preload bridge', () => {
       name: 'onMicrosoftAuthChanged',
       channel: IPC.microsoftAuthChanged,
       subscribe: (cb) => api.onMicrosoftAuthChanged(cb)
+    },
+    {
+      name: 'onFreebiesChanged',
+      channel: IPC.freebiesChanged,
+      subscribe: (cb) => api.onFreebiesChanged(cb)
     }
   ]
 
@@ -321,6 +346,6 @@ describe('preload bridge', () => {
 
   it('gives each listener method its own distinct channel', () => {
     const channels = LISTENER_TABLE.map((row) => row.channel)
-    expect(new Set(channels).size).toBe(4)
+    expect(new Set(channels).size).toBe(5)
   })
 })

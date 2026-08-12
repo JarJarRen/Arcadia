@@ -57,6 +57,14 @@ const api: ArcadiaApi = {
     const listener = (_event: unknown, error?: string): void => callback(error)
     ipcRenderer.on(IPC.microsoftAuthChanged, listener)
     return () => ipcRenderer.removeListener(IPC.microsoftAuthChanged, listener)
+  },
+  getFreebies: () => ipcRenderer.invoke(IPC.freebiesGet),
+  refreshFreebies: () => ipcRenderer.invoke(IPC.freebiesRefresh),
+  claimFreebie: (id) => ipcRenderer.invoke(IPC.freebiesClaim, id),
+  onFreebiesChanged: (callback) => {
+    const listener = (): void => callback()
+    ipcRenderer.on(IPC.freebiesChanged, listener)
+    return () => ipcRenderer.removeListener(IPC.freebiesChanged, listener)
   }
 }
 

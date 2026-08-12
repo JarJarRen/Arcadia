@@ -2,6 +2,7 @@ import type { LibraryEntry } from './library'
 import type { SyncResult } from './sync-types'
 import type { EnvConfigSaveResult, EnvConfigState, EnvConfigValues } from './env-config'
 import type { AvailabilityResult, StoreId } from './types'
+import type { FreebieList } from './freebies'
 
 export const IPC = {
   libraryGet: 'library:get',
@@ -59,7 +60,20 @@ export const IPC = {
   microsoftAuthState: 'microsoft:auth-state',
   microsoftSignIn: 'microsoft:sign-in',
   microsoftSignOut: 'microsoft:sign-out',
-  microsoftAuthChanged: 'microsoft:auth-changed'
+  microsoftAuthChanged: 'microsoft:auth-changed',
+  freebiesGet: 'freebies:get',
+  freebiesRefresh: 'freebies:refresh',
+  /**
+   * Opens the store's claim page for one offer.
+   *
+   * Takes the row id, **not a URL**. The address is looked up in the
+   * database by the main process and validated there — the same reasoning
+   * as `gameOpenFolder`, and it matters more here: one of the three sources
+   * is a third party whose response Arcadia does not control.
+   */
+  freebiesClaim: 'freebies:claim',
+  /** Fires on a background refresh and when a scan confirms a claim. */
+  freebiesChanged: 'freebies:changed'
 } as const
 
 export interface LaunchResult {
@@ -270,6 +284,18 @@ export interface ArcadiaApi {
    * success and sign-out cases, which have nothing to report.
    */
   onMicrosoftAuthChanged(callback: (error?: string) => void): () => void
+  /** The cached list, filtered to the enabled stores. */
+  getFreebies(): Promise<FreebieList>
+  /** Forces a fetch and answers with the result. */
+  refreshFreebies(): Promise<FreebieList>
+  /**
+   * Opens the claim page for one offer and records it as pending.
+   *
+   * Takes the row id. A renderer that could name the address could have
+   * any address opened.
+   */
+  claimFreebie(id: string): Promise<LaunchResult>
+  onFreebiesChanged(callback: () => void): () => void
 }
 
 export interface AppSuggestion {

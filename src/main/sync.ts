@@ -1,4 +1,4 @@
-import type { RawGame } from '@shared/types'
+import type { Game, RawGame } from '@shared/types'
 import type { StoreScanResult, SyncResult } from '@shared/sync-types'
 import type { StoreAdapter } from '@main/stores/types'
 import type { GameRepository } from '@main/db/repository'
@@ -85,7 +85,15 @@ async function scanOne(
 export async function runSync(
   adapters: StoreAdapter[],
   repo: GameRepository,
-  now: number
+  now: number,
+  /**
+   * Run after the scan has been written, with the library as it now
+   * stands.
+   *
+   * Optional, and its failure is swallowed: confirming a freebie claim is
+   * a nicety, and a broken one must not fail a scan of 200 games.
+   */
+  afterScan?: (games: Game[]) => void
 ): Promise<SyncResult> {
   const settled = await Promise.allSettled(
     adapters.map((adapter) => scanOne(adapter, repo, now))
@@ -101,6 +109,15 @@ export async function runSync(
       error: reason instanceof Error ? reason.message : String(reason)
     }
   })
+
+  if (afterScan !== undefined) {
+    try {
+      // `all()` is the repository's existing reader for the whole library.
+      afterScan(repo.all())
+    } catch (error) {
+      console.error('The freebie claims could not be confirmed:', error)
+    }
+  }
 
   return {
     stores,

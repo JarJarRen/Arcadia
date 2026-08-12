@@ -21,10 +21,24 @@ import { describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { App } from '@renderer/App'
 import { t } from '@shared/i18n'
+import type { Freebie } from '@shared/freebies'
 import { entry, game, stubArcadia } from './fixtures'
 
 const TF2 = entry('Team Fortress 2', [game('steam', '440', 'Team Fortress 2')])
 const PORTAL = entry('Portal', [game('steam', '400', 'Portal', { installed: false })])
+
+function freebie(overrides: Partial<Freebie> = {}): Freebie {
+  return {
+    id: 'epic:ghostrunner',
+    storeId: 'epic',
+    title: 'Ghostrunner',
+    kind: 'game',
+    storeGameId: 'ghostrunner',
+    source: 'epic',
+    claim: 'unclaimed',
+    ...overrides
+  }
+}
 
 describe('App', () => {
   it('renders the library it was given', async () => {
@@ -875,5 +889,92 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
 
     expect(screen.queryByRole('dialog', { name: 'Configure API keys' })).toBeNull()
+  })
+
+  it('lays the free games page over the library', async () => {
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: /Free now/ }))
+    expect(await screen.findByRole('heading', { name: 'Free now' })).toBeTruthy()
+  })
+
+  it('closes the free games page with the back button', async () => {
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: /Free now/ }))
+    expect(await screen.findByRole('heading', { name: 'Free now' })).toBeTruthy()
+    // Button 3 is the mouse's back thumb button, as Chromium numbers it.
+    fireEvent.mouseUp(window, { button: 3 })
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Free now' })).toBeNull())
+  })
+
+  /**
+   * The badge is meant to count unclaimed *current* offers only — a claim
+   * already in flight, or already confirmed, is not something left to grab.
+   * LibraryToolbar.test.tsx pins the button's own rendering given a count; it
+   * cannot pin whether App computed that count correctly from the real list,
+   * which is what a pending/confirmed row slipping into the total would
+   * expose and what this test guards against.
+   */
+  it('the badge counts only unclaimed current offers', async () => {
+    stubArcadia({
+      getGames: async () => [TF2],
+      getFreebies: async () => ({
+        current: [
+          freebie({ id: 'a', claim: 'unclaimed' }),
+          freebie({ id: 'b', claim: 'pending' }),
+          freebie({ id: 'c', claim: 'confirmed' })
+        ],
+        upcoming: [freebie({ id: 'd', claim: 'unclaimed' })],
+        failures: []
+      })
+    })
+    render(<App />)
+
+    expect(await screen.findByRole('button', { name: 'Free now · 1' })).toBeTruthy()
+  })
+
+  it('refreshes the badge count when freebies:changed fires', async () => {
+    let changed: (() => void) | undefined
+    let call = 0
+    stubArcadia({
+      getGames: async () => [TF2],
+      getFreebies: async () => ({
+        current: call++ === 0 ? [] : [freebie({ id: 'a', claim: 'unclaimed' })],
+        upcoming: [],
+        failures: []
+      }),
+      onFreebiesChanged: (callback) => {
+        changed = callback
+        return () => undefined
+      }
+    })
+    render(<App />)
+    expect(await screen.findByRole('button', { name: 'Free now' })).toBeTruthy()
+
+    await act(async () => {
+      changed?.()
+      await Promise.resolve()
+    })
+
+    expect(await screen.findByRole('button', { name: 'Free now · 1' })).toBeTruthy()
+  })
+
+  it('a getFreebies failure on mount is logged and leaves the button reachable at zero', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    stubArcadia({
+      getGames: async () => [TF2],
+      getFreebies: async () => {
+        throw new Error('offline')
+      }
+    })
+    render(<App />)
+
+    await waitFor(() =>
+      expect(consoleError).toHaveBeenCalledWith(
+        'The freebies could not be read:',
+        expect.any(Error)
+      )
+    )
+    expect(screen.getByRole('button', { name: 'Free now' })).toBeTruthy()
+    consoleError.mockRestore()
   })
 })

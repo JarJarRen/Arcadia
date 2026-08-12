@@ -15,12 +15,16 @@ import { SteamAppList } from '@main/metadata/steamAppList'
 import { fetchAppDetails } from '@main/metadata/steamStore'
 import { SECURE_WEB_PREFERENCES } from '@main/window-options'
 import { IPC } from '@shared/ipc'
-import { parseLanguage, setLanguage, t } from '@shared/i18n'
+import { getLanguage, parseLanguage, setLanguage, t } from '@shared/i18n'
 import { envFileCandidates } from '@main/env-file'
 import { createScanState } from '@main/scan-state'
 import { enabledAdapters } from '@main/stores/enabled'
 import { MicrosoftSession, type TokenStore } from '@main/stores/microsoft/session'
 import { pollForTokens, requestDeviceCode } from '@main/stores/microsoft/auth'
+import { FreebieRepository } from '@main/db/freebies'
+import { FreebieService } from '@main/freebies/service'
+import { confirmClaims } from '@main/freebies/confirm'
+import { resolveStoreCountry } from '@main/locale-country'
 
 let mainWindow: BrowserWindow | undefined
 
@@ -51,7 +55,25 @@ function loadApiKeys(paths: string[]): void {
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
-    width: 1400,
+    // Wide enough for the library toolbar to lay out on one line rather
+    // than wrapping to a second row.
+    //
+    // The toolbar's own controls (search field, store filter, sort, the two
+    // checkboxes, shared filter, view toggle, count, refresh, add game,
+    // free games, settings) need 1318px in a single line at their default
+    // state — the `toolbarScrollWidth` the smoke test measures by
+    // temporarily forcing the row to lay out unwrapped. A requested window
+    // width does not all reach the page: Chromium's frame and scrollbar
+    // took 16px of the previous 1400px request (measured `toolbarClientWidth`
+    // was 1384, not 1400). 1480 leaves about 145px of slack above the
+    // 1318+16 floor — room for a longer freebie-count badge or a store
+    // selection wider than "All stores", and for the German bundle in
+    // i18n.ts, whose labels ("Bibliothek durchsuchen…", "Spiel hinzufügen")
+    // run measurably longer than the English ones this was measured with.
+    //
+    // Re-measure `toolbarScrollWidth` via `npm run smoke` and recompute this
+    // if a control is added to or widened in LibraryToolbar.tsx.
+    width: 1480,
     height: 900,
     minWidth: 940,
     minHeight: 600,
@@ -228,6 +250,27 @@ app.whenReady().then(() => {
   const metadata = new MetadataRepository(db)
   const settings = new SettingsRepository(db)
 
+  // Held in its own name rather than inlined: the confirmation hook below
+  // needs the repository, not the service.
+  const freebieRepo = new FreebieRepository(db)
+
+  const freebies = new FreebieService({
+    repo: freebieRepo,
+    settings,
+    // The store country prefers the OS's own ISO 3166 code — the real
+    // region, not a guess parsed out of a language tag — and only falls
+    // back to the locale when the OS has none to offer. See
+    // resolveStoreCountry for the order and why. Falls back to US as a last
+    // resort, which is the region Epic's feed defaults to.
+    locale: () => ({
+      language: getLanguage(),
+      country: resolveStoreCountry(app.getLocaleCountryCode(), app.getLocale())
+    }),
+    // Read fresh per call, not captured once: a game bought after the
+    // giveaway appeared must show as owned on the very next list request.
+    games: () => repo.all()
+  })
+
   const microsoftSession = new MicrosoftSession({
     store: microsoftTokenStore(settings),
     // A scan can sign itself out: a refresh token the service has refused
@@ -296,6 +339,8 @@ app.whenReady().then(() => {
     metadata,
     settings,
     adapters,
+    freebies,
+    freebiesRepo: freebieRepo,
     scan,
     appList,
     // Built above in whatever language the module currently holds, which is
@@ -326,6 +371,10 @@ app.whenReady().then(() => {
     }
   })
 
+  // A year. The table is tiny; this exists so it cannot grow without bound
+  // over the life of an installation.
+  freebieRepo.pruneClaims(Date.now() - 365 * 86_400_000)
+
   // First scan in the background: the UI shows the cache immediately and
   // refreshes once the scan is through.
   //
@@ -344,7 +393,12 @@ app.whenReady().then(() => {
       return runSync(
         enabledAdapters(adapters, settings.get('enabled-stores')),
         repo,
-        Math.floor(Date.now() / 1000)
+        Math.floor(Date.now() / 1000),
+        (games) => {
+          if (confirmClaims(freebieRepo, games, Date.now()).length > 0) {
+            mainWindow?.webContents.send(IPC.freebiesChanged)
+          }
+        }
       )
     })
     .then((result) => {
@@ -365,6 +419,22 @@ app.whenReady().then(() => {
       })
     })
     .catch((error: unknown) => console.error('Scan failed:', error))
+
+  // Kicked off after the window exists, so the event this can send has
+  // somewhere to go.
+  //
+  // Forced, unlike every other caller of refresh — the freebies:get handler,
+  // the renderer's reload-on-event — which all still go through the TTL
+  // guard. This call happens once per process launch, not once per event,
+  // so it cannot become the request storm attempted-at was introduced to
+  // stop; it just means a restart inside the six-hour window still shows a
+  // fresh list instead of silently serving the cache.
+  void freebies
+    .refresh(Date.now(), true)
+    .then((changed) => {
+      if (changed) mainWindow?.webContents.send(IPC.freebiesChanged)
+    })
+    .catch((error: unknown) => console.error('The freebies could not be fetched:', error))
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) mainWindow = createWindow()

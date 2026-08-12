@@ -238,6 +238,53 @@ export interface Strings {
     databaseRecovered: (path: string) => string
     /** The database could not be opened at all, so this run keeps nothing. */
     databaseUnusable: (detail: string) => string
+    /** e.g. "The offer could not be opened: …" */
+    claimFailed: (reason: string) => string
+  }
+
+  freebies: {
+    /** The toolbar button. */
+    title: string
+    /** e.g. "Free now · 3" — the count is of unclaimed current offers. */
+    buttonWithCount: (count: number) => string
+    /** The page's own close control — worded like detail.back, not shared with it: each section owns its strings here. */
+    back: string
+    currentHeading: string
+    upcomingHeading: string
+    /** Shown in place of the list when there is nothing free anywhere. */
+    empty: string
+    /** Shown when every source failed and there is no cache either. */
+    unavailable: string
+    refresh: string
+    /** Mirrors toolbar.refreshing — the icon button's accessible name while a fetch is in flight. */
+    refreshing: string
+    /** e.g. "as of 10 Aug, 14:02" */
+    asOf: (when: string) => string
+    sourceFailed: (source: string) => string
+    kind: { all: string; game: string; dlc: string; loot: string }
+    /** The kind chips' tooltips — what each filter does, not a repeat of its short label. */
+    kindHint: { all: string; game: string; dlc: string; loot: string }
+    /** e.g. "ends in 2 days" */
+    endsIn: (days: number) => string
+    endsToday: string
+    /** e.g. "from 14 August" */
+    startsOn: (date: string) => string
+    claim: {
+      /** e.g. "Claim in Epic" */
+      inStore: (store: string) => string
+      inBrowser: string
+      /** The label for a pending claim's button — worded as the action,
+          since Arcadia has nothing truthful to say about when it was last
+          opened without displaying a clock time no one asked to see. */
+      pending: string
+      confirmed: string
+      /** The tooltip on a pending row. */
+      pendingHint: string
+      /** The tooltip on an unclaimed row whose button opens the store app. */
+      inStoreHint: (store: string) => string
+      /** The tooltip on an unclaimed row whose button opens a browser page. */
+      inBrowserHint: string
+    }
   }
 
   stores: {
@@ -521,7 +568,42 @@ const en: Strings = {
       `still there as ${path}.`,
     databaseUnusable: (detail) =>
       `The database could not be opened (${detail}). Arcadia is running, but ` +
-      'nothing it finds will be kept when you close it.'
+      'nothing it finds will be kept when you close it.',
+    claimFailed: (reason) => `The offer could not be opened: ${reason}`
+  },
+
+  freebies: {
+    title: 'Free now',
+    buttonWithCount: (count: number) => `Free now · ${count}`,
+    back: '← Back to library',
+    currentHeading: 'Free to keep',
+    upcomingHeading: 'Coming soon',
+    empty: 'Nothing is free to keep in your stores right now.',
+    unavailable: 'The free-games lists could not be reached.',
+    refresh: 'Refresh',
+    refreshing: 'Refreshing…',
+    asOf: (when: string) => `as of ${when}`,
+    sourceFailed: (source: string) => `${source}'s list could not be fetched.`,
+    kind: { all: 'All', game: 'Games', dlc: 'DLC', loot: 'Loot' },
+    kindHint: {
+      all: 'Show every kind of offer.',
+      game: 'Show only full games.',
+      dlc: 'Show only DLC and expansions.',
+      loot: 'Show only in-game loot and bonuses.'
+    },
+    endsIn: (days: number) => (days === 1 ? 'ends tomorrow' : `ends in ${days} days`),
+    endsToday: 'ends today',
+    startsOn: (date: string) => `from ${date}`,
+    claim: {
+      inStore: (store: string) => `Claim in ${store}`,
+      inBrowser: 'Open in browser',
+      pending: 'Open again',
+      confirmed: '✓ In your library',
+      pendingHint:
+        'Arcadia opened the store page. It marks this as claimed once the game turns up in a scan.',
+      inStoreHint: (store: string) => `Opens ${store} so you can claim the offer there.`,
+      inBrowserHint: 'Opens the offer’s page in your browser.'
+    }
   },
 
   stores: {
@@ -853,7 +935,42 @@ const de: Strings = {
       `Datei liegt weiterhin unter ${path}.`,
     databaseUnusable: (detail) =>
       `Die Datenbank konnte nicht geöffnet werden (${detail}). Arcadia läuft, ` +
-      'aber nichts davon wird beim Beenden gespeichert.'
+      'aber nichts davon wird beim Beenden gespeichert.',
+    claimFailed: (reason) => `Das Angebot konnte nicht geöffnet werden: ${reason}`
+  },
+
+  freebies: {
+    title: 'Gerade gratis',
+    buttonWithCount: (count: number) => `Gerade gratis · ${count}`,
+    back: '← Zurück zur Bibliothek',
+    currentHeading: 'Dauerhaft gratis',
+    upcomingHeading: 'Demnächst',
+    empty: 'In deinen Stores ist gerade nichts dauerhaft gratis.',
+    unavailable: 'Die Gratis-Listen waren nicht erreichbar.',
+    refresh: 'Aktualisieren',
+    refreshing: 'Wird aktualisiert…',
+    asOf: (when: string) => `Stand ${when}`,
+    sourceFailed: (source: string) => `Die Liste von ${source} konnte nicht geladen werden.`,
+    kind: { all: 'Alle', game: 'Spiele', dlc: 'DLC', loot: 'Extras' },
+    kindHint: {
+      all: 'Alle Arten von Angeboten anzeigen.',
+      game: 'Nur vollständige Spiele anzeigen.',
+      dlc: 'Nur DLCs und Erweiterungen anzeigen.',
+      loot: 'Nur Ingame-Extras und Boni anzeigen.'
+    },
+    endsIn: (days: number) => (days === 1 ? 'endet morgen' : `endet in ${days} Tagen`),
+    endsToday: 'endet heute',
+    startsOn: (date: string) => `ab ${date}`,
+    claim: {
+      inStore: (store: string) => `In ${store} holen`,
+      inBrowser: 'Im Browser öffnen',
+      pending: 'Erneut öffnen',
+      confirmed: '✓ In deiner Bibliothek',
+      pendingHint:
+        'Arcadia hat die Store-Seite geöffnet. Als geholt gilt das Spiel, sobald ein Scan es findet.',
+      inStoreHint: (store: string) => `Öffnet ${store}, damit du das Angebot dort holen kannst.`,
+      inBrowserHint: 'Öffnet die Seite des Angebots in deinem Browser.'
+    }
   },
 
   stores: {
