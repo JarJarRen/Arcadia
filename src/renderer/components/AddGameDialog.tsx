@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react'
 import { type StoreId } from '@shared/types'
 import { storeGameIdLooksValid } from '@shared/manual'
+import { parseArguments } from '@shared/executable'
 import { t } from '@shared/i18n'
 import { STORE_LABELS } from './storeLabels'
 
@@ -26,11 +27,15 @@ const PREFERRED: StoreId = 'ea'
 /**
  * Records a game no adapter can see.
  *
- * The store identifier is optional on purpose: for the case this exists for
- * — an EA library that only reports what has been installed here — the user
- * has no way of knowing it. Left empty, the entry still gets artwork and a
- * description through the usual Steam matching; it just cannot be launched,
- * because no store knows the generated identifier.
+ * The store identifier is optional on purpose: for the case this originally
+ * existed for — an EA library that only reports what has been installed here
+ * — the user has no way of knowing it. Left empty, the entry still gets
+ * artwork and a description through the usual Steam matching; it just cannot
+ * be launched, because no store knows the generated identifier.
+ *
+ * `other` is the second case: a game with no store at all. There the
+ * identifier field is replaced with a program to launch directly, chosen
+ * through the native file dialog rather than typed.
  */
 export function AddGameDialog({ availableStores, onClose, onAdded }: Props): ReactElement {
   const [name, setName] = useState('')
@@ -40,6 +45,8 @@ export function AddGameDialog({ availableStores, onClose, onAdded }: Props): Rea
     availableStores.includes(PREFERRED) ? PREFERRED : availableStores[0]
   )
   const [storeGameId, setStoreGameId] = useState('')
+  const [exe, setExe] = useState<string | undefined>()
+  const [args, setArgs] = useState('')
   const [error, setError] = useState<string | undefined>()
   const [saving, setSaving] = useState(false)
   const field = useRef<HTMLInputElement>(null)
@@ -61,7 +68,30 @@ export function AddGameDialog({ availableStores, onClose, onAdded }: Props): Rea
   // and switching the store can invalidate an identifier already entered.
   const idLooksWrong =
     storeId !== undefined && trimmedId !== '' && !storeGameIdLooksValid(storeId, trimmedId)
-  const canSubmit = storeId !== undefined && name.trim() !== '' && !idLooksWrong && !saving
+  const storeless = storeId === 'other'
+  const canSubmit =
+    storeId !== undefined &&
+    name.trim() !== '' &&
+    !idLooksWrong &&
+    !saving &&
+    (!storeless || exe !== undefined)
+
+  const browse = async (): Promise<void> => {
+    setError(undefined)
+    const result = await window.arcadia.pickExecutable()
+    // No error and not ok means the dialog was closed. Saying so would be
+    // noise about something the user just did on purpose.
+    if (!result.ok) {
+      if (result.error !== undefined) setError(result.error)
+      return
+    }
+    setExe(result.exe)
+    if (result.args !== undefined && result.args.length > 0) {
+      setArgs(result.args.map((part) => (part.includes(' ') ? `"${part}"` : part)).join(' '))
+    }
+    // Only while the field is untouched: a name the user typed is theirs.
+    if (name.trim() === '' && result.suggestedName !== undefined) setName(result.suggestedName)
+  }
 
   const submit = async (): Promise<void> => {
     if (!canSubmit || storeId === undefined) return
@@ -71,7 +101,11 @@ export function AddGameDialog({ availableStores, onClose, onAdded }: Props): Rea
       const result = await window.arcadia.addManualGame({
         storeId,
         name: name.trim(),
-        ...(trimmedId === '' ? {} : { storeGameId: trimmedId })
+        ...(storeless
+          ? { launchExe: exe!, launchArgs: parseArguments(args) }
+          : trimmedId === ''
+            ? {}
+            : { storeGameId: trimmedId })
       })
       if (result.ok && result.id !== undefined) {
         onAdded(result.id)
@@ -127,18 +161,44 @@ export function AddGameDialog({ availableStores, onClose, onAdded }: Props): Rea
           )}
         </label>
 
-        <label className="modal__field">
-          <span className="modal__label">{t().addDialog.idLabel}</span>
-          <input
-            className="modal__search"
-            value={storeGameId}
-            onChange={(event) => setStoreGameId(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') void submit()
-            }}
-          />
-          <span className="modal__sublabel">{t().addDialog.idHint}</span>
-        </label>
+        {storeless ? (
+          <>
+            <div className="modal__field">
+              <span className="modal__label">{t().addDialog.executableLabel}</span>
+              <span className="modal__sublabel path">{exe ?? t().addDialog.noExecutable}</span>
+              <button type="button" className="button" onClick={() => void browse()}>
+                {t().addDialog.browse}
+              </button>
+              <span className="modal__sublabel">{t().addDialog.executableHint}</span>
+            </div>
+
+            <label className="modal__field">
+              <span className="modal__label">{t().addDialog.argumentsLabel}</span>
+              <input
+                className="modal__search"
+                value={args}
+                onChange={(event) => setArgs(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') void submit()
+                }}
+              />
+              <span className="modal__sublabel">{t().addDialog.argumentsHint}</span>
+            </label>
+          </>
+        ) : (
+          <label className="modal__field">
+            <span className="modal__label">{t().addDialog.idLabel}</span>
+            <input
+              className="modal__search"
+              value={storeGameId}
+              onChange={(event) => setStoreGameId(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') void submit()
+              }}
+            />
+            <span className="modal__sublabel">{t().addDialog.idHint}</span>
+          </label>
+        )}
 
         {idLooksWrong && (
           <p className="modal__error">{t().errors.invalidInput}</p>

@@ -9,13 +9,29 @@
  */
 import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { AddGameDialog } from '@renderer/components/AddGameDialog'
 import { stubArcadia } from './fixtures'
 import { STORE_IDS } from '@shared/types'
+import { t } from '@shared/i18n'
 import type { ArcadiaApi } from '@shared/ipc'
 
 /** So `.mock.calls[0][0]` is typed as the payload rather than `never`. */
 type AddManualGamePayload = Parameters<ArcadiaApi['addManualGame']>[0]
+
+/** Stands in for `onClose`/`onAdded` where a test does not check either. */
+const noop = (): void => undefined
+
+/**
+ * Matches a label's accessible name by its start.
+ *
+ * Mirrors the fix already used above for the store-identifier field: a
+ * `<label>` here wraps the field name and its sublabel hint together, so the
+ * accessible name is the two run on with nothing between them. Anchoring on
+ * the start finds the input without a production change.
+ */
+const startingWith = (text: string): RegExp =>
+  new RegExp(`^${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`)
 
 describe('AddGameDialog', () => {
   it('sends the name and store, omitting an empty store ID', async () => {
@@ -246,5 +262,107 @@ describe('AddGameDialog', () => {
     fireEvent.click(screen.getByText('Add'))
 
     await waitFor(() => expect(screen.getByText('Disk full')).toBeDefined())
+  })
+})
+
+describe('a storeless game', () => {
+  it('offers a program instead of a store identifier', async () => {
+    render(<AddGameDialog availableStores={['steam', 'other']} onClose={noop} onAdded={noop} />)
+
+    await userEvent.selectOptions(screen.getByLabelText(t().addDialog.storeLabel), 'other')
+
+    expect(screen.getByText(t().addDialog.executableLabel)).toBeTruthy()
+    expect(screen.queryByText(t().addDialog.idLabel)).toBeNull()
+  })
+
+  it('fills the name in from the program when the field is still empty', async () => {
+    window.arcadia.pickExecutable = async () => ({
+      ok: true,
+      exe: 'C:\\Games\\mc.exe',
+      args: ['--offline'],
+      suggestedName: 'Minecraft Launcher'
+    })
+    render(<AddGameDialog availableStores={['other']} onClose={noop} onAdded={noop} />)
+
+    await userEvent.click(screen.getByRole('button', { name: t().addDialog.browse }))
+
+    expect((screen.getByLabelText(t().addDialog.nameLabel) as HTMLInputElement).value).toBe(
+      'Minecraft Launcher'
+    )
+    expect(
+      (screen.getByLabelText(startingWith(t().addDialog.argumentsLabel)) as HTMLInputElement)
+        .value
+    ).toBe('--offline')
+  })
+
+  it('leaves a name the user typed alone', async () => {
+    window.arcadia.pickExecutable = async () => ({
+      ok: true,
+      exe: 'C:\\Games\\mc.exe',
+      args: [],
+      suggestedName: 'mc'
+    })
+    render(<AddGameDialog availableStores={['other']} onClose={noop} onAdded={noop} />)
+
+    await userEvent.type(screen.getByLabelText(t().addDialog.nameLabel), 'My Modpack')
+    await userEvent.click(screen.getByRole('button', { name: t().addDialog.browse }))
+
+    expect((screen.getByLabelText(t().addDialog.nameLabel) as HTMLInputElement).value).toBe(
+      'My Modpack'
+    )
+  })
+
+  it('cannot be submitted without a program', async () => {
+    render(<AddGameDialog availableStores={['other']} onClose={noop} onAdded={noop} />)
+
+    await userEvent.type(screen.getByLabelText(t().addDialog.nameLabel), 'Minecraft')
+
+    expect(
+      (screen.getByRole('button', { name: t().addDialog.submit }) as HTMLButtonElement).disabled
+    ).toBe(true)
+  })
+
+  it('sends the program and the arguments', async () => {
+    const addManualGame = vi.fn(async () => ({ ok: true, id: 'other:manual-minecraft' }))
+    window.arcadia.addManualGame = addManualGame
+    window.arcadia.pickExecutable = async () => ({
+      ok: true,
+      exe: 'C:\\Games\\mc.exe',
+      args: [],
+      suggestedName: 'Minecraft'
+    })
+    render(<AddGameDialog availableStores={['other']} onClose={noop} onAdded={noop} />)
+
+    await userEvent.click(screen.getByRole('button', { name: t().addDialog.browse }))
+    await userEvent.type(
+      screen.getByLabelText(startingWith(t().addDialog.argumentsLabel)),
+      '--profile "My Pack"'
+    )
+    await userEvent.click(screen.getByRole('button', { name: t().addDialog.submit }))
+
+    expect(addManualGame).toHaveBeenCalledWith({
+      storeId: 'other',
+      name: 'Minecraft',
+      launchExe: 'C:\\Games\\mc.exe',
+      launchArgs: ['--profile', 'My Pack']
+    })
+  })
+
+  it('shows why a chosen file was refused', async () => {
+    window.arcadia.pickExecutable = async () => ({ ok: false, error: 'Not a program.' })
+    render(<AddGameDialog availableStores={['other']} onClose={noop} onAdded={noop} />)
+
+    await userEvent.click(screen.getByRole('button', { name: t().addDialog.browse }))
+
+    expect(screen.getByText('Not a program.')).toBeTruthy()
+  })
+
+  it('says nothing when the dialog was simply closed', async () => {
+    window.arcadia.pickExecutable = async () => ({ ok: false })
+    render(<AddGameDialog availableStores={['other']} onClose={noop} onAdded={noop} />)
+
+    await userEvent.click(screen.getByRole('button', { name: t().addDialog.browse }))
+
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 })

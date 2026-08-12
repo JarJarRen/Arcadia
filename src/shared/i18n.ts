@@ -86,6 +86,13 @@ export interface Strings {
     idHint: string
     submit: string
     cancel: string
+    /** The storeless case: the program to start, and its arguments. */
+    executableLabel: string
+    executableHint: string
+    browse: string
+    noExecutable: string
+    argumentsLabel: string
+    argumentsHint: string
   }
 
   /**
@@ -413,9 +420,7 @@ const en: Strings = {
   addDialog: {
     label: 'Add a game by hand',
     title: 'Add a game',
-    hint:
-      'For games no store reports — EA only lists what has been installed on ' +
-      'this machine.',
+    hint: 'For games no store reports, and for programs that belong to no store at all.',
     nameLabel: 'Name',
     storeLabel: 'Store',
     noStores:
@@ -426,7 +431,14 @@ const en: Strings = {
       'Leave empty if you do not know it. The entry then gets artwork and a ' +
       'description, but cannot be launched.',
     submit: 'Add',
-    cancel: 'Cancel'
+    cancel: 'Cancel',
+    executableLabel: 'Program',
+    executableHint:
+      'The program that starts the game. A desktop shortcut works too — it is followed to the program it points at.',
+    browse: 'Browse…',
+    noExecutable: 'No program chosen yet.',
+    argumentsLabel: 'Arguments (optional)',
+    argumentsHint: 'Passed to the program as they are. Put a value with spaces in "quotes".'
   },
 
   setup: {
@@ -792,9 +804,7 @@ const de: Strings = {
   addDialog: {
     label: 'Spiel von Hand hinzufügen',
     title: 'Spiel hinzufügen',
-    hint:
-      'Für Spiele, die kein Store meldet — EA listet nur, was auf diesem ' +
-      'Rechner installiert war.',
+    hint: 'Für Spiele, die kein Store meldet, und für Programme, die zu gar keinem Store gehören.',
     nameLabel: 'Name',
     storeLabel: 'Store',
     noStores:
@@ -805,7 +815,15 @@ const de: Strings = {
       'Leer lassen, wenn du sie nicht kennst. Der Eintrag bekommt dann Bild ' +
       'und Beschreibung, lässt sich aber nicht starten.',
     submit: 'Hinzufügen',
-    cancel: 'Abbrechen'
+    cancel: 'Abbrechen',
+    executableLabel: 'Programm',
+    executableHint:
+      'Das Programm, das das Spiel startet. Eine Verknüpfung vom Desktop geht auch — sie wird zum Programm dahinter aufgelöst.',
+    browse: 'Durchsuchen…',
+    noExecutable: 'Noch kein Programm gewählt.',
+    argumentsLabel: 'Argumente (optional)',
+    argumentsHint:
+      'Werden unverändert an das Programm übergeben. Werte mit Leerzeichen in "Anführungszeichen" setzen.'
   },
 
   setup: {
