@@ -54,24 +54,13 @@ function ClaimButton({ freebie, onClaim }: Omit<Props, 'now'>): ReactElement {
     )
   }
 
-  // A pending row is only ever written with an openedAt (see
-  // src/main/db/freebies.ts), but the type allows its absence. Without a
-  // recorded time there is nothing truthful to say about when it was
-  // opened, so fall back to the same "not yet opened" label the unclaimed
-  // branch uses rather than inventing a clock time.
   const pending = freebie.claim === 'pending'
   const inBrowser = freebie.storeGameId === undefined
-  const label =
-    pending && freebie.openedAt !== undefined
-      ? strings.pending(
-          new Date(freebie.openedAt).toLocaleTimeString(t().format.locale, {
-            hour: '2-digit',
-            minute: '2-digit'
-          })
-        )
-      : inBrowser
-        ? strings.inBrowser
-        : strings.inStore(STORE_LABELS[freebie.storeId])
+  const label = pending
+    ? strings.pending
+    : inBrowser
+      ? strings.inBrowser
+      : strings.inStore(STORE_LABELS[freebie.storeId])
 
   // Same precedent as pendingHint: says where the click leads, never that
   // Arcadia adds the game to an account — it only opens a page.

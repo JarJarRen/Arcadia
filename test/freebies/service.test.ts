@@ -228,12 +228,18 @@ describe('FreebieService', () => {
   })
 
   it('records when a claim was opened', async () => {
+    // Freebie no longer surfaces openedAt to the renderer, but the column
+    // still has to move — pendingClaims() and pruneClaims() depend on it —
+    // so this reads the raw row rather than the removed field.
     const svc = service()
     await svc.refresh(NOW, true)
     svc.markOpened('epic:ghostrunner', NOW)
     const row = repo.find('epic:ghostrunner')
     expect(row?.claim).toBe('pending')
-    expect(row?.openedAt).toBe(NOW)
+    const stored = db
+      .prepare('SELECT opened_at FROM freebie_claims WHERE freebie_id = ?')
+      .get('epic:ghostrunner') as { opened_at: number }
+    expect(stored.opened_at).toBe(NOW)
   })
 
   it('falls back to English for Steam when the interface language has no mapping', async () => {

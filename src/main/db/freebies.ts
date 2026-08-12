@@ -42,8 +42,7 @@ function toFreebie(row: FreebieRow): Freebie {
     ...(row.starts_at === null ? {} : { startsAt: row.starts_at }),
     ...(row.ends_at === null ? {} : { endsAt: row.ends_at }),
     source: row.source as FreebieSource,
-    claim: claimState(row),
-    ...(row.opened_at === null ? {} : { openedAt: row.opened_at })
+    claim: claimState(row)
   }
 }
 

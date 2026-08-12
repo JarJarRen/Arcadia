@@ -273,8 +273,10 @@ export interface Strings {
       /** e.g. "Claim in Epic" */
       inStore: (store: string) => string
       inBrowser: string
-      /** e.g. "Opened 14:32 · open again" */
-      pending: (time: string) => string
+      /** The label for a pending claim's button — worded as the action,
+          since Arcadia has nothing truthful to say about when it was last
+          opened without displaying a clock time no one asked to see. */
+      pending: string
       confirmed: string
       /** The tooltip on a pending row. */
       pendingHint: string
@@ -595,7 +597,7 @@ const en: Strings = {
     claim: {
       inStore: (store: string) => `Claim in ${store}`,
       inBrowser: 'Open in browser',
-      pending: (time: string) => `Opened ${time} · open again`,
+      pending: 'Open again',
       confirmed: '✓ In your library',
       pendingHint:
         'Arcadia opened the store page. It marks this as claimed once the game turns up in a scan.',
@@ -962,7 +964,7 @@ const de: Strings = {
     claim: {
       inStore: (store: string) => `In ${store} holen`,
       inBrowser: 'Im Browser öffnen',
-      pending: (time: string) => `Um ${time} geöffnet · erneut öffnen`,
+      pending: 'Erneut öffnen',
       confirmed: '✓ In deiner Bibliothek',
       pendingHint:
         'Arcadia hat die Store-Seite geöffnet. Als geholt gilt das Spiel, sobald ein Scan es findet.',

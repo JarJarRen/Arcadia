@@ -46,14 +46,8 @@ describe('FreebieCard', () => {
   it('offers to open again while a claim is pending', () => {
     // Never "claimed": Arcadia opened a door and cannot see whether anyone
     // walked through it.
-    render(
-      <FreebieCard
-        freebie={freebie({ claim: 'pending', openedAt: NOW - 60_000 })}
-        now={NOW}
-        onClaim={vi.fn()}
-      />
-    )
-    expect(screen.getByRole('button', { name: /open again/ })).toBeTruthy()
+    render(<FreebieCard freebie={freebie({ claim: 'pending' })} now={NOW} onClaim={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'Open again' })).toBeTruthy()
   })
 
   it('reports a confirmed claim as being in the library', () => {
@@ -137,28 +131,20 @@ describe('FreebieCard', () => {
     expect(screen.getByText('Loot')).toBeTruthy()
   })
 
-  it('falls back to the unclaimed label when no opened time was recorded', () => {
-    // Defensive fallback: a pending row is only ever written with an
-    // openedAt, but the type allows its absence. There is nothing truthful
-    // to say about when it was opened, so this must read exactly like the
-    // unclaimed case rather than inventing a clock time.
+  it('shows "Open again" for a pending claim rather than a fabricated time', () => {
+    // Freebie no longer carries an openedAt at all, so there is nothing left
+    // to invent a clock time from — a pending row reads the same regardless
+    // of when, or whether, the button was pressed before.
     render(<FreebieCard freebie={freebie({ claim: 'pending' })} now={NOW} onClaim={vi.fn()} />)
-    const button = screen.getByRole('button', { name: /Claim in Epic/ })
-    expect(button).toBeTruthy()
+    const button = screen.getByRole('button', { name: 'Open again' })
     expect(button.textContent).not.toMatch(/\d{1,2}:\d{2}/)
   })
 
-  it('shows exactly the opened time and nothing else when a claim is genuinely pending', () => {
+  it('shows exactly "Open again" and nothing else for a pending claim', () => {
     // The old bug was masked by a test that only checked for "open again"
     // as a substring, which passes even when nonsense precedes it.
-    render(
-      <FreebieCard
-        freebie={freebie({ claim: 'pending', openedAt: NOW - 60_000 })}
-        now={NOW}
-        onClaim={vi.fn()}
-      />
-    )
-    expect(screen.getByRole('button', { name: /^Opened \d{1,2}:\d{2} · open again$/ })).toBeTruthy()
+    render(<FreebieCard freebie={freebie({ claim: 'pending' })} now={NOW} onClaim={vi.fn()} />)
+    expect(screen.getByRole('button', { name: /^Open again$/ })).toBeTruthy()
   })
 
   it('says today just under the day boundary', () => {

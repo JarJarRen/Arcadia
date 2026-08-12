@@ -40,8 +40,6 @@ export interface Freebie extends RawFreebie {
   /** `storeId + ':' + mergeKey(title)`, stable across refreshes. */
   id: string
   claim: ClaimState
-  /** When the claim button was last pressed. Epoch ms. */
-  openedAt?: number
 }
 
 export interface FreebieList {

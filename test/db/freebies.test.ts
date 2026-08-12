@@ -77,19 +77,26 @@ describe('FreebieRepository', () => {
     expect(repo.find('epic:ghostrunner')?.claim).toBe('confirmed')
   })
 
-  it('reports a freshly opened claim as pending, with the time', () => {
+  it('reports a freshly opened claim as pending', () => {
     repo.replaceAll([ghost], NOW)
     repo.markOpened('epic:ghostrunner', NOW)
     const row = repo.find('epic:ghostrunner')
     expect(row?.claim).toBe('pending')
-    expect(row?.openedAt).toBe(NOW)
   })
 
   it('overwrites the opened time when the button is pressed again', () => {
+    // Freebie no longer surfaces openedAt to the renderer (the label
+    // dropped the clock time), but the column underneath still has to move
+    // — pendingClaims() and pruneClaims() both depend on it — so this reads
+    // the raw row rather than the removed field.
     repo.replaceAll([ghost], NOW)
     repo.markOpened('epic:ghostrunner', NOW)
     repo.markOpened('epic:ghostrunner', NOW + 60_000)
-    expect(repo.find('epic:ghostrunner')?.openedAt).toBe(NOW + 60_000)
+    expect(repo.find('epic:ghostrunner')?.claim).toBe('pending')
+    const stored = db
+      .prepare('SELECT opened_at FROM freebie_claims WHERE freebie_id = ?')
+      .get('epic:ghostrunner') as { opened_at: number }
+    expect(stored.opened_at).toBe(NOW + 60_000)
   })
 
   it('does not un-confirm a claim if markOpened runs again for it', () => {
@@ -105,7 +112,10 @@ describe('FreebieRepository', () => {
 
     const row = repo.find('epic:ghostrunner')
     expect(row?.claim).toBe('confirmed')
-    expect(row?.openedAt).toBe(NOW + 10_000)
+    const stored = db
+      .prepare('SELECT opened_at FROM freebie_claims WHERE freebie_id = ?')
+      .get('epic:ghostrunner') as { opened_at: number }
+    expect(stored.opened_at).toBe(NOW + 10_000)
   })
 
   it('lists only the claims still waiting for confirmation', () => {
