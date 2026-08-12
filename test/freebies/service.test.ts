@@ -11,7 +11,7 @@ import { openDatabase } from '@main/db/schema'
 import { SettingsRepository } from '@main/db/settings'
 import { FreebieRepository } from '@main/db/freebies'
 import { FreebieService } from '@main/freebies/service'
-import { STORE_IDS } from '@shared/types'
+import { STORE_IDS, type Game } from '@shared/types'
 
 const NOW = Date.parse('2026-08-10T12:00:00.000Z')
 
@@ -83,6 +83,10 @@ describe('FreebieService', () => {
       repo,
       settings,
       locale: () => ({ language: 'en', country: 'US' }),
+      // Empty by default so the ownership marking added for getList stays
+      // out of the way of every test below that is not about it; the
+      // "marks a row owned" tests further down override this per case.
+      games: () => [],
       fetchFn
     })
   }
@@ -241,6 +245,7 @@ describe('FreebieService', () => {
       repo,
       settings,
       locale: () => ({ language: 'fr', country: 'US' }),
+      games: () => [],
       fetchFn
     })
     await svc.refresh(NOW, true)
@@ -288,6 +293,7 @@ describe('FreebieService', () => {
         repo,
         settings,
         locale: () => ({ language: 'en', country: 'US' }),
+        games: () => [],
         fetchFn: allDown()
       }
       const svc = new FreebieService(options)
@@ -330,6 +336,99 @@ describe('FreebieService', () => {
       const svc = service(fetchFn)
       expect(await svc.refresh(NOW, false)).toBe(true)
       expect(fetchFn.mock.calls.length).toBeGreaterThan(0)
+    })
+  })
+
+  describe('marking a row owned from the current library', () => {
+    /** `Game` extends `RawGame`; only the six fields below are required. */
+    function game(overrides: Partial<Game>): Game {
+      return {
+        id: 'ubisoft:1234',
+        storeId: 'ubisoft',
+        storeGameId: '1234',
+        name: 'Test',
+        installed: false,
+        favorite: false,
+        hidden: false,
+        firstSeen: NOW,
+        lastSeen: NOW,
+        ...overrides
+      }
+    }
+
+    it('marks the row owned end to end: GamerPower boilerplate stripped, then matched against the library', async () => {
+      // The exact screenshot bug: GamerPower reports the game with a
+      // trailing "(Ubisoft) Giveaway" that gamerpower.ts strips at parse
+      // time (see its own tests) — without that stripping this row would
+      // never match the library's plain title at all.
+      const fetchFn = router({
+        gamerpower: async () => [
+          {
+            id: 50,
+            title: "Tom Clancy's Ghost Recon Future Soldier (Ubisoft) Giveaway",
+            open_giveaway_url: 'https://www.gamerpower.com/open/ghost-recon',
+            type: 'Game',
+            platforms: 'PC, Ubisoft',
+            end_date: 'N/A',
+            status: 'Active'
+          }
+        ]
+      })
+      const svc = new FreebieService({
+        repo,
+        settings,
+        locale: () => ({ language: 'en', country: 'US' }),
+        games: () => [game({ name: "Tom Clancy's Ghost Recon Future Soldier" })],
+        fetchFn
+      })
+      await svc.refresh(NOW, true)
+      const row = svc.getList([...STORE_IDS], NOW).current.find((r) => r.storeId === 'ubisoft')
+      expect(row?.title).toBe("Tom Clancy's Ghost Recon Future Soldier")
+      expect(row?.claim).toBe('owned')
+    })
+
+    it('does not mark a row owned when the matching game sits in a different store', async () => {
+      // Ownership must not cross stores: owning it on Steam says nothing
+      // about whether the Ubisoft copy was ever claimed.
+      const fetchFn = router({
+        gamerpower: async () => [
+          {
+            id: 51,
+            title: 'Anno 1800 (Ubisoft) Giveaway',
+            open_giveaway_url: 'https://www.gamerpower.com/open/anno-1800',
+            type: 'Game',
+            platforms: 'PC, Ubisoft',
+            end_date: 'N/A',
+            status: 'Active'
+          }
+        ]
+      })
+      const svc = new FreebieService({
+        repo,
+        settings,
+        locale: () => ({ language: 'en', country: 'US' }),
+        games: () => [game({ id: 'steam:9', storeId: 'steam', storeGameId: '9', name: 'Anno 1800' })],
+        fetchFn
+      })
+      await svc.refresh(NOW, true)
+      const row = svc.getList([...STORE_IDS], NOW).current.find((r) => r.storeId === 'ubisoft')
+      expect(row?.claim).toBe('unclaimed')
+    })
+
+    it('keeps a confirmed claim reading confirmed rather than flipping it to owned', async () => {
+      const svc = new FreebieService({
+        repo,
+        settings,
+        locale: () => ({ language: 'en', country: 'US' }),
+        games: () => [game({ id: 'epic:abc', storeId: 'epic', storeGameId: 'abc', name: 'Ghostrunner' })],
+        fetchFn: router()
+      })
+      await svc.refresh(NOW, true)
+      repo.markOpened('epic:ghostrunner', NOW)
+      repo.markConfirmed('epic:ghostrunner', NOW + 1000)
+
+      const row = svc.getList([...STORE_IDS], NOW + 1000).current.find((r) => r.id === 'epic:ghostrunner')
+      expect(row?.claim).toBe('confirmed')
     })
   })
 })

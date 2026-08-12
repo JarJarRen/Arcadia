@@ -61,6 +61,12 @@ describe('FreebieCard', () => {
     expect(screen.getByText(/In your library/)).toBeTruthy()
   })
 
+  it('reports an owned row as already in the library, with no claim button', () => {
+    render(<FreebieCard freebie={freebie({ claim: 'owned' })} now={NOW} onClaim={vi.fn()} />)
+    expect(screen.getByText(/Already in your library/)).toBeTruthy()
+    expect(screen.queryByRole('button')).toBeNull()
+  })
+
   it('hands the whole row to the claim handler', () => {
     const onClaim = vi.fn()
     const row = freebie()

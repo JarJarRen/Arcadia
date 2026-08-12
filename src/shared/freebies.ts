@@ -9,8 +9,14 @@ export type FreebieSource = 'epic' | 'steam' | 'gamerpower'
  * `pending` is the honest middle: Arcadia opened the store's page and
  * cannot know whether the button there was pressed. Only a later library
  * scan can turn that into `confirmed`.
+ *
+ * `owned` is a different fact from `confirmed`: it says the library already
+ * had the game before the giveaway ever appeared, not that Arcadia watched
+ * a claim succeed. It is derived at read time from the current library
+ * rather than stored, and a `confirmed` claim always outranks it — see
+ * FreebieService.getList.
  */
-export type ClaimState = 'unclaimed' | 'pending' | 'confirmed'
+export type ClaimState = 'unclaimed' | 'pending' | 'confirmed' | 'owned'
 
 /** What a source parser produces, before dedup and before the database. */
 export interface RawFreebie {

@@ -51,6 +51,16 @@ function ClaimButton({ freebie, onClaim }: Omit<Props, 'now'>): ReactElement {
     )
   }
 
+  // Static, like `confirmed`: a game the user already owns needs no button
+  // inviting them to claim it again.
+  if (freebie.claim === 'owned') {
+    return (
+      <p className="freebie__claimed" role="status">
+        {strings.owned}
+      </p>
+    )
+  }
+
   // A pending row is only ever written with an openedAt (see
   // src/main/db/freebies.ts), but the type allows its absence. Without a
   // recorded time there is nothing truthful to say about when it was

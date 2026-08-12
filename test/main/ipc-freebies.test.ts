@@ -45,6 +45,7 @@ describe('IPC freebies channels', () => {
       repo: harness.context.freebiesRepo,
       settings: harness.settings,
       locale: () => ({ language: 'en', country: 'US' }),
+      games: () => harness.repo.all(),
       fetchFn: async () => ({ ok: true, status: 200, json: async () => ({}) })
     })
     registerIpcHandlers(harness.context)

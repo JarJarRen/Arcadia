@@ -247,7 +247,10 @@ app.whenReady().then(() => {
     locale: () => ({
       language: getLanguage(),
       country: resolveStoreCountry(app.getLocaleCountryCode(), app.getLocale())
-    })
+    }),
+    // Read fresh per call, not captured once: a game bought after the
+    // giveaway appeared must show as owned on the very next list request.
+    games: () => repo.all()
   })
 
   const microsoftSession = new MicrosoftSession({

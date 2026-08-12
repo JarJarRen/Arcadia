@@ -274,6 +274,8 @@ export interface Strings {
       confirmed: string
       /** The tooltip on a pending row. */
       pendingHint: string
+      /** The library already has this game — static text, no button, same as `confirmed`. */
+      owned: string
     }
   }
 
@@ -583,7 +585,8 @@ const en: Strings = {
       pending: (time: string) => `Opened ${time} · open again`,
       confirmed: '✓ In your library',
       pendingHint:
-        'Arcadia opened the store page. It marks this as claimed once the game turns up in a scan.'
+        'Arcadia opened the store page. It marks this as claimed once the game turns up in a scan.',
+      owned: '✓ Already in your library'
     }
   },
 
@@ -941,7 +944,8 @@ const de: Strings = {
       pending: (time: string) => `Um ${time} geöffnet · erneut öffnen`,
       confirmed: '✓ In deiner Bibliothek',
       pendingHint:
-        'Arcadia hat die Store-Seite geöffnet. Als geholt gilt das Spiel, sobald ein Scan es findet.'
+        'Arcadia hat die Store-Seite geöffnet. Als geholt gilt das Spiel, sobald ein Scan es findet.',
+      owned: '✓ Schon in deiner Bibliothek'
     }
   },
 

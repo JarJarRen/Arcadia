@@ -70,7 +70,10 @@ export function makeHarness(overrides: Partial<IpcContext> = {}): Harness {
     freebies: new FreebieService({
       repo: freebiesRepo,
       settings,
-      locale: () => ({ language: 'en', country: 'US' })
+      locale: () => ({ language: 'en', country: 'US' }),
+      // A real repository over the same in-memory database, for the same
+      // reason freebiesRepo above is real rather than stubbed.
+      games: () => repo.all()
     }),
     // A real one, not a stub: it is a counter and a callback with no
     // dependencies, and the genuine article keeps the handlers' scan

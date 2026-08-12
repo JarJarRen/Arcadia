@@ -1,9 +1,10 @@
-import type { FreebieList, RawFreebie } from '@shared/freebies'
-import type { StoreId } from '@shared/types'
+import type { Freebie, FreebieList, RawFreebie } from '@shared/freebies'
+import type { Game, StoreId } from '@shared/types'
 import { t } from '@shared/i18n'
 import type { FetchFn } from '@main/metadata/steamAppList'
 import type { FreebieRepository } from '@main/db/freebies'
 import type { SettingsRepository } from '@main/db/settings'
+import { libraryIndex, matchesLibrary } from './confirm'
 import { fetchEpicFreebies } from './sources/epic'
 import { fetchSteamFreebies } from './sources/steam'
 import { fetchGamerPowerFreebies } from './sources/gamerpower'
@@ -48,6 +49,13 @@ export interface FreebieServiceOptions {
   settings: SettingsRepository
   /** Where the interface language and the store country come from. */
   locale: () => { language: string; country: string }
+  /**
+   * The current library, read fresh on every list request rather than
+   * captured once: ownership is a fact about the library right now, not
+   * about the offer, and a game bought after the giveaway appeared must
+   * show as owned on the very next read with no cache to invalidate.
+   */
+  games: () => Game[]
   fetchFn?: FetchFn
 }
 
@@ -75,13 +83,35 @@ export class FreebieService {
 
   getList(stores: StoreId[], now: number): FreebieList {
     const rows = filterByStores(this.options.repo.list(), stores)
-    const { current, upcoming } = splitFreebies(rows, now)
+    const owned = this.markOwned(rows)
+    const { current, upcoming } = splitFreebies(owned, now)
     return {
       current,
       upcoming,
       ...(this.fetchedAt === undefined ? {} : { fetchedAt: this.fetchedAt }),
       failures: [...this.failures]
     }
+  }
+
+  /**
+   * Marks a row `owned` when the library already has the game, without
+   * touching a `confirmed` row.
+   *
+   * `confirmed` and `owned` answer different questions — one says Arcadia
+   * watched this exact claim succeed, the other says the library holds the
+   * game regardless of why — and a row the user actually claimed here must
+   * keep saying so rather than being relabelled by a coincidence of
+   * ownership. Derived on every read rather than written to the database:
+   * ownership is a property of the library as it stands right now, not of
+   * the offer, so there is nothing here that belongs in a cache.
+   */
+  private markOwned(rows: Freebie[]): Freebie[] {
+    const index = libraryIndex(this.options.games())
+    return rows.map((row) =>
+      row.claim === 'confirmed' || !matchesLibrary(index, row)
+        ? row
+        : { ...row, claim: 'owned' as const }
+    )
   }
 
   /**
