@@ -343,6 +343,14 @@ export interface Strings {
       missingXuid: string
       catalogFailed: (reason: string) => string
     }
+    other: {
+      /** Shown under the store's checkbox in the configuration screen. */
+      handAdded: string
+      noExecutable: (name: string) => string
+      fileMissing: (path: string) => string
+      nothingToInstall: string
+      notLaunchable: (name: string) => string
+    }
   }
 }
 
@@ -699,6 +707,13 @@ const en: Strings = {
         'Xbox Live did not return a player ID for this account, so the title history ' +
         'cannot be read.',
       catalogFailed: (reason) => `The Microsoft Store catalogue could not be read: ${reason}`
+    },
+    other: {
+      handAdded: 'Games you add by hand. Nothing is detected automatically.',
+      noExecutable: (name) => `${name} has no program to start.`,
+      fileMissing: (path) => `The program is no longer there: ${path}`,
+      nothingToInstall: 'This game was added by hand. There is nothing to install.',
+      notLaunchable: (name) => `${name} is started directly, not through a store.`
     }
   }
 }
@@ -1074,6 +1089,14 @@ const de: Strings = {
         'Spielverlauf nicht gelesen werden.',
       catalogFailed: (reason) =>
         `Der Microsoft-Store-Katalog konnte nicht gelesen werden: ${reason}`
+    },
+    other: {
+      handAdded: 'Spiele, die du von Hand hinzufügst. Es wird nichts automatisch erkannt.',
+      noExecutable: (name) => `${name} hat kein Programm zum Starten.`,
+      fileMissing: (path) => `Das Programm ist nicht mehr da: ${path}`,
+      nothingToInstall:
+        'Dieses Spiel wurde von Hand hinzugefügt. Es gibt nichts zu installieren.',
+      notLaunchable: (name) => `${name} wird direkt gestartet, nicht über einen Store.`
     }
   }
 }

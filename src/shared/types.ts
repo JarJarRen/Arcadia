@@ -1,4 +1,12 @@
-export const STORE_IDS = ['steam', 'epic', 'ea', 'ubisoft', 'microsoft'] as const
+/**
+ * Every store, in the order that decides which source wins.
+ *
+ * `library/merge.ts` builds its ranking from this array, so `other` is last
+ * on purpose: when a hand-made entry and a scanned game share a name, the
+ * scanned one becomes the active source. A placeholder must not displace the
+ * real thing.
+ */
+export const STORE_IDS = ['steam', 'epic', 'ea', 'ubisoft', 'microsoft', 'other'] as const
 export type StoreId = (typeof STORE_IDS)[number]
 
 /** What an adapter reads raw from a store. */

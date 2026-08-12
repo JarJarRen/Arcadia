@@ -82,3 +82,14 @@ describe('storeGameIdLooksValid', () => {
     }
   })
 })
+
+describe('storeless identifiers', () => {
+  it('accepts a generated identifier', () => {
+    expect(storeGameIdLooksValid('other', manualStoreGameId('Minecraft Launcher'))).toBe(true)
+  })
+
+  it('rejects anything a caller invents', () => {
+    expect(storeGameIdLooksValid('other', 'C:\\Games\\mc.exe')).toBe(false)
+    expect(storeGameIdLooksValid('other', '440')).toBe(false)
+  })
+})

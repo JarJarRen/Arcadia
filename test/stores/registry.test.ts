@@ -5,9 +5,12 @@ import { STORE_IDS } from '@shared/types'
 describe('createAdapters', () => {
   it('creates exactly one adapter per store', () => {
     // Grows with STORE_IDS: if a store is added without an adapter, this
-    // test fails rather than silently swallowing the store.
+    // test fails rather than silently swallowing the store. 'other' is the
+    // exception — it identifies hand-added games rather than a store an
+    // adapter scans, so it never gets one.
+    const adaptedStoreIds = STORE_IDS.filter((id) => id !== 'other')
     const adapters = createAdapters({ steam: {} })
-    expect(adapters.map((a) => a.id).sort()).toEqual([...STORE_IDS].sort())
+    expect(adapters.map((a) => a.id).sort()).toEqual([...adaptedStoreIds].sort())
   })
 
   it('gives every adapter a user-visible name', () => {
