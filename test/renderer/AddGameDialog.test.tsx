@@ -267,6 +267,7 @@ describe('AddGameDialog', () => {
 
 describe('a storeless game', () => {
   it('offers a program instead of a store identifier', async () => {
+    stubArcadia()
     render(<AddGameDialog availableStores={['steam', 'other']} onClose={noop} onAdded={noop} />)
 
     await userEvent.selectOptions(screen.getByLabelText(t().addDialog.storeLabel), 'other')
@@ -276,11 +277,13 @@ describe('a storeless game', () => {
   })
 
   it('fills the name in from the program when the field is still empty', async () => {
-    window.arcadia.pickExecutable = async () => ({
-      ok: true,
-      exe: 'C:\\Games\\mc.exe',
-      args: ['--offline'],
-      suggestedName: 'Minecraft Launcher'
+    stubArcadia({
+      pickExecutable: async () => ({
+        ok: true,
+        exe: 'C:\\Games\\mc.exe',
+        args: ['--offline'],
+        suggestedName: 'Minecraft Launcher'
+      })
     })
     render(<AddGameDialog availableStores={['other']} onClose={noop} onAdded={noop} />)
 
@@ -296,11 +299,13 @@ describe('a storeless game', () => {
   })
 
   it('leaves a name the user typed alone', async () => {
-    window.arcadia.pickExecutable = async () => ({
-      ok: true,
-      exe: 'C:\\Games\\mc.exe',
-      args: [],
-      suggestedName: 'mc'
+    stubArcadia({
+      pickExecutable: async () => ({
+        ok: true,
+        exe: 'C:\\Games\\mc.exe',
+        args: [],
+        suggestedName: 'mc'
+      })
     })
     render(<AddGameDialog availableStores={['other']} onClose={noop} onAdded={noop} />)
 
@@ -313,6 +318,7 @@ describe('a storeless game', () => {
   })
 
   it('cannot be submitted without a program', async () => {
+    stubArcadia()
     render(<AddGameDialog availableStores={['other']} onClose={noop} onAdded={noop} />)
 
     await userEvent.type(screen.getByLabelText(t().addDialog.nameLabel), 'Minecraft')
@@ -324,12 +330,14 @@ describe('a storeless game', () => {
 
   it('sends the program and the arguments', async () => {
     const addManualGame = vi.fn(async () => ({ ok: true, id: 'other:manual-minecraft' }))
-    window.arcadia.addManualGame = addManualGame
-    window.arcadia.pickExecutable = async () => ({
-      ok: true,
-      exe: 'C:\\Games\\mc.exe',
-      args: [],
-      suggestedName: 'Minecraft'
+    stubArcadia({
+      addManualGame,
+      pickExecutable: async () => ({
+        ok: true,
+        exe: 'C:\\Games\\mc.exe',
+        args: [],
+        suggestedName: 'Minecraft'
+      })
     })
     render(<AddGameDialog availableStores={['other']} onClose={noop} onAdded={noop} />)
 
@@ -349,7 +357,7 @@ describe('a storeless game', () => {
   })
 
   it('shows why a chosen file was refused', async () => {
-    window.arcadia.pickExecutable = async () => ({ ok: false, error: 'Not a program.' })
+    stubArcadia({ pickExecutable: async () => ({ ok: false, error: 'Not a program.' }) })
     render(<AddGameDialog availableStores={['other']} onClose={noop} onAdded={noop} />)
 
     await userEvent.click(screen.getByRole('button', { name: t().addDialog.browse }))
@@ -358,7 +366,7 @@ describe('a storeless game', () => {
   })
 
   it('says nothing when the dialog was simply closed', async () => {
-    window.arcadia.pickExecutable = async () => ({ ok: false })
+    stubArcadia({ pickExecutable: async () => ({ ok: false }) })
     render(<AddGameDialog availableStores={['other']} onClose={noop} onAdded={noop} />)
 
     await userEvent.click(screen.getByRole('button', { name: t().addDialog.browse }))
