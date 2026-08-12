@@ -414,7 +414,7 @@ export function App(): ReactElement {
   const freebiesOverlay =
     overlay?.kind === 'freebies' ? (
       <div className="detailoverlay">
-        <FreeGames onClose={close} />
+        <FreeGames onClose={close} onOpenSetup={() => void openSetup()} />
       </div>
     ) : null
 

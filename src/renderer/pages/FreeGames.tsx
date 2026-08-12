@@ -3,6 +3,7 @@ import type { Freebie, FreebieKind } from '@shared/freebies'
 import { t } from '@shared/i18n'
 import { useFreebies } from '../hooks/useFreebies'
 import { FreebieCard } from '../components/FreebieCard'
+import { SettingsMenu } from '../components/SettingsMenu'
 
 type KindFilter = 'all' | FreebieKind
 
@@ -50,10 +51,18 @@ function Section({
   )
 }
 
-export function FreeGames({ onClose }: { onClose: () => void }): ReactElement {
+interface Props {
+  onClose: () => void
+  /** Reopens the configuration screen — the gear needs this page's own
+      copy since the page covers the toolbar that would otherwise host it. */
+  onOpenSetup: () => void
+}
+
+export function FreeGames({ onClose, onOpenSetup }: Props): ReactElement {
   const { list, loading, error, refresh, claim } = useFreebies()
   const [kind, setKind] = useState<KindFilter>('all')
   const now = Date.now()
+  const refreshLabel = loading ? t().freebies.refreshing : t().freebies.refresh
 
   const current = keepKind(list.current, kind)
   const upcoming = keepKind(list.upcoming, kind)
@@ -95,8 +104,18 @@ export function FreeGames({ onClose }: { onClose: () => void }): ReactElement {
             </button>
           ))}
         </div>
-        <button type="button" className="button" onClick={refresh} disabled={loading}>
-          {t().freebies.refresh}
+        {/* Icon only, matching the library toolbar's refresh — the label
+            lives in the tooltip and the accessible name instead of on the
+            button. */}
+        <button
+          type="button"
+          className="button button--icon"
+          disabled={loading}
+          aria-label={refreshLabel}
+          title={refreshLabel}
+          onClick={refresh}
+        >
+          <span aria-hidden="true">⟳</span>
         </button>
         {list.fetchedAt !== undefined && (
           <span className="freebies__asof">
@@ -110,6 +129,12 @@ export function FreeGames({ onClose }: { onClose: () => void }): ReactElement {
             )}
           </span>
         )}
+        {/* The gear the library toolbar renders — this page covers the
+            toolbar while it is open, so without its own copy the
+            configuration screen and the language switch are unreachable
+            from here. Reused rather than copied: one popover, one place
+            its markup can drift. */}
+        <SettingsMenu onOpenSetup={onOpenSetup} />
       </header>
 
       {list.failures.map((failure) => (

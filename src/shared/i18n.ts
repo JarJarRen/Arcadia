@@ -256,6 +256,8 @@ export interface Strings {
     /** Shown when every source failed and there is no cache either. */
     unavailable: string
     refresh: string
+    /** Mirrors toolbar.refreshing — the icon button's accessible name while a fetch is in flight. */
+    refreshing: string
     /** e.g. "as of 10 Aug, 14:02" */
     asOf: (when: string) => string
     sourceFailed: (source: string) => string
@@ -573,6 +575,7 @@ const en: Strings = {
     empty: 'Nothing is free to keep in your stores right now.',
     unavailable: 'The free-games lists could not be reached.',
     refresh: 'Refresh',
+    refreshing: 'Refreshing…',
     asOf: (when: string) => `as of ${when}`,
     sourceFailed: (source: string) => `${source}'s list could not be fetched.`,
     kind: { all: 'All', game: 'Games', dlc: 'DLC', loot: 'Loot' },
@@ -932,6 +935,7 @@ const de: Strings = {
     empty: 'In deinen Stores ist gerade nichts dauerhaft gratis.',
     unavailable: 'Die Gratis-Listen waren nicht erreichbar.',
     refresh: 'Aktualisieren',
+    refreshing: 'Wird aktualisiert…',
     asOf: (when: string) => `Stand ${when}`,
     sourceFailed: (source: string) => `Die Liste von ${source} konnte nicht geladen werden.`,
     kind: { all: 'Alle', game: 'Spiele', dlc: 'DLC', loot: 'Extras' },
