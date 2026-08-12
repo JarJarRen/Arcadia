@@ -278,8 +278,6 @@ export interface Strings {
       confirmed: string
       /** The tooltip on a pending row. */
       pendingHint: string
-      /** The library already has this game — static text, no button, same as `confirmed`. */
-      owned: string
       /** The tooltip on an unclaimed row whose button opens the store app. */
       inStoreHint: (store: string) => string
       /** The tooltip on an unclaimed row whose button opens a browser page. */
@@ -601,7 +599,6 @@ const en: Strings = {
       confirmed: '✓ In your library',
       pendingHint:
         'Arcadia opened the store page. It marks this as claimed once the game turns up in a scan.',
-      owned: '✓ Already in your library',
       inStoreHint: (store: string) => `Opens ${store} so you can claim the offer there.`,
       inBrowserHint: 'Opens the offer’s page in your browser.'
     }
@@ -969,7 +966,6 @@ const de: Strings = {
       confirmed: '✓ In deiner Bibliothek',
       pendingHint:
         'Arcadia hat die Store-Seite geöffnet. Als geholt gilt das Spiel, sobald ein Scan es findet.',
-      owned: '✓ Schon in deiner Bibliothek',
       inStoreHint: (store: string) => `Öffnet ${store}, damit du das Angebot dort holen kannst.`,
       inBrowserHint: 'Öffnet die Seite des Angebots in deinem Browser.'
     }

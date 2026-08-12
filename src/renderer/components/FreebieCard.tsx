@@ -43,20 +43,13 @@ function kindLabel(freebie: Freebie): string {
 function ClaimButton({ freebie, onClaim }: Omit<Props, 'now'>): ReactElement {
   const strings = t().freebies.claim
 
-  if (freebie.claim === 'confirmed') {
+  // `owned` and `confirmed` read the same: both mean the game is in the
+  // library, and the distinction between "we saw it happen" and "it was
+  // already there" is not one the user needs to make.
+  if (freebie.claim === 'confirmed' || freebie.claim === 'owned') {
     return (
       <p className="freebie__claimed" role="status">
         {strings.confirmed}
-      </p>
-    )
-  }
-
-  // Static, like `confirmed`: a game the user already owns needs no button
-  // inviting them to claim it again.
-  if (freebie.claim === 'owned') {
-    return (
-      <p className="freebie__claimed" role="status">
-        {strings.owned}
       </p>
     )
   }

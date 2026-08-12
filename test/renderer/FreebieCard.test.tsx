@@ -61,9 +61,11 @@ describe('FreebieCard', () => {
     expect(screen.getByText(/In your library/)).toBeTruthy()
   })
 
-  it('reports an owned row as already in the library, with no claim button', () => {
+  it('reports an owned row as in the library too, with no claim button', () => {
+    // Same wording as `confirmed` — the user does not need to know whether
+    // Arcadia saw the claim happen or the game was already there.
     render(<FreebieCard freebie={freebie({ claim: 'owned' })} now={NOW} onClaim={vi.fn()} />)
-    expect(screen.getByText(/Already in your library/)).toBeTruthy()
+    expect(screen.getByText(/In your library/)).toBeTruthy()
     expect(screen.queryByRole('button')).toBeNull()
   })
 
