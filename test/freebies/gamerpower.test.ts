@@ -173,9 +173,19 @@ describe('stripping marketing boilerplate from the title', () => {
   })
 
   it('keeps the original title rather than emptying it', () => {
-    // "Giveaway" alone strips down to nothing; the original is the safer
-    // answer than a blank card.
+    // "Giveaway" alone no longer strips at all — the patterns require a
+    // preceding space, and there is nothing before it. It reaches the
+    // caller unchanged without the empty-result guard being involved.
     expect(titleOf('Giveaway')).toBe('Giveaway')
+  })
+
+  it('keeps a title that really does strip down to nothing', () => {
+    // The leading space is what makes this one reach the empty-result
+    // guard: the pattern matches " Giveaway" and leaves an empty string.
+    // A blank card is worse than a slightly ugly one, so the original
+    // wins — and this is the only input shape that proves that branch
+    // still works.
+    expect(titleOf(' Giveaway')).toBe(' Giveaway')
   })
 
   it('leaves "NHL 24: Hockey" alone — "key$" must not match inside "Hockey"', () => {
