@@ -404,8 +404,15 @@ app.whenReady().then(() => {
 
   // Kicked off after the window exists, so the event this can send has
   // somewhere to go.
+  //
+  // Forced, unlike every other caller of refresh — the freebies:get handler,
+  // the renderer's reload-on-event — which all still go through the TTL
+  // guard. This call happens once per process launch, not once per event,
+  // so it cannot become the request storm attempted-at was introduced to
+  // stop; it just means a restart inside the six-hour window still shows a
+  // fresh list instead of silently serving the cache.
   void freebies
-    .refresh(Date.now(), false)
+    .refresh(Date.now(), true)
     .then((changed) => {
       if (changed) mainWindow?.webContents.send(IPC.freebiesChanged)
     })
