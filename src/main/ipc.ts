@@ -810,6 +810,15 @@ export function registerIpcHandlers(context: IpcContext): void {
   ipcMain.handle(IPC.freebiesRefresh, async (): Promise<FreebieList> => {
     const stores = parseEnabledStores(context.settings.get('enabled-stores'))
     await context.freebies.refresh(Date.now(), true)
+    // The page's own subscriber updates from this handler's return value, so
+    // it looks right without this. The toolbar badge does not: it only ever
+    // updates on mount or on this event, so without it a forced refresh
+    // pressed from inside the page leaves the badge showing whatever it
+    // showed when the page was opened for the rest of the session. This
+    // cannot loop — the reload it triggers calls freebies:get, whose
+    // refresh(now, false) hits the TTL guard this forced refresh just
+    // re-armed.
+    context.getWindow()?.webContents.send(IPC.freebiesChanged)
     return context.freebies.getList(stores, Date.now())
   })
 
