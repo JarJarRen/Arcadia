@@ -7,6 +7,15 @@
   --text-dim: #949bab;
   --accent: #4a8cff;
   color-scheme: dark;
+  /* The library toolbar and the free-games header are two rules with the
+     same job — a full-width control row — and drifted apart the moment one
+     of them gained an unstyled heading. One variable so a future control
+     added to either can only grow the row it is actually in, not silently
+     re-open the mismatch between the two. 66px is the toolbar's own
+     measured height (14px padding + a 37px control row) — see the
+     `toolbarHeight` figure the smoke test prints, which is the only thing
+     here that can actually measure it. */
+  --toolbar-height: 66px;
 }
 
 * {
@@ -31,6 +40,7 @@ body {
   flex-wrap: wrap;
   gap: 10px;
   align-items: center;
+  min-height: var(--toolbar-height);
   padding: 14px 20px;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
@@ -586,9 +596,20 @@ button:focus-visible {
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
+  min-height: var(--toolbar-height);
   padding: 14px 20px;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
+}
+
+/* The browser default for a bare <h2> — 1.5em text plus 0.83em margins top
+   and bottom — was the actual cause of this header standing taller than
+   .toolbar: the margins alone outweighed the difference. Sized to sit on
+   the same baseline as the buttons beside it rather than as a document
+   heading, matching .modal__title's convention elsewhere in the app. */
+.freebies__header h2 {
+  margin: 0;
+  font-size: 18px;
 }
 
 /* The inset .freebies lost: banners, the empty state and both Section

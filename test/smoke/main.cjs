@@ -117,6 +117,33 @@ function check(result) {
         'the cards have collapsed.'
     )
   }
+
+  // Neither bar may need more width than it has at the app's default window
+  // size — that is what "wraps to a second line" means for a flex-wrap row.
+  // One pixel of tolerance for rounding between getBoundingClientRect and
+  // the integer scrollWidth/clientWidth.
+  if (result.toolbarScrollWidth > result.toolbarClientWidth + 1) {
+    problems.push(
+      `The library toolbar needs ${result.toolbarScrollWidth}px but only has ` +
+        `${result.toolbarClientWidth}px — it wraps to a second line.`
+    )
+  }
+  if (result.freebiesHeaderScrollWidth > result.freebiesHeaderClientWidth + 1) {
+    problems.push(
+      `The free-games header needs ${result.freebiesHeaderScrollWidth}px but only has ` +
+        `${result.freebiesHeaderClientWidth}px — it wraps to a second line.`
+    )
+  }
+
+  // The two bars are meant to look like one continuous piece of chrome as
+  // the page changes underneath them; a height mismatch is exactly what
+  // gave that away before .freebies__header picked up .toolbar's min-height.
+  if (Math.abs(result.toolbarHeight - result.freebiesHeaderHeight) > 1) {
+    problems.push(
+      `The library toolbar is ${result.toolbarHeight}px tall but the free-games header is ` +
+        `${result.freebiesHeaderHeight}px — they no longer match.`
+    )
+  }
   return problems
 }
 
@@ -155,7 +182,10 @@ process.on('unhandledRejection', (reason) => {
 
 app.whenReady().then(async () => {
   const win = new BrowserWindow({
-    width: 1400,
+    // Mirrors createWindow's default in src/main/index.ts — the toolbar
+    // no-wrap assertions below are only meaningful measured at the size the
+    // app actually opens at.
+    width: 1480,
     height: 900,
     show: false,
     webPreferences: {
@@ -197,6 +227,29 @@ app.whenReady().then(async () => {
     const box = (el) => (el ? el.getBoundingClientRect() : { height: 0, width: 0 })
     const sw = card && card.querySelector('.storeswitch')
 
+    // Toolbar geometry: height, and the width the row needs versus the width
+    // it has. Both bars use \`flex-wrap: wrap\`, so a row that runs out of
+    // space grows a second line rather than overflowing horizontally, and
+    // forcing \`nowrap\` alone is not enough to see that either: the search
+    // field (\`flex: 1 1 240px\`) just shrinks to absorb the missing space
+    // instead of overflowing. \`width: max-content\` removes the parent's
+    // width constraint so the row reports what it would need at its natural,
+    // unshrunk size. Both are restored immediately after the read.
+    const measureRow = (el) => {
+      if (!el) return { height: 0, scrollWidth: 0, clientWidth: 0 }
+      const height = Math.round(el.getBoundingClientRect().height)
+      const clientWidth = el.clientWidth
+      const prevWrap = el.style.flexWrap
+      const prevWidth = el.style.width
+      el.style.flexWrap = 'nowrap'
+      el.style.width = 'max-content'
+      const scrollWidth = el.scrollWidth
+      el.style.flexWrap = prevWrap
+      el.style.width = prevWidth
+      return { height, scrollWidth: Math.round(scrollWidth), clientWidth: Math.round(clientWidth) }
+    }
+    const toolbarGeometry = measureRow(document.querySelector('.toolbar'))
+
     // The free-games grid. Measured for the same reason as the library
     // tiles above: a CSS bug once collapsed all 193 of them to 6 pixels
     // with every unit test green, and jsdom computes no layout.
@@ -216,9 +269,16 @@ app.whenReady().then(async () => {
       await new Promise((resolve) => setTimeout(resolve, 50))
     }
     const freebieCard = freebie === null ? null : freebie.getBoundingClientRect()
+    const freebiesHeaderGeometry = measureRow(document.querySelector('.freebies__header'))
 
     return {
       stylesheets: document.styleSheets.length,
+      toolbarHeight: toolbarGeometry.height,
+      toolbarScrollWidth: toolbarGeometry.scrollWidth,
+      toolbarClientWidth: toolbarGeometry.clientWidth,
+      freebiesHeaderHeight: freebiesHeaderGeometry.height,
+      freebiesHeaderScrollWidth: freebiesHeaderGeometry.scrollWidth,
+      freebiesHeaderClientWidth: freebiesHeaderGeometry.clientWidth,
       cardCount: document.querySelectorAll('.card').length,
       cardHeight: Math.round(box(card).height),
       artHeight: Math.round(box(art).height),
