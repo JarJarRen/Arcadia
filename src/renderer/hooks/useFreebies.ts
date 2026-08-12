@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Freebie, FreebieList } from '@shared/freebies'
-import { t } from '@shared/i18n'
 
 const EMPTY: FreebieList = { current: [], upcoming: [], failures: [] }
 
@@ -54,7 +53,12 @@ export function useFreebies(): FreebieControls {
     async (freebie: Freebie): Promise<void> => {
       // The id, never the address. Main looks the row up and validates it.
       const result = await window.arcadia.claimFreebie(freebie.id)
-      if (!result.ok) setError(result.error ?? t().freebies.unavailable)
+      // freebies:claim returns an error string on every failure path, so
+      // there is nothing to fall back to here — and the one this used to
+      // fall back to was the list-level "could not be reached" message,
+      // which would have been wrong for a single failed claim if it had
+      // ever actually rendered.
+      if (!result.ok) setError(result.error)
     },
     []
   )
