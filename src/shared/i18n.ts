@@ -240,6 +240,10 @@ export interface Strings {
     databaseUnusable: (detail: string) => string
     /** e.g. "The offer could not be opened: …" */
     claimFailed: (reason: string) => string
+    executableNotAbsolute: string
+    executableUnsupported: string
+    executableMissing: (path: string) => string
+    shortcutUnreadable: string
   }
 
   freebies: {
@@ -577,7 +581,12 @@ const en: Strings = {
     databaseUnusable: (detail) =>
       `The database could not be opened (${detail}). Arcadia is running, but ` +
       'nothing it finds will be kept when you close it.',
-    claimFailed: (reason) => `The offer could not be opened: ${reason}`
+    claimFailed: (reason) => `The offer could not be opened: ${reason}`,
+    executableNotAbsolute: 'Choose a program by its full path.',
+    executableUnsupported:
+      'Choose a program (.exe). Batch files are not supported, because running one needs a command interpreter.',
+    executableMissing: (path) => `There is no file at ${path}.`,
+    shortcutUnreadable: 'That shortcut could not be read. Choose the program itself instead.'
   },
 
   freebies: {
@@ -951,7 +960,13 @@ const de: Strings = {
     databaseUnusable: (detail) =>
       `Die Datenbank konnte nicht geöffnet werden (${detail}). Arcadia läuft, ` +
       'aber nichts davon wird beim Beenden gespeichert.',
-    claimFailed: (reason) => `Das Angebot konnte nicht geöffnet werden: ${reason}`
+    claimFailed: (reason) => `Das Angebot konnte nicht geöffnet werden: ${reason}`,
+    executableNotAbsolute: 'Wähle ein Programm über seinen vollständigen Pfad.',
+    executableUnsupported:
+      'Wähle ein Programm (.exe). Batch-Dateien werden nicht unterstützt, weil dafür ein Kommandozeilen-Interpreter nötig wäre.',
+    executableMissing: (path) => `Unter ${path} liegt keine Datei.`,
+    shortcutUnreadable:
+      'Diese Verknüpfung ließ sich nicht lesen. Wähle stattdessen das Programm selbst.'
   },
 
   freebies: {
