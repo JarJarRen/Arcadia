@@ -89,10 +89,17 @@ export function isShortcut(path: string): boolean {
  * Decided by the separator the path itself uses rather than by the host's,
  * which is what makes a `C:\…` path answer correctly on the Linux box that
  * runs CI. A file in the root keeps its root.
+ *
+ * Cuts at the last occurrence of *either* separator, since a path can mix
+ * them — `executableProblem`'s absolute-path check and `fileNameOf`'s split
+ * both accept `\` and `/`, so a mixed path reaches here unrejected.
+ *
+ * Assumes an absolute path: a relative one such as `mc.exe` has no separator
+ * to cut at and answers `''`, but rejecting that is `executableProblem`'s
+ * job, not this function's.
  */
 export function folderOf(path: string): string {
-  const separator = path.includes('\\') ? '\\' : '/'
-  const cut = path.lastIndexOf(separator)
+  const cut = Math.max(path.lastIndexOf('\\'), path.lastIndexOf('/'))
   if (cut === -1) return ''
   // `C:\mc.exe` → `C:\`, `/launcher` → `/`. Cutting at `cut` alone would
   // leave `C:` and `''`, neither of which is a directory.

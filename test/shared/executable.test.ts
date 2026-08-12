@@ -80,4 +80,17 @@ describe('folderOf', () => {
     expect(folderOf('C:\\mc.exe')).toBe('C:\\')
     expect(folderOf('/launcher')).toBe('/')
   })
+
+  it('cuts at the last separator when the path mixes both', () => {
+    // executableProblem's absolute-path check and fileNameOf's split both
+    // accept either separator, so a mixed path like this reaches here
+    // intact rather than being rejected earlier.
+    expect(folderOf('C:\\Games/mc.exe')).toBe('C:\\Games')
+  })
+
+  it('answers empty for a path with no separator', () => {
+    // Precondition: callers pass an absolute path. A relative one such as
+    // this is executableProblem's job to reject, not folderOf's.
+    expect(folderOf('mc.exe')).toBe('')
+  })
 })
