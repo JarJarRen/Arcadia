@@ -247,6 +247,8 @@ export interface Strings {
     title: string
     /** e.g. "Free now · 3" — the count is of unclaimed current offers. */
     buttonWithCount: (count: number) => string
+    /** The page's own close control — worded like detail.back, not shared with it: each section owns its strings here. */
+    back: string
     currentHeading: string
     upcomingHeading: string
     /** Shown in place of the list when there is nothing free anywhere. */
@@ -563,6 +565,7 @@ const en: Strings = {
   freebies: {
     title: 'Free now',
     buttonWithCount: (count: number) => `Free now · ${count}`,
+    back: '← Back to library',
     currentHeading: 'Free to keep',
     upcomingHeading: 'Coming soon',
     empty: 'Nothing is free to keep in your stores right now.',
@@ -920,6 +923,7 @@ const de: Strings = {
   freebies: {
     title: 'Gerade gratis',
     buttonWithCount: (count: number) => `Gerade gratis · ${count}`,
+    back: '← Zurück zur Bibliothek',
     currentHeading: 'Dauerhaft gratis',
     upcomingHeading: 'Demnächst',
     empty: 'In deinen Stores ist gerade nichts dauerhaft gratis.',

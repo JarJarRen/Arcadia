@@ -75,6 +75,12 @@ export function FreeGames({ onClose }: { onClose: () => void }): ReactElement {
   return (
     <section className="freebies">
       <header className="freebies__header">
+        {/* First in reading order, same shape as detail__back, so it reads
+            as "go back" rather than "dismiss" — a bare × gave no hint that
+            this returns to the library rather than closing something. */}
+        <button type="button" className="button freebies__back" onClick={onClose}>
+          {t().freebies.back}
+        </button>
         <h2>{t().freebies.title}</h2>
         <div className="freebies__chips" role="group">
           {CHIPS.map((value) => (
@@ -104,14 +110,6 @@ export function FreeGames({ onClose }: { onClose: () => void }): ReactElement {
             )}
           </span>
         )}
-        <button
-          type="button"
-          className="button button--icon"
-          aria-label={t().common.close}
-          onClick={onClose}
-        >
-          ×
-        </button>
       </header>
 
       {list.failures.map((failure) => (

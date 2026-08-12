@@ -591,6 +591,14 @@ button:focus-visible {
   border-bottom: 1px solid var(--border);
 }
 
+/* Same job as .detail__back — first in reading order, ahead of everything
+   else in the header — but that one sits in a stacked hero and needs
+   margin-bottom to separate it from the title below; here the header is a
+   row, so margin-right does the equivalent spacing instead. */
+.freebies__back {
+  margin-right: 4px;
+}
+
 .freebies__chips {
   display: flex;
   flex-wrap: wrap;

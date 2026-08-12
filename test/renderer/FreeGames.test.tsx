@@ -169,12 +169,12 @@ describe('FreeGames', () => {
     await waitFor(() => expect(api.refreshFreebies).toHaveBeenCalled())
   })
 
-  it('closes on the close button', async () => {
+  it('closes on the back-to-library button', async () => {
     const onClose = vi.fn()
     stubApi()
     render(<FreeGames onClose={onClose} />)
     await waitFor(() => expect(screen.getByText('Ghostrunner')).toBeTruthy())
-    fireEvent.click(screen.getByRole('button', { name: /close/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Back to library/i }))
     expect(onClose).toHaveBeenCalled()
   })
 
