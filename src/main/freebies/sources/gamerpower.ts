@@ -76,12 +76,21 @@ function asRecord(value: unknown): Record<string, unknown> {
  * repeatedly because the boilerplate stacks: "… Steam Key Giveaway" needs
  * both the trailing "Giveaway" and the trailing "Steam Key" removed, and
  * removing one can expose the other.
+ *
+ * The word patterns require `\s+` (at least one whitespace character)
+ * before the word, not `\s*`. `\s*` also matches zero whitespace, which
+ * lets the pattern match inside a word rather than only a standalone word
+ * at the boundary — "NHL 24: Hockey" loses its tail to "…key$" and becomes
+ * "NHL 24: Hoc". The store-parenthetical pattern keeps `\s*`: the literal
+ * "(" it requires is already a hard boundary, so it cannot match inside a
+ * word, and a title can legitimately butt up against it with no space
+ * ("Beacon Pines(Epic Games)").
  */
 const TRAILING_PATTERNS: readonly RegExp[] = [
-  /\s*giveaway$/i,
+  /\s+giveaway$/i,
   /\s*\((?:epic games store|epic games|steam|ubisoft|gog|origin|ea app|ea|xbox|microsoft)\)$/i,
-  /\s*(?:steam key|epic key|ubisoft key|key)$/i,
-  /\s*free game$/i
+  /\s+(?:steam key|epic key|ubisoft key|key)$/i,
+  /\s+free game$/i
 ]
 
 function stripMarketingBoilerplate(title: string): string {

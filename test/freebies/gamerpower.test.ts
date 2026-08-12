@@ -177,6 +177,22 @@ describe('stripping marketing boilerplate from the title', () => {
     // answer than a blank card.
     expect(titleOf('Giveaway')).toBe('Giveaway')
   })
+
+  it('leaves "NHL 24: Hockey" alone — "key$" must not match inside "Hockey"', () => {
+    expect(titleOf('NHL 24: Hockey')).toBe('NHL 24: Hockey')
+  })
+
+  it('leaves "Old Whiskey" alone — "key$" must not match inside "Whiskey"', () => {
+    expect(titleOf('Old Whiskey')).toBe('Old Whiskey')
+  })
+
+  it('leaves "Assassins Creed Turkey" alone — "key$" must not match inside "Turkey"', () => {
+    expect(titleOf('Assassins Creed Turkey')).toBe('Assassins Creed Turkey')
+  })
+
+  it('leaves "Endgame" alone — "game$" must not match inside a word ending in it', () => {
+    expect(titleOf('Endgame')).toBe('Endgame')
+  })
 })
 
 describe('fetchGamerPowerFreebies', () => {
