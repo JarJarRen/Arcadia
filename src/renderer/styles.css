@@ -548,10 +548,74 @@ button:focus-visible {
   margin-top: auto;
 }
 
+/* Replaces the claim button once confirmed, in the same spot in the flex
+   column — margin-top: auto matches .freebie__claim so the card's footer
+   does not jump when a claim goes from pending to confirmed. */
+.freebie__claimed {
+  margin-top: auto;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.freebie__store {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.freebie__kind,
+.freebie__when {
+  color: var(--text-dim);
+}
+
 .freebies__grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 1rem;
+}
+
+/* ── Free games page ─────────────────────────────────────────────────── */
+/* Padding of its own: unlike .detail, which pads its hero text and its
+   columns separately, this page has no substructure to carry it, so the
+   page itself sits away from the overlay's edge. */
+.freebies {
+  padding: 20px;
+}
+
+.freebies__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 14px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.freebies__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* The selected chip, via the state it already carries for accessibility —
+   the same hook `.storeswitch__option--active` and `.viewtoggle__option--
+   active` reach with a class, because these are plain .button elements
+   with nothing else to distinguish them. */
+.freebies__chips button[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.freebies__asof {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.freebies__empty {
+  padding: 40px 0;
+  text-align: center;
+  color: var(--text-dim);
 }
 
 /* ── Details page ────────────────────────────────────────────────────── */

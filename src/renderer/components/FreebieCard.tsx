@@ -71,7 +71,7 @@ function ClaimButton({ freebie, onClaim }: Omit<Props, 'now'>): ReactElement {
   return (
     <button
       type="button"
-      className="freebie__claim"
+      className="button freebie__claim"
       title={freebie.claim === 'pending' ? strings.pendingHint : undefined}
       onClick={() => onClaim(freebie)}
     >

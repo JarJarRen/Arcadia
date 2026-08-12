@@ -77,6 +77,7 @@ export function FreeGames({ onClose }: { onClose: () => void }): ReactElement {
             <button
               key={value}
               type="button"
+              className="button"
               aria-pressed={kind === value}
               onClick={() => setKind(value)}
             >
@@ -84,7 +85,7 @@ export function FreeGames({ onClose }: { onClose: () => void }): ReactElement {
             </button>
           ))}
         </div>
-        <button type="button" onClick={refresh} disabled={loading}>
+        <button type="button" className="button" onClick={refresh} disabled={loading}>
           {t().freebies.refresh}
         </button>
         {list.fetchedAt !== undefined && (
@@ -99,7 +100,12 @@ export function FreeGames({ onClose }: { onClose: () => void }): ReactElement {
             )}
           </span>
         )}
-        <button type="button" aria-label={t().common.close} onClick={onClose}>
+        <button
+          type="button"
+          className="button button--icon"
+          aria-label={t().common.close}
+          onClick={onClose}
+        >
           ×
         </button>
       </header>
