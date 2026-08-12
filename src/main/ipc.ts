@@ -1,4 +1,4 @@
-import { ipcMain, screen, shell, type BrowserWindow } from 'electron'
+import { dialog, ipcMain, screen, shell, type BrowserWindow } from 'electron'
 import { stat } from 'node:fs/promises'
 import { IPC, type LaunchResult } from '@shared/ipc'
 import { getLanguage, parseLanguage, setLanguage, t } from '@shared/i18n'
@@ -14,6 +14,7 @@ import { mergeLibrary } from '@main/library/merge'
 import { runSync } from '@main/sync'
 import type { ScanState } from '@main/scan-state'
 import { cancelInstall, installGame, launchGame, type InstallFrame } from '@main/launch-bridge'
+import { pickExecutable } from '@main/pick-executable'
 import { decodeWindowHandle } from '@main/platform/windows'
 import type { SteamAppList } from '@main/metadata/steamAppList'
 import { applyManualMatch } from '@main/metadata/queue'
@@ -27,6 +28,17 @@ import type { DeviceCode, MicrosoftTokens } from '@main/stores/microsoft/auth'
 import type { FreebieService } from '@main/freebies/service'
 import { confirmClaims } from '@main/freebies/confirm'
 import type { FreebieRepository } from '@main/db/freebies'
+
+/**
+ * What the program dialog offers.
+ *
+ * Shortcuts are listed because that is what sits on a desktop; they are
+ * resolved to their target before anything is stored.
+ */
+const FILTERS = [
+  { name: 'Programs', extensions: ['exe', 'lnk'] },
+  { name: 'All files', extensions: ['*'] }
+]
 
 export interface IpcContext {
   repo: GameRepository
@@ -473,6 +485,27 @@ export function registerIpcHandlers(context: IpcContext): void {
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) }
     }
+  })
+
+  ipcMain.handle(IPC.libraryPickExecutable, async () => {
+    const window = context.getWindow()
+    return pickExecutable({
+      showOpenDialog: () =>
+        // Modal to Arcadia's own window where there is one: a dialog that can
+        // be lost behind the library is worse than no dialog.
+        window === undefined
+          ? dialog.showOpenDialog({ properties: ['openFile'], filters: FILTERS })
+          : dialog.showOpenDialog(window, { properties: ['openFile'], filters: FILTERS }),
+      readShortcutLink: (path) => shell.readShortcutLink(path),
+      exists: async (path) => {
+        try {
+          return (await stat(path)).isFile()
+        } catch {
+          return false
+        }
+      },
+      platform: process.platform
+    })
   })
 
   /**

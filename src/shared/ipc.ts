@@ -54,6 +54,13 @@ export const IPC = {
   envConfigSave: 'env-config:save',
   libraryAddManual: 'library:add-manual',
   libraryRemoveManual: 'library:remove-manual',
+  /**
+   * Opens a file dialog for the program a storeless game starts.
+   *
+   * The dialog belongs in main: the renderer must not be the thing that
+   * names a path, the same reasoning as `gameOpenFolder`.
+   */
+  libraryPickExecutable: 'library:pick-executable',
   artworkBroken: 'artwork:broken',
   navigateBack: 'navigate:back',
   navigateForward: 'navigate:forward',
@@ -87,6 +94,18 @@ export interface LaunchResult {
    * click would look as though it had done nothing.
    */
   notice?: string
+}
+
+export interface PickedExecutable {
+  ok: boolean
+  /** The program, with a Windows shortcut already resolved to its target. */
+  exe?: string
+  /** The shortcut's own arguments, already split. Empty otherwise. */
+  args?: string[]
+  /** A first guess at the game's name, for prefilling the field. */
+  suggestedName?: string
+  /** Absent when the user simply closed the dialog. */
+  error?: string
 }
 
 export interface MicrosoftAuthState {
@@ -223,6 +242,12 @@ export interface ArcadiaApi {
   }): Promise<{ ok: boolean; error?: string; id?: string }>
   /** Deletes a hand-made entry. Refuses anything a scan found. */
   removeManualGame(gameId: string): Promise<LaunchResult>
+  /**
+   * Asks for the program a storeless game starts.
+   *
+   * Answers `{ ok: false }` with no error when the dialog was closed.
+   */
+  pickExecutable(): Promise<PickedExecutable>
   /**
    * Reports artwork that failed to load.
    *

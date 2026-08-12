@@ -163,6 +163,12 @@ describe('preload bridge', () => {
       call: () => api.removeManualGame('game-remove-id')
     },
     {
+      name: 'pickExecutable',
+      channel: IPC.libraryPickExecutable,
+      args: [],
+      call: () => api.pickExecutable()
+    },
+    {
       name: 'reportBrokenArtwork',
       channel: IPC.artworkBroken,
       args: ['merge-artwork', 'grid'],
@@ -254,9 +260,9 @@ describe('preload bridge', () => {
     expect(invokeCalls[0]?.args).toEqual(row.args)
   })
 
-  it('covers every invoke-based method exactly once, with thirty distinct channels', () => {
-    expect(INVOKE_TABLE).toHaveLength(30)
-    expect(new Set(INVOKE_TABLE.map((row) => row.name)).size).toBe(30)
+  it('covers every invoke-based method exactly once, with thirty-one distinct channels', () => {
+    expect(INVOKE_TABLE).toHaveLength(31)
+    expect(new Set(INVOKE_TABLE.map((row) => row.name)).size).toBe(31)
     // Exhaustive for real, rather than by assertion: every method on the
     // bridge is either in the table above or one of the six listeners.
     const listenerMethods = [
@@ -286,7 +292,7 @@ describe('preload bridge', () => {
     ]
 
     expect(new Set(allChannels).size).toBe(allChannels.length)
-    expect(allChannels).toHaveLength(35)
+    expect(allChannels).toHaveLength(36)
   })
 
   /**
