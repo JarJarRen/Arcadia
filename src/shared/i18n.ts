@@ -246,6 +246,8 @@ export interface Strings {
     shortcutUnreadable: string
     executableRequired: string
     executableNotAllowed: string
+    /** The program picker itself failed to open — a destroyed window, for one. */
+    executablePickFailed: (detail: string) => string
   }
 
   freebies: {
@@ -590,7 +592,8 @@ const en: Strings = {
     executableMissing: (path) => `There is no file at ${path}.`,
     shortcutUnreadable: 'That shortcut could not be read. Choose the program itself instead.',
     executableRequired: 'Choose the program that starts this game.',
-    executableNotAllowed: 'Only a game without a store is started from a program on this computer.'
+    executableNotAllowed: 'Only a game without a store is started from a program on this computer.',
+    executablePickFailed: (detail) => `The program picker could not be opened: ${detail}`
   },
 
   freebies: {
@@ -973,7 +976,8 @@ const de: Strings = {
       'Diese Verknüpfung ließ sich nicht lesen. Wähle stattdessen das Programm selbst.',
     executableRequired: 'Wähle das Programm, das dieses Spiel startet.',
     executableNotAllowed:
-      'Nur ein Spiel ohne Store wird über ein Programm auf diesem Rechner gestartet.'
+      'Nur ein Spiel ohne Store wird über ein Programm auf diesem Rechner gestartet.',
+    executablePickFailed: (detail) => `Die Programmauswahl konnte nicht geöffnet werden: ${detail}`
   },
 
   freebies: {

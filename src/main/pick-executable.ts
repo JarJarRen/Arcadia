@@ -48,7 +48,7 @@ export async function pickExecutable(deps: PickDeps): Promise<PickedExecutable> 
   let args: string[] = []
   // The shortcut's own name beats the target's: "Minecraft Launcher" is what
   // the user recognises, "mc" is what the file happens to be called.
-  let suggestedName = defaultNameFor(picked)
+  const suggestedName = defaultNameFor(picked)
 
   if (deps.platform === 'win32' && isShortcut(picked)) {
     try {
@@ -58,8 +58,6 @@ export async function pickExecutable(deps: PickDeps): Promise<PickedExecutable> 
     } catch {
       return { ok: false, error: t().errors.shortcutUnreadable }
     }
-  } else {
-    suggestedName = defaultNameFor(exe)
   }
 
   const problem = executableProblem(exe, deps.platform)

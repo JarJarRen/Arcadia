@@ -489,23 +489,33 @@ export function registerIpcHandlers(context: IpcContext): void {
 
   ipcMain.handle(IPC.libraryPickExecutable, async () => {
     const window = context.getWindow()
-    return pickExecutable({
-      showOpenDialog: () =>
-        // Modal to Arcadia's own window where there is one: a dialog that can
-        // be lost behind the library is worse than no dialog.
-        window === undefined
-          ? dialog.showOpenDialog({ properties: ['openFile'], filters: FILTERS })
-          : dialog.showOpenDialog(window, { properties: ['openFile'], filters: FILTERS }),
-      readShortcutLink: (path) => shell.readShortcutLink(path),
-      exists: async (path) => {
-        try {
-          return (await stat(path)).isFile()
-        } catch {
-          return false
-        }
-      },
-      platform: process.platform
-    })
+    try {
+      return await pickExecutable({
+        showOpenDialog: () =>
+          // Modal to Arcadia's own window where there is one: a dialog that can
+          // be lost behind the library is worse than no dialog.
+          window === undefined
+            ? dialog.showOpenDialog({ properties: ['openFile'], filters: FILTERS })
+            : dialog.showOpenDialog(window, { properties: ['openFile'], filters: FILTERS }),
+        readShortcutLink: (path) => shell.readShortcutLink(path),
+        exists: async (path) => {
+          try {
+            return (await stat(path)).isFile()
+          } catch {
+            return false
+          }
+        },
+        platform: process.platform
+      })
+    } catch (error) {
+      // Matches the shape every other contract-bearing handler here
+      // promises. Without this, a rejected `showOpenDialog` — a destroyed
+      // window at call time, for instance — would reach the renderer as a
+      // rejected `invoke()` promise instead, and the Add-game dialog does
+      // not wrap this call in a try/catch of its own.
+      const message = error instanceof Error ? error.message : String(error)
+      return { ok: false, error: t().errors.executablePickFailed(message) }
+    }
   })
 
   /**
