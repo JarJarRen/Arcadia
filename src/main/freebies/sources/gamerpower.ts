@@ -63,6 +63,48 @@ function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
 }
 
+/**
+ * Marketing boilerplate the aggregator appends to a title that a native
+ * feed reports plainly — "Beacon Pines (Epic Games) Giveaway" against
+ * Epic's own "Beacon Pines". Left in place, the two never dedup (see
+ * dedupeFreebies, which keys on the title) and the same game shows up
+ * twice, once correctly marked owned and once offered as if it were not.
+ *
+ * Each pattern strips only from the *end*, and only a fixed, known store
+ * name in parentheses — never an arbitrary parenthetical, which could be
+ * part of the product's own name ("Drop Loot (Playtest)"). Applied
+ * repeatedly because the boilerplate stacks: "… Steam Key Giveaway" needs
+ * both the trailing "Giveaway" and the trailing "Steam Key" removed, and
+ * removing one can expose the other.
+ */
+const TRAILING_PATTERNS: readonly RegExp[] = [
+  /\s*giveaway$/i,
+  /\s*\((?:epic games store|epic games|steam|ubisoft|gog|origin|ea app|ea|xbox|microsoft)\)$/i,
+  /\s*(?:steam key|epic key|ubisoft key|key)$/i,
+  /\s*free game$/i
+]
+
+function stripMarketingBoilerplate(title: string): string {
+  let stripped = title
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const pattern of TRAILING_PATTERNS) {
+      const next = stripped.replace(pattern, '')
+      if (next !== stripped) {
+        stripped = next
+        changed = true
+      }
+    }
+  }
+
+  const cleaned = stripped.trim().replace(/\s+/g, ' ')
+  // A title that strips down to nothing was never boilerplate to begin
+  // with — some other pattern in the table matched too eagerly — so the
+  // safer answer is the original title rather than an empty card.
+  return cleaned.length === 0 ? title : cleaned
+}
+
 export function parseGamerPowerFreebies(json: unknown, now: number): RawFreebie[] {
   if (!Array.isArray(json)) return []
 
@@ -86,7 +128,7 @@ export function parseGamerPowerFreebies(json: unknown, now: number): RawFreebie[
     const image = record.thumbnail
     rows.push({
       storeId,
-      title,
+      title: stripMarketingBoilerplate(title),
       kind: kindOf(record.type),
       claimUrl: url,
       ...(typeof image === 'string' ? { imageUrl: image } : {}),

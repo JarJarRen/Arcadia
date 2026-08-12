@@ -105,6 +105,34 @@ describe('dedupeFreebies', () => {
     expect(rows[0]?.endsAt).toBe(NOW + 2 * 86_400_000)
   })
 
+  it('dedups Epic\'s own row against GamerPower\'s once the boilerplate is stripped', () => {
+    // The exact regression: GamerPower's parser now strips "(Epic Games)
+    // Giveaway" at parse time (see gamerpower.ts), so both rows carry the
+    // plain title "Beacon Pines" by the time they reach dedup. Before that
+    // fix the two titles never matched and the game appeared twice — once
+    // correctly marked owned, once offered as if it were not.
+    const beaconPinesNative: RawFreebie = {
+      storeId: 'epic',
+      title: 'Beacon Pines',
+      kind: 'game',
+      storeGameId: 'beacon-pines',
+      source: 'epic'
+    }
+    const beaconPinesAggregated: RawFreebie = {
+      storeId: 'epic',
+      title: 'Beacon Pines',
+      kind: 'game',
+      claimUrl: 'https://www.gamerpower.com/open/beacon-pines',
+      source: 'gamerpower'
+    }
+    const rows = dedupeFreebies([beaconPinesAggregated, beaconPinesNative])
+    expect(rows).toHaveLength(1)
+    // The survivor is the Epic-native row: it carries storeGameId, so the
+    // card offers the launcher deep link rather than a browser link.
+    expect(rows[0]?.source).toBe('epic')
+    expect(rows[0]?.storeGameId).toBe('beacon-pines')
+  })
+
   it('does not let a lower-ranked row overwrite a field the winner already has', () => {
     const higher: RawFreebie = {
       storeId: 'epic',

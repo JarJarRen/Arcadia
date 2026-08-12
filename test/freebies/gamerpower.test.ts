@@ -128,6 +128,57 @@ describe('parseGamerPowerFreebies', () => {
   })
 })
 
+describe('stripping marketing boilerplate from the title', () => {
+  /** A minimal active, mapped, dated record — only `title` varies per case. */
+  function record(title: string): unknown {
+    return {
+      id: 99,
+      title,
+      open_giveaway_url: 'https://www.gamerpower.com/open/x',
+      type: 'Game',
+      platforms: 'PC, Steam',
+      end_date: 'N/A',
+      status: 'Active'
+    }
+  }
+
+  function titleOf(input: string): string | undefined {
+    return parseGamerPowerFreebies([record(input)], NOW)[0]?.title
+  }
+
+  it('strips a trailing store parenthetical plus "Steam Key" plus "Giveaway"', () => {
+    // Only a known store name in parentheses is stripped — "(Playtest)" is
+    // part of the product's own name and must survive.
+    expect(titleOf('Drop Loot (Playtest) Steam Key Giveaway')).toBe('Drop Loot (Playtest)')
+  })
+
+  it('leaves a bare trailing "Code" alone', () => {
+    expect(titleOf('The Elder Scrolls Online: 2000 Trade Bars Code Giveaway')).toBe(
+      'The Elder Scrolls Online: 2000 Trade Bars Code'
+    )
+  })
+
+  it('strips a known store parenthetical and the trailing Giveaway around it', () => {
+    expect(titleOf("Tom Clancy's Ghost Recon Future Soldier (Ubisoft) Giveaway")).toBe(
+      "Tom Clancy's Ghost Recon Future Soldier"
+    )
+  })
+
+  it('strips "(Epic Games) Giveaway" — the exact case that duplicated Beacon Pines', () => {
+    expect(titleOf('Beacon Pines (Epic Games) Giveaway')).toBe('Beacon Pines')
+  })
+
+  it('leaves a title with no boilerplate untouched', () => {
+    expect(titleOf('Plain Title With No Boilerplate')).toBe('Plain Title With No Boilerplate')
+  })
+
+  it('keeps the original title rather than emptying it', () => {
+    // "Giveaway" alone strips down to nothing; the original is the safer
+    // answer than a blank card.
+    expect(titleOf('Giveaway')).toBe('Giveaway')
+  })
+})
+
 describe('fetchGamerPowerFreebies', () => {
   it('requests the giveaways endpoint and returns the parsed rows', async () => {
     const seen: string[] = []
