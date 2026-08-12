@@ -504,6 +504,8 @@ button:focus-visible {
 }
 
 /* ── Freebie card ─────────────────────────────────────────────────────
+   Border, radius and colours match .card — this grid sits one page away
+   from the library and previously looked like a different app.
    min-height is deliberate, not decorative: jsdom computes no layout, so
    nothing in the test suite would catch this collapsing to a sliver the
    way the library grid once did. */
@@ -511,7 +513,8 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   min-height: 220px;
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
   overflow: hidden;
   background: var(--surface);
 }
@@ -525,22 +528,22 @@ button:focus-visible {
 .freebie__body {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
-  padding: 0.6rem 0.7rem 0.7rem;
+  gap: 6px;
+  padding: 10px 12px 12px;
 }
 
 .freebie__title {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: 14px;
   line-height: 1.25;
 }
 
 .freebie__meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
+  gap: 6px;
   margin: 0;
-  font-size: 0.78rem;
+  font-size: 12px;
   opacity: 0.8;
 }
 
@@ -554,7 +557,7 @@ button:focus-visible {
 .freebie__claimed {
   margin-top: auto;
   color: var(--text-dim);
-  font-size: 0.85rem;
+  font-size: 12px;
 }
 
 .freebie__store {
@@ -569,8 +572,9 @@ button:focus-visible {
 
 .freebies__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 16px;
+  align-content: start;
 }
 
 /* ── Free games page ─────────────────────────────────────────────────── */
