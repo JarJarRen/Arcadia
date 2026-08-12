@@ -76,6 +76,56 @@ describe('dedupeFreebies', () => {
     const rows = dedupeFreebies([epicNative, { ...epicNative, title: 'Something Else' }])
     expect(rows).toHaveLength(2)
   })
+
+  it('keeps a Steam row deduped against its GamerPower twin with the twin\'s end date', () => {
+    // Steam's own endpoint never reports a window at all, so the only
+    // endsAt this pairing can ever have comes from the aggregator's row —
+    // discarding it along with the rest of the lower-ranked row would
+    // leave the card with no deadline for a promotion that is typically
+    // the shortest-lived on the page.
+    const steamNative: RawFreebie = {
+      storeId: 'steam',
+      title: 'Free Forever Game',
+      kind: 'game',
+      storeGameId: '1145360',
+      source: 'steam'
+    }
+    const steamAggregated: RawFreebie = {
+      storeId: 'steam',
+      title: 'Free Forever Game',
+      kind: 'game',
+      claimUrl: 'https://www.gamerpower.com/open/free-forever-game',
+      endsAt: NOW + 2 * 86_400_000,
+      source: 'gamerpower'
+    }
+    const rows = dedupeFreebies([steamAggregated, steamNative])
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.source).toBe('steam')
+    expect(rows[0]?.storeGameId).toBe('1145360')
+    expect(rows[0]?.endsAt).toBe(NOW + 2 * 86_400_000)
+  })
+
+  it('does not let a lower-ranked row overwrite a field the winner already has', () => {
+    const higher: RawFreebie = {
+      storeId: 'epic',
+      title: 'Ghostrunner',
+      kind: 'game',
+      storeGameId: 'ghostrunner',
+      endsAt: NOW + 1_000,
+      source: 'epic'
+    }
+    const lower: RawFreebie = {
+      storeId: 'epic',
+      title: 'Ghostrunner',
+      kind: 'game',
+      claimUrl: 'https://www.gamerpower.com/open/ghostrunner',
+      endsAt: NOW + 999_999,
+      source: 'gamerpower'
+    }
+    const rows = dedupeFreebies([lower, higher])
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.endsAt).toBe(NOW + 1_000)
+  })
 })
 
 describe('splitFreebies', () => {

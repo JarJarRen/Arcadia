@@ -16,22 +16,43 @@ export function freebieId(storeId: StoreId, title: string): string {
  * Which source wins when the same game arrives twice.
  *
  * Native feeds outrank the aggregator because they carry a store
- * identifier and an exact promotion window. Fixed ranking rather than
+ * identifier — Epic's also carries the exact promotion window, but
+ * Steam's `featuredcategories` endpoint carries no window at all, which is
+ * why `endsAt`/`startsAt` are merged in field by field below rather than
+ * discarded with the rest of a lower-ranked row. Fixed ranking rather than
  * first-wins: otherwise the answer would depend on which request finished
  * first, which is not a property anybody can reason about.
  */
 const RANK: Record<FreebieSource, number> = { epic: 0, steam: 1, gamerpower: 2 }
 
 export function dedupeFreebies(rows: RawFreebie[]): RawFreebie[] {
-  const best = new Map<string, RawFreebie>()
+  const groups = new Map<string, RawFreebie[]>()
   for (const row of rows) {
     const id = freebieId(row.storeId, row.title)
-    const existing = best.get(id)
-    if (existing === undefined || RANK[row.source] < RANK[existing.source]) {
-      best.set(id, row)
-    }
+    const bucket = groups.get(id)
+    if (bucket === undefined) groups.set(id, [row])
+    else bucket.push(row)
   }
-  return [...best.values()]
+
+  const merged: RawFreebie[] = []
+  for (const bucket of groups.values()) {
+    const ranked = [...bucket].sort((a, b) => RANK[a.source] - RANK[b.source])
+    const winner = ranked[0]!
+    // The winner's own row still decides everything else — the store
+    // identifier, the claim URL, the image. Only the deadline fields are
+    // taken from a lower-ranked row, and only where the winner has nothing
+    // to say: Steam's row can never carry one, so without this a Steam
+    // giveaway deduped against its GamerPower twin would lose the only end
+    // date it ever had.
+    const startsAt = ranked.find((row) => row.startsAt !== undefined)?.startsAt
+    const endsAt = ranked.find((row) => row.endsAt !== undefined)?.endsAt
+    merged.push({
+      ...winner,
+      ...(startsAt === undefined ? {} : { startsAt }),
+      ...(endsAt === undefined ? {} : { endsAt })
+    })
+  }
+  return merged
 }
 
 export function filterByStores(rows: Freebie[], stores: StoreId[]): Freebie[] {

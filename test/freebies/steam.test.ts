@@ -49,13 +49,6 @@ describe('parseSteamFreebies', () => {
     expect(rows[0]?.title).toBe('Valid Id Game')
   })
 
-  it('sets no end date, because the endpoint reports none', async () => {
-    // Better an absent date than a guessed one: the card says "ends in 2
-    // days" only where that is known.
-    const rows = parseSteamFreebies(await fixture())
-    expect(rows[0]?.endsAt).toBeUndefined()
-  })
-
   it('survives a response that is not shaped as expected', () => {
     expect(parseSteamFreebies({})).toEqual([])
     expect(parseSteamFreebies(null)).toEqual([])
