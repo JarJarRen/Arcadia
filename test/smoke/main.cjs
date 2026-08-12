@@ -118,6 +118,26 @@ function check(result) {
     )
   }
 
+  // Every card's claim button (or, once confirmed, its "In your library"
+  // text) has to sit on the same bottom edge as its row neighbours — a card
+  // with a two-line title must not push its button lower than a card with a
+  // one-line title. `margin-top: auto` only does that when the flex column
+  // above it actually stretches to fill the card; this is what catches it
+  // silently not doing so.
+  const rowsWithAction = (result.freebieRows ?? []).filter((row) => row.actionBottom !== null)
+  if (rowsWithAction.length > 1) {
+    const bottoms = rowsWithAction.map((row) => row.actionBottom)
+    const min = Math.min(...bottoms)
+    const max = Math.max(...bottoms)
+    if (max - min > 1) {
+      problems.push(
+        `Free-games action elements do not share a bottom edge: ` +
+          rowsWithAction.map((row) => `"${row.title}" at ${row.actionBottom}px`).join(', ') +
+          '.'
+      )
+    }
+  }
+
   // Neither bar may need more width than it has at the app's default window
   // size — that is what "wraps to a second line" means for a flex-wrap row.
   // One pixel of tolerance for rounding between getBoundingClientRect and
@@ -271,6 +291,22 @@ app.whenReady().then(async () => {
     const freebieCard = freebie === null ? null : freebie.getBoundingClientRect()
     const freebiesHeaderGeometry = measureRow(document.querySelector('.freebies__header'))
 
+    // Bottom edge of every card's action element (the claim button, or the
+    // "In your library" text once confirmed) and of the card itself. A card
+    // with a two-line title has more content above the button than one with
+    // a one-line title; \`margin-top: auto\` is only supposed to absorb that
+    // difference so every button still lands on the same line.
+    const freebieRows = [...document.querySelectorAll('.freebie')].map((el) => {
+      const action = el.querySelector('.freebie__claim, .freebie__claimed')
+      const title = el.querySelector('.freebie__title')
+      return {
+        title: title ? title.textContent : null,
+        cardBottom: Math.round(el.getBoundingClientRect().bottom),
+        cardHeight: Math.round(el.getBoundingClientRect().height),
+        actionBottom: action ? Math.round(action.getBoundingClientRect().bottom) : null
+      }
+    })
+
     return {
       stylesheets: document.styleSheets.length,
       toolbarHeight: toolbarGeometry.height,
@@ -330,7 +366,8 @@ app.whenReady().then(async () => {
 
       freebiesOpened,
       freebieCount: document.querySelectorAll('.freebie').length,
-      freebieHeight: freebieCard === null ? 0 : Math.round(freebieCard.height)
+      freebieHeight: freebieCard === null ? 0 : Math.round(freebieCard.height),
+      freebieRows
     }
   })()`)
 
