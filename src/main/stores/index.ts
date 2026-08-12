@@ -5,6 +5,7 @@ import { EaAdapter, type EaAdapterConfig } from './ea'
 import { UbisoftAdapter } from './ubisoft'
 import { MicrosoftAdapter, type MicrosoftAdapterConfig } from './microsoft'
 import type { MicrosoftSession } from './microsoft/session'
+import { OtherAdapter, type OtherAdapterDeps } from './other'
 
 export interface AdapterConfig {
   steam: SteamAdapterConfig
@@ -20,6 +21,14 @@ export interface AdapterConfig {
    * identifiers, and a game without a name is skipped.
    */
   resolveSteamName?: (appId: number) => string | undefined
+  /**
+   * How the storeless store reads its own rows and checks its files.
+   *
+   * Required rather than optional: without it that store would report an
+   * empty library on every scan, and `upsertScan` would mark every entry
+   * the user had added as uninstalled.
+   */
+  other: OtherAdapterDeps
 }
 
 /**
@@ -43,9 +52,11 @@ export function createAdapters(config: AdapterConfig): StoreAdapter[] {
     new UbisoftAdapter(),
     new MicrosoftAdapter(config.microsoft ?? {}, {
       ...(config.microsoftSession === undefined ? {} : { session: config.microsoftSession })
-    })
+    }),
+    new OtherAdapter(config.other)
   ]
 }
 
 export type { StoreAdapter }
 export type { EaAdapterConfig }
+export type { OtherAdapterDeps }

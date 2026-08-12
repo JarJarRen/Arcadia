@@ -1,4 +1,5 @@
 import { app, BrowserWindow, safeStorage, shell } from 'electron'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import { config as loadDotenv } from 'dotenv'
@@ -310,7 +311,14 @@ app.whenReady().then(() => {
     // identifiers; without a name a game is skipped.
     resolveSteamName: (appId) => appList.nameFor(appId),
     microsoft: { catalogCachePath: join(app.getPath('userData'), 'microsoft-catalog.json') },
-    microsoftSession
+    microsoftSession,
+    // Read fresh per scan, not captured once: a game added a moment ago has
+    // to appear in the very next sync. `existsSync` rather than an async stat
+    // because `scanInstalled` runs over a handful of rows, not a library.
+    other: {
+      listStoreless: () => repo.storeless(),
+      fileExists: (path) => existsSync(path)
+    }
   })
 
   // Closes gaps the app opens itself. The renderer reports images that fail

@@ -30,7 +30,9 @@ const game = {
   lastSeen: 0
 }
 
-function adapterWith(launchCommand?: () => { exe: string; args: string[] }): unknown {
+function adapterWith(
+  launchCommand?: () => { exe: string; args: string[]; cwd?: string }
+): unknown {
   return {
     id: 'microsoft',
     displayName: 'Microsoft Store',
@@ -50,7 +52,7 @@ describe('launchGame with a command', () => {
     const result = await launchGame(adapters as never, game, run)
 
     expect(result.ok).toBe(true)
-    expect(run).toHaveBeenCalledWith('explorer.exe', ['shell:AppsFolder\\x!App'])
+    expect(run).toHaveBeenCalledWith('explorer.exe', ['shell:AppsFolder\\x!App'], undefined)
     expect(openExternal).not.toHaveBeenCalled()
   })
 
@@ -100,5 +102,36 @@ describe('launchGame with a command', () => {
 
     expect(result.ok).toBe(false)
     expect(result.error).toContain('Forza Horizon')
+  })
+
+  it('passes the working directory through to the command', async () => {
+    const run = vi.fn(async () => undefined)
+    const adapters = [
+      adapterWith(() => ({ exe: 'C:\\Games\\mc.exe', args: [], cwd: 'C:\\Games' }))
+    ]
+
+    const result = await launchGame(adapters as never, game, run)
+
+    expect(result.ok).toBe(true)
+    expect(run).toHaveBeenCalledWith('C:\\Games\\mc.exe', [], { cwd: 'C:\\Games' })
+  })
+
+  it('asks for no working directory when the adapter names none', async () => {
+    const run = vi.fn(async () => undefined)
+    const adapters = [adapterWith(() => ({ exe: 'explorer.exe', args: ['shell:AppsFolder\\x!App'] }))]
+
+    await launchGame(adapters as never, game, run)
+
+    expect(run).toHaveBeenCalledWith('explorer.exe', ['shell:AppsFolder\\x!App'], undefined)
+  })
+
+  it('hands an argument with shell characters through untouched', async () => {
+    const run = vi.fn(async () => undefined)
+    const adapters = [adapterWith(() => ({ exe: 'C:\\Games\\mc.exe', args: ['--name', 'a&b'] }))]
+
+    await launchGame(adapters as never, game, run)
+
+    // One argument, not a command. This is what spawning without a shell buys.
+    expect(run).toHaveBeenCalledWith('C:\\Games\\mc.exe', ['--name', 'a&b'], undefined)
   })
 })

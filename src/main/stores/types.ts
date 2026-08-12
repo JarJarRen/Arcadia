@@ -56,8 +56,13 @@ export interface StoreAdapter {
    * Microsoft — `launchUri` is used exactly as before.
    *
    * Throws when the game cannot be launched. The message reaches the user.
+   *
+   * `cwd` is optional and absent for every store-backed game — those are
+   * started by the store, which chooses its own. The storeless store sets it
+   * to the program's own folder, because a launcher that reads its
+   * configuration relative to the working directory misbehaves otherwise.
    */
-  launchCommand?(game: Game): { exe: string; args: string[] }
+  launchCommand?(game: Game): { exe: string; args: string[]; cwd?: string }
 
   /**
    * Returns the URI that makes the store download the game.
