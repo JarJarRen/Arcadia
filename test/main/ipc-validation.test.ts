@@ -398,5 +398,34 @@ describe('IPC input validation', () => {
       const stored = harness.repo.byId(result.id!)
       expect(stored?.launchExe).toBe(existingExe)
     })
+
+    it('refuses a whitespace-only program on the storeless store', async () => {
+      const result = await invoke(IPC.libraryAddManual, {
+        storeId: 'other',
+        name: 'Blank Launcher',
+        launchExe: '   '
+      })
+
+      // Whitespace collapses to no program at all, and the storeless store
+      // is the one store that needs one — the repository's own rule is what
+      // refuses this, not a check on the raw string here.
+      expect(result).toMatchObject({ ok: false })
+    })
+
+    it('drops a whitespace-only program on a store other than the storeless one', async () => {
+      const result = (await invoke(IPC.libraryAddManual, {
+        storeId: 'steam',
+        name: 'Blank Steam Entry',
+        launchExe: '   '
+      })) as { ok: boolean; id?: string }
+
+      // Whitespace collapses to `undefined` before the mirrored rule (a
+      // program is only for the storeless store) is ever evaluated, so this
+      // is accepted with the field simply dropped — not refused for
+      // carrying a program it shouldn't.
+      expect(result).toMatchObject({ ok: true })
+      const stored = harness.repo.byId(result.id!)
+      expect(stored?.launchExe).toBeUndefined()
+    })
   })
 })
