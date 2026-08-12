@@ -17,6 +17,16 @@ function chipLabel(kind: KindFilter): string {
   return labels.loot
 }
 
+// The visible label is short by design ("All", "DLC"); the tooltip says
+// what the filter does instead of just repeating it.
+function chipHint(kind: KindFilter): string {
+  const hints = t().freebies.kindHint
+  if (kind === 'all') return hints.all
+  if (kind === 'game') return hints.game
+  if (kind === 'dlc') return hints.dlc
+  return hints.loot
+}
+
 function keepKind(rows: Freebie[], kind: KindFilter): Freebie[] {
   return kind === 'all' ? rows : rows.filter((row) => row.kind === kind)
 }
@@ -87,7 +97,12 @@ export function FreeGames({ onClose, onOpenSetup }: Props): ReactElement {
         {/* First in reading order, same shape as detail__back, so it reads
             as "go back" rather than "dismiss" — a bare × gave no hint that
             this returns to the library rather than closing something. */}
-        <button type="button" className="button freebies__back" onClick={onClose}>
+        <button
+          type="button"
+          className="button freebies__back"
+          title={t().freebies.back}
+          onClick={onClose}
+        >
           {t().freebies.back}
         </button>
         <h2>{t().freebies.title}</h2>
@@ -98,6 +113,7 @@ export function FreeGames({ onClose, onOpenSetup }: Props): ReactElement {
               type="button"
               className="button"
               aria-pressed={kind === value}
+              title={chipHint(value)}
               onClick={() => setKind(value)}
             >
               {chipLabel(value)}

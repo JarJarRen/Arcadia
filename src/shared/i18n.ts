@@ -262,6 +262,8 @@ export interface Strings {
     asOf: (when: string) => string
     sourceFailed: (source: string) => string
     kind: { all: string; game: string; dlc: string; loot: string }
+    /** The kind chips' tooltips — what each filter does, not a repeat of its short label. */
+    kindHint: { all: string; game: string; dlc: string; loot: string }
     /** e.g. "ends in 2 days" */
     endsIn: (days: number) => string
     endsToday: string
@@ -278,6 +280,10 @@ export interface Strings {
       pendingHint: string
       /** The library already has this game — static text, no button, same as `confirmed`. */
       owned: string
+      /** The tooltip on an unclaimed row whose button opens the store app. */
+      inStoreHint: (store: string) => string
+      /** The tooltip on an unclaimed row whose button opens a browser page. */
+      inBrowserHint: string
     }
   }
 
@@ -579,6 +585,12 @@ const en: Strings = {
     asOf: (when: string) => `as of ${when}`,
     sourceFailed: (source: string) => `${source}'s list could not be fetched.`,
     kind: { all: 'All', game: 'Games', dlc: 'DLC', loot: 'Loot' },
+    kindHint: {
+      all: 'Show every kind of offer.',
+      game: 'Show only full games.',
+      dlc: 'Show only DLC and expansions.',
+      loot: 'Show only in-game loot and bonuses.'
+    },
     endsIn: (days: number) => (days === 1 ? 'ends tomorrow' : `ends in ${days} days`),
     endsToday: 'ends today',
     startsOn: (date: string) => `from ${date}`,
@@ -589,7 +601,9 @@ const en: Strings = {
       confirmed: '✓ In your library',
       pendingHint:
         'Arcadia opened the store page. It marks this as claimed once the game turns up in a scan.',
-      owned: '✓ Already in your library'
+      owned: '✓ Already in your library',
+      inStoreHint: (store: string) => `Opens ${store} so you can claim the offer there.`,
+      inBrowserHint: 'Opens the offer’s page in your browser.'
     }
   },
 
@@ -939,6 +953,12 @@ const de: Strings = {
     asOf: (when: string) => `Stand ${when}`,
     sourceFailed: (source: string) => `Die Liste von ${source} konnte nicht geladen werden.`,
     kind: { all: 'Alle', game: 'Spiele', dlc: 'DLC', loot: 'Extras' },
+    kindHint: {
+      all: 'Alle Arten von Angeboten anzeigen.',
+      game: 'Nur vollständige Spiele anzeigen.',
+      dlc: 'Nur DLCs und Erweiterungen anzeigen.',
+      loot: 'Nur Ingame-Extras und Boni anzeigen.'
+    },
     endsIn: (days: number) => (days === 1 ? 'endet morgen' : `endet in ${days} Tagen`),
     endsToday: 'endet heute',
     startsOn: (date: string) => `ab ${date}`,
@@ -949,7 +969,9 @@ const de: Strings = {
       confirmed: '✓ In deiner Bibliothek',
       pendingHint:
         'Arcadia hat die Store-Seite geöffnet. Als geholt gilt das Spiel, sobald ein Scan es findet.',
-      owned: '✓ Schon in deiner Bibliothek'
+      owned: '✓ Schon in deiner Bibliothek',
+      inStoreHint: (store: string) => `Öffnet ${store}, damit du das Angebot dort holen kannst.`,
+      inBrowserHint: 'Öffnet die Seite des Angebots in deinem Browser.'
     }
   },
 
