@@ -1,6 +1,8 @@
 import type { DatabaseSync } from 'node:sqlite'
 import { gameId, type Game, type RawGame, type StoreId } from '@shared/types'
 import { manualStoreGameId, storeGameIdLooksValid } from '@shared/manual'
+import { folderOf } from '@shared/executable'
+import { t } from '@shared/i18n'
 import type { MergeOverrides } from '@main/library/merge'
 
 interface MergeOverrideRow {
@@ -115,9 +117,10 @@ export class GameRepository {
   /**
    * Records a game no adapter can see.
    *
-   * `installed` stays 0, and that is load-bearing rather than incidental:
-   * `upsertScan` only marks games gone that are currently installed, so a
-   * manual entry survives every scan of its store untouched.
+   * `installed` stays 0 for the five real stores, and that is load-bearing
+   * rather than incidental: `upsertScan` only marks games gone that are
+   * currently installed, so a manual entry survives every scan of its store
+   * untouched. The storeless store is the exception — see below.
    *
    * Giving a real store identifier is worthwhile where it is known. The row
    * then carries the same id an adapter would produce, so once the game is
@@ -127,11 +130,31 @@ export class GameRepository {
    * Returns the id, so the caller can select the new entry straight away.
    */
   addManualGame(
-    game: { storeId: StoreId; name: string; storeGameId?: string },
+    game: {
+      storeId: StoreId
+      name: string
+      storeGameId?: string
+      launchExe?: string
+      launchArgs?: string[]
+    },
     now: number
   ): string {
     const name = game.name.trim()
     if (name === '') throw new Error('A game needs a name.')
+
+    // Two mirrored rules. The storeless store is the only one with nothing to
+    // launch through, so it is the only one that must carry a program — and
+    // the only one that may. Without the second half this would quietly
+    // become "attach a program to any game", which is a different feature
+    // with a different question at its centre: what a later scan should do
+    // to the row.
+    if (game.storeId === 'other') {
+      if (game.launchExe === undefined || game.launchExe.trim() === '') {
+        throw new Error(t().errors.executableRequired)
+      }
+    } else if (game.launchExe !== undefined || game.launchArgs !== undefined) {
+      throw new Error(t().errors.executableNotAllowed)
+    }
 
     const supplied = game.storeGameId?.trim()
     if (supplied !== undefined && supplied !== '') {
@@ -143,22 +166,44 @@ export class GameRepository {
       }
     }
 
-    const storeGameId = supplied === undefined || supplied === ''
-      ? manualStoreGameId(name)
-      : supplied
+    const storeGameId =
+      supplied === undefined || supplied === '' ? manualStoreGameId(name) : supplied
     const id = gameId(game.storeId, storeGameId)
 
     if (this.byId(id) !== undefined) {
       throw new Error(`${name} is already in the library.`)
     }
 
+    // A storeless entry is installed at once: its file was picked from a
+    // dialog and checked before reaching this layer, and an entry that read
+    // "not installed" until the next sync would look broken. A hand-made
+    // entry for a real store stays uninstalled, because there it describes
+    // something Arcadia genuinely cannot see on disk.
+    const exe = game.launchExe
+    const installed = exe === undefined ? 0 : 1
+    const installPath = exe === undefined ? null : folderOf(exe)
+
     this.db
       .prepare(
         `INSERT INTO games (
-           id, store_id, store_game_id, name, installed, manual, first_seen, last_seen
-         ) VALUES (@id, @storeId, @storeGameId, @name, 0, 1, @now, @now)`
+           id, store_id, store_game_id, name, installed, install_path, manual,
+           launch_exe, launch_args, first_seen, last_seen
+         ) VALUES (
+           @id, @storeId, @storeGameId, @name, @installed, @installPath, 1,
+           @launchExe, @launchArgs, @now, @now
+         )`
       )
-      .run({ id, storeId: game.storeId, storeGameId, name, now })
+      .run({
+        id,
+        storeId: game.storeId,
+        storeGameId,
+        name,
+        installed,
+        installPath,
+        launchExe: exe ?? null,
+        launchArgs: game.launchArgs === undefined ? null : JSON.stringify(game.launchArgs),
+        now
+      })
 
     return id
   }

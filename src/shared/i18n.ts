@@ -244,6 +244,8 @@ export interface Strings {
     executableUnsupported: string
     executableMissing: (path: string) => string
     shortcutUnreadable: string
+    executableRequired: string
+    executableNotAllowed: string
   }
 
   freebies: {
@@ -586,7 +588,9 @@ const en: Strings = {
     executableUnsupported:
       'Choose a program (.exe). Batch files are not supported, because running one needs a command interpreter.',
     executableMissing: (path) => `There is no file at ${path}.`,
-    shortcutUnreadable: 'That shortcut could not be read. Choose the program itself instead.'
+    shortcutUnreadable: 'That shortcut could not be read. Choose the program itself instead.',
+    executableRequired: 'Choose the program that starts this game.',
+    executableNotAllowed: 'Only a game without a store is started from a program on this computer.'
   },
 
   freebies: {
@@ -966,7 +970,10 @@ const de: Strings = {
       'Wähle ein Programm (.exe). Batch-Dateien werden nicht unterstützt, weil dafür ein Kommandozeilen-Interpreter nötig wäre.',
     executableMissing: (path) => `Unter ${path} liegt keine Datei.`,
     shortcutUnreadable:
-      'Diese Verknüpfung ließ sich nicht lesen. Wähle stattdessen das Programm selbst.'
+      'Diese Verknüpfung ließ sich nicht lesen. Wähle stattdessen das Programm selbst.',
+    executableRequired: 'Wähle das Programm, das dieses Spiel startet.',
+    executableNotAllowed:
+      'Nur ein Spiel ohne Store wird über ein Programm auf diesem Rechner gestartet.'
   },
 
   freebies: {
