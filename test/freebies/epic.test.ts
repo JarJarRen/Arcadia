@@ -52,6 +52,45 @@ describe('parseEpicFreebies', () => {
     expect(slugless?.claimUrl).toBe('https://store.epicgames.com/')
   })
 
+  it('falls back to the store URL when the slug does not match the shape claim.ts requires', () => {
+    // An underscore, an uppercase letter or a percent-escape would pass
+    // this parser's old length-only check but fail claim.ts's stricter
+    // PAGE_SLUG — producing a card that says "Claim in Epic" and fails on
+    // click. Caught here instead, with the same fallback a missing slug
+    // already gets.
+    const rows = parseEpicFreebies(
+      {
+        data: {
+          Catalog: {
+            searchStore: {
+              elements: [
+                {
+                  title: 'Odd Slug Game',
+                  catalogNs: { mappings: [{ pageSlug: 'Not_A-Valid.Slug' }] },
+                  promotions: {
+                    promotionalOffers: [
+                      {
+                        promotionalOffers: [
+                          {
+                            discountSetting: { discountPercentage: 0 }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      NOW
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.storeGameId).toBeUndefined()
+    expect(rows[0]?.claimUrl).toBe('https://store.epicgames.com/')
+  })
+
   it('drops a promotion that has already ended', async () => {
     // A stale response must not resurrect a promotion that has already closed.
     const rows = parseEpicFreebies(await fixture(), NOW)

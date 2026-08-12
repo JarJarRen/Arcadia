@@ -12,6 +12,17 @@ const ENDPOINT = 'https://store-site-backend-static.ak.epicgames.com/freeGamesPr
 /** Where a game with no page slug has to send the user instead. */
 const STORE_FALLBACK = 'https://store.epicgames.com/'
 
+/**
+ * The same shape `claim.ts` requires of an Epic page slug.
+ *
+ * Duplicated rather than imported: `claim.ts` is deliberately the one place
+ * that boundary is enforced, and it throws there rather than falling back,
+ * because by that point there is nowhere left to fall back to. Checked here
+ * too so a slug that would fail it never gets set as `storeGameId` in the
+ * first place — this is where a fallback still exists.
+ */
+const PAGE_SLUG = /^[a-z0-9][a-z0-9-]*$/
+
 export interface EpicFreebieOptions {
   locale: string
   country: string
@@ -71,7 +82,12 @@ function imageUrl(keyImages: unknown): string | undefined {
 function pageSlug(catalogNs: unknown): string | undefined {
   for (const mapping of asArray(asRecord(catalogNs).mappings)) {
     const slug = asRecord(mapping).pageSlug
-    if (typeof slug === 'string' && slug.length > 0) return slug
+    // An underscore, an uppercase letter or a percent-escape is a slug
+    // `claim.ts` would refuse outright, and refusing it there produces a
+    // card that reads "Claim in Epic" and fails on click. Skipping past it
+    // here instead of returning it lets a later, conforming mapping still
+    // be found — and if none is, the caller falls back to the store URL.
+    if (typeof slug === 'string' && PAGE_SLUG.test(slug)) return slug
   }
   return undefined
 }

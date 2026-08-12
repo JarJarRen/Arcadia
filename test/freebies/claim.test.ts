@@ -93,6 +93,25 @@ describe('claimTarget', () => {
     }
   )
 
+  it('never puts the attacker-chosen part of a rejected claim address into the thrown message', () => {
+    // The message this throws reaches errors.claimFailed and is rendered in
+    // a UI banner. A third party choosing the words shown in Arcadia's own
+    // error banner is a phishing surface, even though React's escaping
+    // already rules out injection. The host is allowed — gamerpower.com — so
+    // this is rejected for its credentials, not its host, which is the
+    // branch that used to interpolate the whole URL including the userinfo.
+    const phishText = 'free-steam-keys-click-here-now'
+    try {
+      claimTarget(
+        row({ source: 'gamerpower', claimUrl: `https://${phishText}@gamerpower.com/x` })
+      )
+      throw new Error('expected claimTarget to throw')
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error)
+      expect((error as Error).message).not.toContain(phishText)
+    }
+  })
+
   it('refuses a row with neither an identifier nor a URL', () => {
     expect(() => claimTarget(row({}))).toThrow()
   })

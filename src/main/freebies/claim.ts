@@ -38,24 +38,34 @@ function hostIsAllowed(hostname: string): boolean {
  * Throws rather than falling back to something more permissive: a row whose
  * target cannot be vouched for is not claimable, and saying so is better
  * than opening a URL nobody checked.
+ *
+ * None of these messages include the raw `claimUrl`. It reaches here
+ * unvalidated from third-party JSON, and the message ends up rendered
+ * verbatim in Arcadia's own error banner (`errors.claimFailed`) — React
+ * escapes it, so this was never an injection, but a hostile feed choosing
+ * words for Arcadia's own UI is a phishing surface worth closing anyway.
+ * The unknown-host branch already showed only `parsed.hostname`, which is
+ * both identifying and safe; the others now follow that model by showing
+ * nothing attacker-chosen at all, while staying distinguishable from each
+ * other.
  */
 function checkedUrl(claimUrl: string): string {
   let parsed: URL
   try {
     parsed = new URL(claimUrl)
   } catch {
-    throw new Error(`Not a usable claim address: ${claimUrl}`)
+    throw new Error('Refusing a claim address that could not be parsed as a URL.')
   }
   // https only. This is what kills javascript:, file:, data: — and plain
   // http, which is downgradeable and which no store Arcadia knows needs.
   if (parsed.protocol !== 'https:') {
-    throw new Error(`Refusing a claim address that is not https: ${claimUrl}`)
+    throw new Error('Refusing a claim address that is not https.')
   }
   // Userinfo is never needed by a legitimate store link, and it is exactly
   // the kind of attacker-controlled text this file exists to keep out of
   // whatever consumes the returned string — reject rather than strip it.
   if (parsed.username !== '' || parsed.password !== '') {
-    throw new Error(`Refusing a claim address that carries credentials: ${claimUrl}`)
+    throw new Error('Refusing a claim address that carries credentials.')
   }
   if (!hostIsAllowed(parsed.hostname)) {
     throw new Error(`Refusing a claim address on an unknown host: ${parsed.hostname}`)
