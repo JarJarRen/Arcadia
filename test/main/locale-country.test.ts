@@ -21,12 +21,16 @@ describe('countryFromLocale', () => {
     expect(countryFromLocale('es-419')).toBe('US')
   })
 
-  it('uses a bare two-letter language tag as its own best guess', () => {
-    // No region segment exists at all here, so there is nothing to prefer
-    // over the primary subtag itself — and defaulting a German system
-    // straight to US, which the old split-based code did, was exactly the
-    // kind of silently-wrong answer this fix replaces.
-    expect(countryFromLocale('de')).toBe('DE')
+  it('refuses to read a bare language tag as a country', () => {
+    // Language codes and country codes are separate namespaces that agree
+    // only by luck. "de" would land on Germany, which is why reusing the
+    // subtag looks reasonable — but "sv" is Swedish and El Salvador, "et"
+    // is Estonian and Ethiopia, "ca" is Catalan and Canada. Guessing asks
+    // the store for a real but wrong region, which is worse than asking for
+    // the default and much harder to spot.
+    expect(countryFromLocale('de')).toBe('US')
+    expect(countryFromLocale('sv')).toBe('US')
+    expect(countryFromLocale('et')).toBe('US')
   })
 
   it('falls back to US when the last segment is not a two-letter code at all', () => {
