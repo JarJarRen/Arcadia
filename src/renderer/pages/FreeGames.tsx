@@ -151,39 +151,41 @@ export function FreeGames({ onClose, onOpenSetup }: Props): ReactElement {
         <SettingsMenu onOpenSetup={onOpenSetup} />
       </header>
 
-      {list.failures.map((failure) => (
-        <p key={failure} className="banner banner--notice" role="status">
-          {failure}
-        </p>
-      ))}
-      {error !== undefined && (
-        <p className="banner banner--error" role="alert">
-          {error}
-        </p>
-      )}
+      <div className="freebies__body">
+        {list.failures.map((failure) => (
+          <p key={failure} className="banner banner--notice" role="status">
+            {failure}
+          </p>
+        ))}
+        {error !== undefined && (
+          <p className="banner banner--error" role="alert">
+            {error}
+          </p>
+        )}
 
-      {unreachable && <p className="freebies__empty">{t().freebies.unavailable}</p>}
-      {/* A thrown initial load leaves `list` at the empty default (no
-          failures recorded, so `unreachable` is false) while `error` holds
-          the real reason. Without this guard the empty message and the
-          error banner above would both render, giving two different
-          explanations for the same bare page. */}
-      {!unreachable && empty && !loading && error === undefined && (
-        <p className="freebies__empty">{t().freebies.empty}</p>
-      )}
+        {unreachable && <p className="freebies__empty">{t().freebies.unavailable}</p>}
+        {/* A thrown initial load leaves `list` at the empty default (no
+            failures recorded, so `unreachable` is false) while `error` holds
+            the real reason. Without this guard the empty message and the
+            error banner above would both render, giving two different
+            explanations for the same bare page. */}
+        {!unreachable && empty && !loading && error === undefined && (
+          <p className="freebies__empty">{t().freebies.empty}</p>
+        )}
 
-      <Section
-        heading={t().freebies.currentHeading}
-        rows={current}
-        now={now}
-        onClaim={handleClaim}
-      />
-      <Section
-        heading={t().freebies.upcomingHeading}
-        rows={upcoming}
-        now={now}
-        onClaim={handleClaim}
-      />
+        <Section
+          heading={t().freebies.currentHeading}
+          rows={current}
+          now={now}
+          onClaim={handleClaim}
+        />
+        <Section
+          heading={t().freebies.upcomingHeading}
+          rows={upcoming}
+          now={now}
+          onClaim={handleClaim}
+        />
+      </div>
     </section>
   )
 }

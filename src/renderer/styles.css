@@ -578,21 +578,23 @@ button:focus-visible {
 }
 
 /* ── Free games page ─────────────────────────────────────────────────── */
-/* Padding of its own: unlike .detail, which pads its hero text and its
-   columns separately, this page has no substructure to carry it, so the
-   page itself sits away from the overlay's edge. */
-.freebies {
-  padding: 20px;
-}
-
+/* No padding of its own: the header below is a full-width bar like
+   .toolbar, and .freebies__body carries the inset for what sits under it —
+   the same split the library uses between .toolbar and .grid. */
 .freebies__header {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
-  padding-bottom: 14px;
-  margin-bottom: 16px;
+  gap: 10px;
+  padding: 14px 20px;
   border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+/* The inset .freebies lost: banners, the empty state and both Section
+   blocks all sit here rather than each carrying its own padding. */
+.freebies__body {
+  padding: 20px;
 }
 
 /* Same job as .detail__back — first in reading order, ahead of everything
