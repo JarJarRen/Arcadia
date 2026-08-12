@@ -55,7 +55,25 @@ function loadApiKeys(paths: string[]): void {
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
-    width: 1400,
+    // Wide enough for the library toolbar to lay out on one line rather
+    // than wrapping to a second row.
+    //
+    // The toolbar's own controls (search field, store filter, sort, the two
+    // checkboxes, shared filter, view toggle, count, refresh, add game,
+    // free games, settings) need 1318px in a single line at their default
+    // state — the `toolbarScrollWidth` the smoke test measures by
+    // temporarily forcing the row to lay out unwrapped. A requested window
+    // width does not all reach the page: Chromium's frame and scrollbar
+    // took 16px of the previous 1400px request (measured `toolbarClientWidth`
+    // was 1384, not 1400). 1480 leaves about 145px of slack above the
+    // 1318+16 floor — room for a longer freebie-count badge or a store
+    // selection wider than "All stores", and for the German bundle in
+    // i18n.ts, whose labels ("Bibliothek durchsuchen…", "Spiel hinzufügen")
+    // run measurably longer than the English ones this was measured with.
+    //
+    // Re-measure `toolbarScrollWidth` via `npm run smoke` and recompute this
+    // if a control is added to or widened in LibraryToolbar.tsx.
+    width: 1480,
     height: 900,
     minWidth: 940,
     minHeight: 600,
