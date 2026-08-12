@@ -239,6 +239,9 @@ export interface ArcadiaApi {
     storeId: string
     name: string
     storeGameId?: string
+    /** Only for the `other` store; rejected for every other. */
+    launchExe?: string
+    launchArgs?: string[]
   }): Promise<{ ok: boolean; error?: string; id?: string }>
   /** Deletes a hand-made entry. Refuses anything a scan found. */
   removeManualGame(gameId: string): Promise<LaunchResult>
