@@ -116,6 +116,40 @@ describe('FreeGames', () => {
     )
   })
 
+  it('does not claim nothing is free when a chip filter is just narrow', async () => {
+    // Five Epic games free, DLC chip selected: current/upcoming after the
+    // filter are both empty, but that is a fact about the filter, not about
+    // the stores. The empty message must not appear on that basis.
+    stubApi({
+      current: [
+        {
+          id: 'epic:a',
+          storeId: 'epic',
+          title: 'A',
+          kind: 'game',
+          storeGameId: 'a',
+          source: 'epic',
+          claim: 'unclaimed'
+        },
+        {
+          id: 'epic:b',
+          storeId: 'epic',
+          title: 'B',
+          kind: 'game',
+          storeGameId: 'b',
+          source: 'epic',
+          claim: 'unclaimed'
+        }
+      ],
+      upcoming: []
+    })
+    render(<FreeGames onClose={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('A')).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: 'DLC' }))
+    expect(screen.queryByText('A')).toBeNull()
+    expect(screen.queryByText(/Nothing is free to keep/)).toBeNull()
+  })
+
   it('distinguishes an empty list from an unreachable one', async () => {
     stubApi({
       current: [],

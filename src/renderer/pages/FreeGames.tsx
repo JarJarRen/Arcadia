@@ -61,7 +61,11 @@ export function FreeGames({ onClose }: { onClose: () => void }): ReactElement {
   // Nothing found and nothing fetched are different states. The first is
   // news about the world; the second is news about Arcadia.
   const unreachable = list.fetchedAt === undefined && list.failures.length > 0
-  const empty = current.length === 0 && upcoming.length === 0
+  // Unfiltered: `empty` is a claim about the world ("nothing is free"), and
+  // a chip is a claim about what the user asked to see. Deriving this from
+  // `current`/`upcoming` after the DLC chip narrows five Epic games to zero
+  // DLC rows would say the first thing while meaning the second.
+  const empty = list.current.length === 0 && list.upcoming.length === 0
 
   // One handler shared by both sections, rather than an inline arrow
   // repeated per Section: the two would otherwise be indistinguishable to
