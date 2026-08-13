@@ -7,7 +7,11 @@ import type { GuidedInstall, StoreAdapter } from '@main/stores/types'
 import { runWindowAgent, type AgentHandle, type AgentTarget } from '@main/platform/windows'
 
 /** Starts a program. Injected in tests; in production a detached spawn. */
-export type RunCommand = (exe: string, args: string[]) => Promise<void>
+export type RunCommand = (
+  exe: string,
+  args: string[],
+  options?: { cwd?: string }
+) => Promise<void>
 
 /**
  * Starts the command and stops caring about it.
@@ -25,9 +29,18 @@ export type RunCommand = (exe: string, args: string[]) => Promise<void>
  * for `'error'` turns that throw into a rejection `open()`'s `catch` can
  * turn into a clean `{ ok: false }` instead of taking Arcadia down with it.
  */
-const defaultRun: RunCommand = (exe, args) =>
+const defaultRun: RunCommand = (exe, args, options) =>
   new Promise((resolve, reject) => {
-    const child = spawn(exe, args, { detached: true, stdio: 'ignore', windowsHide: true })
+    const child = spawn(exe, args, {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+      // Spread rather than `cwd: options?.cwd`: passing an explicit
+      // `undefined` is not the same as omitting it for every option Node
+      // reads, and the stores that name no directory must keep inheriting
+      // Arcadia's own.
+      ...(options?.cwd === undefined ? {} : { cwd: options.cwd })
+    })
     child.once('error', reject)
     child.once('spawn', () => {
       // Only after the process really started: unref'ing lets the game
@@ -256,7 +269,7 @@ async function open(
   if (action === 'launch' && adapter.launchCommand !== undefined) {
     try {
       const command = adapter.launchCommand(game)
-      await run(command.exe, command.args)
+      await run(command.exe, command.args, command.cwd === undefined ? undefined : { cwd: command.cwd })
       return { ok: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)

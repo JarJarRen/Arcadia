@@ -8,6 +8,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { FreeGames } from '@renderer/pages/FreeGames'
 import type { FreebieList } from '@shared/freebies'
+import { STORE_IDS, type StoreId } from '@shared/types'
+import { t } from '@shared/i18n'
 
 const NOW = Date.parse('2026-08-10T12:00:00.000Z')
 
@@ -61,6 +63,29 @@ function stubApi(overrides: Partial<FreebieList> = {}, claim = vi.fn()) {
   return api
 }
 
+/**
+ * The page with every prop supplied.
+ *
+ * A helper rather than the props written out at each call site: the page
+ * takes the library's search and store filter now, and spelling five
+ * defaults into fifteen `render` calls would bury what each test is
+ * actually about.
+ */
+function renderPage(props: Partial<Parameters<typeof FreeGames>[0]> = {}) {
+  const all = {
+    onClose: vi.fn(),
+    onOpenSetup: vi.fn(),
+    search: '',
+    stores: [] as StoreId[],
+    availableStores: [...STORE_IDS],
+    onSearchChange: vi.fn(),
+    onStoresChange: vi.fn(),
+    ...props
+  }
+  render(<FreeGames {...all} />)
+  return all
+}
+
 describe('FreeGames', () => {
   beforeEach(() => {
     vi.setSystemTime(NOW)
@@ -68,7 +93,7 @@ describe('FreeGames', () => {
 
   it('lists what is free now and what is coming', async () => {
     stubApi()
-    render(<FreeGames onClose={vi.fn()} onOpenSetup={vi.fn()} />)
+    renderPage()
     await waitFor(() => expect(screen.getByText('Ghostrunner')).toBeTruthy())
     expect(screen.getByText('Skin Pack')).toBeTruthy()
     expect(screen.getByText('Next Week Game')).toBeTruthy()
@@ -76,7 +101,7 @@ describe('FreeGames', () => {
 
   it('narrows to games when the Games chip is chosen', async () => {
     stubApi()
-    render(<FreeGames onClose={vi.fn()} onOpenSetup={vi.fn()} />)
+    renderPage()
     await waitFor(() => expect(screen.getByText('Skin Pack')).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: 'Games' }))
     expect(screen.queryByText('Skin Pack')).toBeNull()
@@ -88,7 +113,7 @@ describe('FreeGames', () => {
     // it: the address is main's to resolve and validate.
     const claim = vi.fn(async () => ({ ok: true }))
     stubApi({}, claim)
-    render(<FreeGames onClose={vi.fn()} onOpenSetup={vi.fn()} />)
+    renderPage()
     await waitFor(() => expect(screen.getByText('Skin Pack')).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: /Open in browser/ }))
     expect(claim).toHaveBeenCalledWith('ubisoft:skin pack')
@@ -96,7 +121,7 @@ describe('FreeGames', () => {
 
   it('shows the failure of one source above the rest of the list', async () => {
     stubApi({ failures: ["GamerPower's list could not be fetched."] })
-    render(<FreeGames onClose={vi.fn()} onOpenSetup={vi.fn()} />)
+    renderPage()
     await waitFor(() => expect(screen.getByText(/GamerPower/)).toBeTruthy())
     // The other sources' rows are still there.
     expect(screen.getByText('Ghostrunner')).toBeTruthy()
@@ -104,13 +129,13 @@ describe('FreeGames', () => {
 
   it('says how old the list is', async () => {
     stubApi()
-    render(<FreeGames onClose={vi.fn()} onOpenSetup={vi.fn()} />)
+    renderPage()
     await waitFor(() => expect(screen.getByText(/as of/)).toBeTruthy())
   })
 
   it('offers an empty state rather than a bare page', async () => {
     stubApi({ current: [], upcoming: [] })
-    render(<FreeGames onClose={vi.fn()} onOpenSetup={vi.fn()} />)
+    renderPage()
     await waitFor(() =>
       expect(screen.getByText(/Nothing is free to keep/)).toBeTruthy()
     )
@@ -143,7 +168,7 @@ describe('FreeGames', () => {
       ],
       upcoming: []
     })
-    render(<FreeGames onClose={vi.fn()} onOpenSetup={vi.fn()} />)
+    renderPage()
     await waitFor(() => expect(screen.getByText('A')).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: 'DLC' }))
     expect(screen.queryByText('A')).toBeNull()
@@ -157,7 +182,7 @@ describe('FreeGames', () => {
       fetchedAt: undefined,
       failures: ['a', 'b', 'c']
     })
-    render(<FreeGames onClose={vi.fn()} onOpenSetup={vi.fn()} />)
+    renderPage()
     await waitFor(() => expect(screen.getByText(/could not be reached/)).toBeTruthy())
   })
 
@@ -166,7 +191,7 @@ describe('FreeGames', () => {
     // "Refresh" lives in aria-label rather than as visible text, so this
     // finds it by accessible name rather than by a text node.
     const api = stubApi()
-    render(<FreeGames onClose={vi.fn()} onOpenSetup={vi.fn()} />)
+    renderPage()
     await waitFor(() => expect(screen.getByText('Ghostrunner')).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
     await waitFor(() => expect(api.refreshFreebies).toHaveBeenCalled())
@@ -175,7 +200,7 @@ describe('FreeGames', () => {
   it('closes on the back-to-library button', async () => {
     const onClose = vi.fn()
     stubApi()
-    render(<FreeGames onClose={onClose} onOpenSetup={vi.fn()} />)
+    renderPage({ onClose })
     await waitFor(() => expect(screen.getByText('Ghostrunner')).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: /Back to library/i }))
     expect(onClose).toHaveBeenCalled()
@@ -186,7 +211,7 @@ describe('FreeGames', () => {
     // reachable from here too, not just from the library behind it.
     const onOpenSetup = vi.fn()
     stubApi()
-    render(<FreeGames onClose={vi.fn()} onOpenSetup={onOpenSetup} />)
+    renderPage({ onOpenSetup })
     await waitFor(() => expect(screen.getByText('Ghostrunner')).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Configuration…' }))
@@ -196,7 +221,7 @@ describe('FreeGames', () => {
   it('shows an error banner when a claim fails rather than confirming it', async () => {
     const claim = vi.fn(async () => ({ ok: false, error: 'The offer has already ended.' }))
     stubApi({}, claim)
-    render(<FreeGames onClose={vi.fn()} onOpenSetup={vi.fn()} />)
+    renderPage()
     await waitFor(() => expect(screen.getByText('Skin Pack')).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: /Open in browser/ }))
     await waitFor(() =>
@@ -220,7 +245,7 @@ describe('FreeGames', () => {
       })
     }
     ;(window as unknown as { arcadia: unknown }).arcadia = api
-    render(<FreeGames onClose={vi.fn()} onOpenSetup={vi.fn()} />)
+    renderPage()
     await waitFor(() => expect(screen.getByText('Ghostrunner')).toBeTruthy())
     expect(api.getFreebies).toHaveBeenCalledTimes(1)
 
@@ -239,7 +264,7 @@ describe('FreeGames', () => {
       onFreebiesChanged: vi.fn(() => () => {})
     }
     ;(window as unknown as { arcadia: unknown }).arcadia = api
-    render(<FreeGames onClose={vi.fn()} onOpenSetup={vi.fn()} />)
+    renderPage()
 
     await waitFor(() =>
       expect(screen.getByRole('alert').textContent).toBe('Database is locked')
@@ -290,7 +315,7 @@ describe('FreeGames', () => {
     }
     ;(window as unknown as { arcadia: unknown }).arcadia = api
 
-    render(<FreeGames onClose={vi.fn()} onOpenSetup={vi.fn()} />)
+    renderPage()
     await waitFor(() => expect(api.getFreebies).toHaveBeenCalledTimes(1))
 
     // Start the second, faster load while the first is still pending.
@@ -302,5 +327,75 @@ describe('FreeGames', () => {
     resolveSlow?.(LIST)
     await waitFor(() => expect(screen.getByText('Fresh Arrival')).toBeTruthy())
     expect(screen.queryByText('Ghostrunner')).toBeNull()
+  })
+
+  it('puts the search box and the store filter first in the header', async () => {
+    stubApi()
+    renderPage()
+    await waitFor(() => expect(screen.getByText('Ghostrunner')).toBeTruthy())
+
+    const header = document.querySelector('.freebies__header')!
+    // The first two children of the row, in this order — that is the whole
+    // reason nothing moves when the page changes.
+    expect(header.children[0]!.classList.contains('toolbar__search')).toBe(true)
+    expect(header.children[1]!.classList.contains('popover')).toBe(true)
+  })
+
+  it('narrows the list by the search text', async () => {
+    stubApi()
+    renderPage({ search: 'ghost' })
+    await waitFor(() => expect(screen.getByText('Ghostrunner')).toBeTruthy())
+
+    expect(screen.queryByText('Skin Pack')).toBeNull()
+  })
+
+  it('narrows the upcoming section too', async () => {
+    stubApi()
+    renderPage({ search: 'next' })
+    await waitFor(() => expect(screen.getByText('Next Week Game')).toBeTruthy())
+
+    expect(screen.queryByText('Ghostrunner')).toBeNull()
+  })
+
+  it('narrows the list by store', async () => {
+    stubApi()
+    renderPage({ stores: ['ubisoft'] })
+    await waitFor(() => expect(screen.getByText('Skin Pack')).toBeTruthy())
+
+    expect(screen.queryByText('Ghostrunner')).toBeNull()
+  })
+
+  it('says nothing matches, not that nothing is free', async () => {
+    // The page has always separated a claim about the world from a claim
+    // about what was asked for. A search matching none of a non-empty list
+    // is the second, and saying the first would be false.
+    stubApi()
+    renderPage({ search: 'no such game' })
+
+    await waitFor(() => expect(screen.getByText(t().freebies.noMatches)).toBeTruthy())
+    expect(screen.queryByText(t().freebies.empty)).toBeNull()
+  })
+
+  it('still says nothing is free when the list is genuinely empty', async () => {
+    stubApi({ current: [], upcoming: [] })
+    renderPage()
+
+    await waitFor(() => expect(screen.getByText(t().freebies.empty)).toBeTruthy())
+    expect(screen.queryByText(t().freebies.noMatches)).toBeNull()
+  })
+
+  it('says nothing matches when the chip empties the list', async () => {
+    // The chip could always narrow to zero rows, and used to leave the page
+    // silently blank. It is one more thing the user asked for, so it earns
+    // the same message.
+    stubApi()
+    renderPage()
+    await waitFor(() => expect(screen.getByText('Skin Pack')).toBeTruthy())
+
+    // The fixture holds no loot at all, so this chip alone empties a list
+    // that is not itself empty.
+    fireEvent.click(screen.getByRole('button', { name: t().freebies.kind.loot }))
+
+    expect(screen.getByText(t().freebies.noMatches)).toBeTruthy()
   })
 })

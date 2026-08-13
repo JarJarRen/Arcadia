@@ -61,18 +61,74 @@ describe('StoreSelection', () => {
     expect(screen.getAllByText(/checking/i).length).toBeGreaterThan(0)
   })
 
-  it('shows the reason a store was not found', async () => {
+  it('keeps the status on the row and the reason behind the button', async () => {
     stubApi({ epic: { available: false, reason: 'No Epic Games Launcher here.' } })
     render(<StoreSelection enabled={[]} onChange={vi.fn()} />)
 
-    expect(await screen.findByText(/No Epic Games Launcher here\./)).toBeDefined()
+    // The status is the part you should not have to click for.
+    expect(await screen.findAllByText(/not found on this machine/i)).toBeDefined()
+    expect(screen.queryByText(/No Epic Games Launcher here\./)).toBeNull()
+
+    fireEvent.click(await screen.findByRole('button', { name: /details about epic/i }))
+
+    expect(screen.getByText(/No Epic Games Launcher here\./)).toBeDefined()
   })
 
-  it('shows a limitation of a store that was found', async () => {
+  it('keeps a limitation behind the button too', async () => {
     stubApi({ ubisoft: { available: true, limitations: ['Owned games from a local cache.'] } })
     render(<StoreSelection enabled={[]} onChange={vi.fn()} />)
 
-    expect(await screen.findByText(/Owned games from a local cache\./)).toBeDefined()
+    expect(await screen.findByRole('button', { name: /details about ubisoft/i })).toBeDefined()
+    expect(screen.queryByText(/Owned games from a local cache\./)).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: /details about ubisoft/i }))
+
+    expect(screen.getByText(/Owned games from a local cache\./)).toBeDefined()
+  })
+
+  it('offers no button for a store with nothing to explain', async () => {
+    stubApi({ steam: { available: true } })
+    render(<StoreSelection enabled={[]} onChange={vi.fn()} />)
+
+    await screen.findAllByText(/found on this machine/i)
+    // No affordance to go hunting through when there is nothing behind it.
+    expect(screen.queryByRole('button', { name: /details about steam/i })).toBeNull()
+  })
+
+  it('does not toggle the store when its detail button is pressed', async () => {
+    // The row's text sits inside a <label>, so a button placed within it
+    // would be part of the checkbox's click target.
+    stubApi({ ubisoft: { available: true, limitations: ['Owned games from a local cache.'] } })
+    const onChange = vi.fn()
+    render(<StoreSelection enabled={['ubisoft']} onChange={onChange} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /details about ubisoft/i }))
+
+    expect(onChange).not.toHaveBeenCalled()
+    expect((screen.getByRole('checkbox', { name: /ubisoft/i }) as HTMLInputElement).checked).toBe(
+      true
+    )
+  })
+
+  it('closes one store\'s detail when another is opened', async () => {
+    // Nothing coordinates this: pressing the second button is a mousedown
+    // outside the first popover's root, which closes it. Pinned so nobody
+    // adds shared "which one is open" state to solve a problem that is
+    // already solved.
+    stubApi({
+      ubisoft: { available: true, limitations: ['Owned games from a local cache.'] },
+      ea: { available: true, limitations: ['Install state is a heuristic.'] }
+    })
+    render(<StoreSelection enabled={[]} onChange={vi.fn()} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /details about ubisoft/i }))
+    expect(screen.getByText(/Owned games from a local cache\./)).toBeDefined()
+
+    fireEvent.mouseDown(screen.getByRole('button', { name: /details about ea/i }))
+    fireEvent.click(screen.getByRole('button', { name: /details about ea/i }))
+
+    expect(screen.queryByText(/Owned games from a local cache\./)).toBeNull()
+    expect(screen.getByText(/Install state is a heuristic\./)).toBeDefined()
   })
 
   it('keeps the checkboxes usable when the probe fails', async () => {

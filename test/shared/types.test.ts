@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { gameId, parseGameId } from '@shared/types'
+import { gameId, parseGameId, STORE_IDS } from '@shared/types'
 
 describe('gameId', () => {
   it('joins store and store ID into a stable ID', () => {
@@ -41,5 +41,18 @@ describe('gameId', () => {
   it('rejects empty IDs and IDs without a store', () => {
     expect(() => parseGameId('')).toThrow()
     expect(() => parseGameId(':anything')).toThrow()
+  })
+
+  it('knows the storeless store, ranked after every real one', () => {
+    expect(STORE_IDS).toContain('other')
+    // Last, so a real store wins the active source when names collide.
+    expect(STORE_IDS[STORE_IDS.length - 1]).toBe('other')
+  })
+
+  it('parses a storeless game id', () => {
+    expect(parseGameId('other:manual-minecraft-launcher')).toEqual({
+      storeId: 'other',
+      storeGameId: 'manual-minecraft-launcher'
+    })
   })
 })

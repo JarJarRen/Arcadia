@@ -956,6 +956,14 @@ app.whenReady().then(async () => {
     await wait()
 
     const opened = box() !== null
+
+    // The screen opens on the stores tab; everything measured below — the
+    // three key fields, their links, and the skip answer — is on the other.
+    // Selected by position, the way the Close button below is: there are
+    // exactly two, stores first.
+    box().querySelectorAll('[role="tab"]')[1].click()
+    await wait()
+
     const inputs = () => [...box().querySelectorAll('.modal__field input')]
     const prefilled = inputs().map((i) => i.value)
     const links = box().querySelectorAll('.modal__link').length

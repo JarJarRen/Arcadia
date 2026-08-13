@@ -27,7 +27,11 @@ const PATTERNS: Record<StoreId, RegExp> = {
   // packages.ts derives from the registry. MSIX allows only
   // alphanumerics, periods and dashes in the name half; the publisher ID
   // half is always alphanumeric.
-  microsoft: /^[A-Za-z0-9.-]+_[A-Za-z0-9]+$/
+  microsoft: /^[A-Za-z0-9.-]+_[A-Za-z0-9]+$/,
+  // Generated from the name, never typed: the dialog offers no field for it.
+  // The pattern is a backstop for anything arriving over IPC, and it is what
+  // makes the Record<StoreId, RegExp> complete.
+  other: /^manual-[a-z0-9-]+$/
 }
 
 export function storeGameIdLooksValid(storeId: StoreId, storeGameId: string): boolean {

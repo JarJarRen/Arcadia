@@ -52,6 +52,7 @@ export function stubArcadia(overrides: Partial<ArcadiaApi> = {}): ArcadiaApi {
     saveEnvConfig: async () => ({ ok: true, restarting: false }),
     addManualGame: async () => ({ ok: true, id: 'steam:manual-1' }),
     removeManualGame: async () => ({ ok: true }),
+    pickExecutable: async () => ({ ok: false }),
     reportBrokenArtwork: async () => undefined,
     isScanning: async () => false,
     getStartupNotice: async () => undefined,

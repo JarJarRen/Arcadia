@@ -141,8 +141,12 @@ describe('openDatabase on a damaged file', () => {
       }
     }
     // And the fresh database genuinely works, rather than merely existing.
+    // Starts at 1, not 0: opening a fresh database writes the
+    // enabled-stores-other migration marker unconditionally (see
+    // migrateEnabledStoresForOther in schema.ts), so this insert is the
+    // second row rather than the first.
     db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run('language', 'en')
-    expect(db.prepare('SELECT COUNT(*) AS n FROM settings').get()).toEqual({ n: 1 })
+    expect(db.prepare('SELECT COUNT(*) AS n FROM settings').get()).toEqual({ n: 2 })
   })
 
   it('survives a damaged file that arrives with a write-ahead log', () => {

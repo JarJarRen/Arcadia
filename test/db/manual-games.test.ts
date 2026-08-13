@@ -108,3 +108,59 @@ describe('Manually added games', () => {
     expect(repo.byId(id)!.favorite).toBe(true)
   })
 })
+
+describe('storeless entries', () => {
+  let db: DatabaseSync
+  let repo: GameRepository
+
+  beforeEach(() => {
+    db = openDatabase(':memory:')
+    repo = new GameRepository(db)
+  })
+
+  it('is installed the moment it is added', () => {
+    const id = repo.addManualGame(
+      { storeId: 'other', name: 'Minecraft Launcher', launchExe: 'C:\\Games\\mc.exe' },
+      T0
+    )
+
+    const game = repo.byId(id)!
+    expect(id).toBe('other:manual-minecraft-launcher')
+    // The file was picked from a dialog and checked before it got here.
+    // "Not installed" until the next sync would read as broken.
+    expect(game.installed).toBe(true)
+    expect(game.installPath).toBe('C:\\Games')
+    expect(game.manual).toBe(true)
+  })
+
+  it('keeps a hand-made entry for a real store uninstalled', () => {
+    const id = repo.addManualGame({ storeId: 'ea', name: 'Dead Space' }, T0)
+    expect(repo.byId(id)!.installed).toBe(false)
+  })
+
+  it('stores the arguments as given', () => {
+    const id = repo.addManualGame(
+      {
+        storeId: 'other',
+        name: 'Minecraft',
+        launchExe: 'C:\\Games\\mc.exe',
+        launchArgs: ['--profile', 'My Pack']
+      },
+      T0
+    )
+    expect(repo.byId(id)!.launchArgs).toEqual(['--profile', 'My Pack'])
+  })
+
+  it('refuses a storeless entry with no program', () => {
+    expect(() => repo.addManualGame({ storeId: 'other', name: 'Nothing' }, T0)).toThrow()
+  })
+
+  it('refuses a program on a store that has one of its own', () => {
+    expect(() =>
+      repo.addManualGame(
+        { storeId: 'steam', name: 'TF2', storeGameId: '440', launchExe: 'C:\\x.exe' },
+        T0
+      )
+    ).toThrow()
+  })
+})

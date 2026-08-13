@@ -1,4 +1,4 @@
-import { ipcMain, screen, shell, type BrowserWindow } from 'electron'
+import { dialog, ipcMain, screen, shell, type BrowserWindow } from 'electron'
 import { stat } from 'node:fs/promises'
 import { IPC, type LaunchResult } from '@shared/ipc'
 import { getLanguage, parseLanguage, setLanguage, t } from '@shared/i18n'
@@ -14,10 +14,12 @@ import { mergeLibrary } from '@main/library/merge'
 import { runSync } from '@main/sync'
 import type { ScanState } from '@main/scan-state'
 import { cancelInstall, installGame, launchGame, type InstallFrame } from '@main/launch-bridge'
+import { pickExecutable } from '@main/pick-executable'
 import { decodeWindowHandle } from '@main/platform/windows'
 import type { SteamAppList } from '@main/metadata/steamAppList'
 import { applyManualMatch } from '@main/metadata/queue'
 import { readEnvConfig, saveEnvConfig } from '@main/env-config'
+import { executableProblem } from '@shared/executable'
 import { parseEnabledStores, serializeEnabledStores } from '@shared/stores'
 import { enabledAdapters } from '@main/stores/enabled'
 import { envValueIsWritable } from '@main/env-file'
@@ -27,6 +29,17 @@ import type { DeviceCode, MicrosoftTokens } from '@main/stores/microsoft/auth'
 import type { FreebieService } from '@main/freebies/service'
 import { confirmClaims } from '@main/freebies/confirm'
 import type { FreebieRepository } from '@main/db/freebies'
+
+/**
+ * What the program dialog offers.
+ *
+ * Shortcuts are listed because that is what sits on a desktop; they are
+ * resolved to their target before anything is stored.
+ */
+const FILTERS = [
+  { name: 'Programs', extensions: ['exe', 'lnk'] },
+  { name: 'All files', extensions: ['*'] }
+]
 
 export interface IpcContext {
   repo: GameRepository
@@ -428,17 +441,18 @@ export function registerIpcHandlers(context: IpcContext): void {
   /**
    * Adds a game by hand.
    *
-   * Every field is validated in the repository rather than here, because
+   * Most fields are validated in the repository rather than here, because
    * that is the layer the constraint belongs to — a store identifier must
    * not reach a launch URI unchecked, no matter which caller supplied it.
-   * This handler only converts a thrown error into a message the interface
-   * can show.
+   * The program path is the exception: this handler is the validation
+   * boundary for it, since checking it means touching the filesystem, which
+   * the repository does not otherwise do.
    */
-  ipcMain.handle(IPC.libraryAddManual, (_event, game: unknown) => {
+  ipcMain.handle(IPC.libraryAddManual, async (_event, game: unknown) => {
     if (typeof game !== 'object' || game === null) {
       return { ok: false, error: t().errors.invalidInput }
     }
-    const { storeId, name, storeGameId } = game as Record<string, unknown>
+    const { storeId, name, storeGameId, launchExe, launchArgs } = game as Record<string, unknown>
     if (typeof storeId !== 'string' || typeof name !== 'string') {
       return { ok: false, error: t().errors.invalidInput }
     }
@@ -448,10 +462,53 @@ export function registerIpcHandlers(context: IpcContext): void {
     if (storeGameId !== undefined && typeof storeGameId !== 'string') {
       return { ok: false, error: t().errors.invalidInput }
     }
+    if (launchExe !== undefined && typeof launchExe !== 'string') {
+      return { ok: false, error: t().errors.invalidInput }
+    }
+    if (
+      launchArgs !== undefined &&
+      (!Array.isArray(launchArgs) || launchArgs.some((part) => typeof part !== 'string'))
+    ) {
+      return { ok: false, error: t().errors.invalidInput }
+    }
+
+    // Trimmed here, ahead of validation, so surrounding whitespace can never
+    // reach the database: this value becomes both `launch_exe` and (via
+    // `folderOf`) `install_path`, and `spawn` is given it as a working
+    // directory verbatim. An empty result after trimming is treated as no
+    // program at all rather than as a path to check.
+    const trimmedExe = typeof launchExe === 'string' ? launchExe.trim() : undefined
+    const exe = trimmedExe === '' ? undefined : trimmedExe
+
+    // Checked here as well as in the picker, because the picker is not the
+    // only way to reach this channel. Whatever the renderer sends, the path
+    // that ends up in the database is one this process has looked at.
+    if (exe !== undefined) {
+      const problem = executableProblem(exe, process.platform)
+      if (problem === 'notAbsolute') {
+        return { ok: false, error: t().errors.executableNotAbsolute }
+      }
+      if (problem === 'unsupportedType') {
+        return { ok: false, error: t().errors.executableUnsupported }
+      }
+      try {
+        if (!(await stat(exe)).isFile()) {
+          return { ok: false, error: t().errors.executableMissing(exe) }
+        }
+      } catch {
+        return { ok: false, error: t().errors.executableMissing(exe) }
+      }
+    }
 
     try {
       const id = context.repo.addManualGame(
-        { storeId: storeId as StoreId, name, ...(storeGameId === undefined ? {} : { storeGameId }) },
+        {
+          storeId: storeId as StoreId,
+          name,
+          ...(storeGameId === undefined ? {} : { storeGameId }),
+          ...(exe === undefined ? {} : { launchExe: exe }),
+          ...(launchArgs === undefined ? {} : { launchArgs: launchArgs as string[] })
+        },
         Math.floor(Date.now() / 1000)
       )
       notifyChanged()
@@ -472,6 +529,37 @@ export function registerIpcHandlers(context: IpcContext): void {
       return { ok: true }
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    }
+  })
+
+  ipcMain.handle(IPC.libraryPickExecutable, async () => {
+    const window = context.getWindow()
+    try {
+      return await pickExecutable({
+        showOpenDialog: () =>
+          // Modal to Arcadia's own window where there is one: a dialog that can
+          // be lost behind the library is worse than no dialog.
+          window === undefined
+            ? dialog.showOpenDialog({ properties: ['openFile'], filters: FILTERS })
+            : dialog.showOpenDialog(window, { properties: ['openFile'], filters: FILTERS }),
+        readShortcutLink: (path) => shell.readShortcutLink(path),
+        exists: async (path) => {
+          try {
+            return (await stat(path)).isFile()
+          } catch {
+            return false
+          }
+        },
+        platform: process.platform
+      })
+    } catch (error) {
+      // Matches the shape every other contract-bearing handler here
+      // promises. Without this, a rejected `showOpenDialog` — a destroyed
+      // window at call time, for instance — would reach the renderer as a
+      // rejected `invoke()` promise instead, and the Add-game dialog does
+      // not wrap this call in a try/catch of its own.
+      const message = error instanceof Error ? error.message : String(error)
+      return { ok: false, error: t().errors.executablePickFailed(message) }
     }
   })
 

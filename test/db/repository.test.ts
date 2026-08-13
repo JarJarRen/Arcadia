@@ -167,4 +167,60 @@ describe('GameRepository', () => {
     expect(repo.byId('steam:2')).toBeUndefined()
     expect(repo.byId('steam:1')).toBeDefined()
   })
+
+  describe('storeless games', () => {
+    it('round-trips the program and its arguments', () => {
+      repo.upsertScan(
+        'other',
+        [
+          raw({
+            storeGameId: 'manual-minecraft',
+            name: 'Minecraft',
+            launchExe: 'C:\\Games\\mc.exe',
+            launchArgs: ['--profile', 'My Pack'],
+            manual: true
+          })
+        ],
+        T0
+      )
+
+      const game = repo.byId('other:manual-minecraft')!
+      expect(game.launchExe).toBe('C:\\Games\\mc.exe')
+      expect(game.launchArgs).toEqual(['--profile', 'My Pack'])
+    })
+
+    it('survives arguments that are not readable JSON', () => {
+      repo.upsertScan('other', [raw({ storeGameId: 'manual-x', name: 'X', manual: true })], T0)
+      db.prepare("UPDATE games SET launch_args = 'not json' WHERE id = 'other:manual-x'").run()
+
+      // all() reads the whole library through toGame; one damaged row must not
+      // empty it.
+      expect(repo.all()).toHaveLength(1)
+      expect(repo.byId('other:manual-x')!.launchArgs).toEqual([])
+    })
+
+    it('keeps a storeless row deletable across scans', () => {
+      repo.upsertScan('other', [raw({ storeGameId: 'manual-x', name: 'X', manual: true })], T0)
+      repo.upsertScan('other', [raw({ storeGameId: 'manual-x', name: 'X', manual: true })], T1)
+
+      expect(repo.byId('other:manual-x')!.manual).toBe(true)
+    })
+
+    it('still lets a scan claim a hand-made row of a real store', () => {
+      repo.addManualGame({ storeId: 'steam', name: 'TF2', storeGameId: '440' }, T0)
+      expect(repo.byId('steam:440')!.manual).toBe(true)
+
+      repo.upsertScan('steam', [raw({ storeGameId: '440', name: 'TF2' })], T1)
+
+      // No adapter sets `manual`, so the documented hand-over is unchanged.
+      expect(repo.byId('steam:440')!.manual).toBeUndefined()
+    })
+
+    it('lists only the storeless rows', () => {
+      repo.upsertScan('steam', [raw({ storeGameId: '440', name: 'TF2' })], T0)
+      repo.upsertScan('other', [raw({ storeGameId: 'manual-x', name: 'X', manual: true })], T0)
+
+      expect(repo.storeless().map((game) => game.id)).toEqual(['other:manual-x'])
+    })
+  })
 })

@@ -896,6 +896,27 @@ button:focus-visible {
   font-size: 12px;
 }
 
+.modal__tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal__tab {
+  padding: 8px 14px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--text-dim);
+  font: inherit;
+  cursor: pointer;
+}
+
+.modal__tab--active {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+}
+
 .modal__error {
   margin: 0;
   color: #ffb4b4;
@@ -1031,6 +1052,35 @@ button:focus-visible {
 .popover__panel--end {
   left: auto;
   right: 0;
+}
+
+/* The "i" beside a store's status. Round and small because it sits inside a
+   line of text rather than in a toolbar. */
+.button--info {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 11px;
+  line-height: 1;
+}
+
+/* Wider than the toolbar's menus and free to wrap: this holds sentences,
+   not menu items. */
+.popover__panel--info {
+  max-width: 320px;
+  white-space: normal;
+}
+
+.popover__notes {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 .popover__label {
@@ -1186,6 +1236,13 @@ button:focus-visible {
 
 .modal__toggle .modal__sublabel {
   display: block;
+}
+
+/* Puts the detail button on the store's first line rather than under it. */
+.modal__toggle--row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
 }
 
 /* The details page in grid mode, laid over the library.

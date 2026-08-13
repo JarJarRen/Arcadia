@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react'
 import { t } from '@shared/i18n'
-import { emptyEnvConfig, type EnvConfigKey, type EnvConfigValues } from '@shared/env-config'
+import { emptyEnvConfig, type EnvConfigValues } from '@shared/env-config'
 import type { StoreId } from '@shared/types'
 import { StoreSelection } from './StoreSelection'
+import { ApiKeyFields } from './ApiKeyFields'
 
 interface Props {
   values: EnvConfigValues
@@ -20,37 +21,6 @@ interface Props {
   /** Saves at once — no restart, unlike the keys below it. */
   onEnabledStoresChange: (stores: StoreId[]) => void
   onClose: () => void
-}
-
-interface Field {
-  key: EnvConfigKey
-  label: string
-  hint: string
-  url: string
-}
-
-/** The three keys, in the order the `.env` template lists them. */
-function fields(): Field[] {
-  return [
-    {
-      key: 'STEAM_WEB_API_KEY',
-      label: t().setup.steamKeyLabel,
-      hint: t().setup.steamKeyHint,
-      url: 'https://steamcommunity.com/dev/apikey'
-    },
-    {
-      key: 'STEAM_ID64',
-      label: t().setup.steamIdLabel,
-      hint: t().setup.steamIdHint,
-      url: 'https://steamcommunity.com/'
-    },
-    {
-      key: 'STEAMGRIDDB_API_KEY',
-      label: t().setup.gridKeyLabel,
-      hint: t().setup.gridKeyHint,
-      url: 'https://www.steamgriddb.com/profile/preferences/api'
-    }
-  ]
 }
 
 /**
@@ -79,10 +49,21 @@ export function SetupDialog({
   const [restarting, setRestarting] = useState(false)
   const [error, setError] = useState<string | undefined>()
   const first = useRef<HTMLInputElement>(null)
+  const [tab, setTab] = useState<'stores' | 'keys'>('stores')
+  const storesTab = useRef<HTMLButtonElement>(null)
+  const keysTab = useRef<HTMLButtonElement>(null)
 
+  // The first key field is no longer on screen at mount, so the tab it lives
+  // behind is what gets the focus instead.
   useEffect(() => {
-    first.current?.focus()
+    storesTab.current?.focus()
   }, [])
+
+  // Keeps the old behaviour — you can start typing as soon as the fields are
+  // there — moved to the moment they actually appear.
+  useEffect(() => {
+    if (tab === 'keys') first.current?.focus()
+  }, [tab])
 
   // Escape closes only where closing is allowed. On the first start it would
   // otherwise dismiss the gate without answering it, and the dialog would be
@@ -124,54 +105,67 @@ export function SetupDialog({
       ? t().setup.saveAndRestart
       : t().setup.save
 
+  const tabs = [
+    { id: 'stores' as const, label: t().setup.storesTitle, ref: storesTab },
+    { id: 'keys' as const, label: t().setup.tabKeys, ref: keysTab }
+  ]
+
   return (
     <div className="modal" role="dialog" aria-modal="true" aria-label={t().setup.label}>
       <div className="modal__box modal__box--wide">
         <h2 className="modal__title">{t().setup.title}</h2>
-        <p className="modal__hint">{t().setup.intro}</p>
         {firstRun && <p className="modal__hint">{t().setup.firstRunHint}</p>}
 
-        <StoreSelection enabled={enabledStores} onChange={onEnabledStoresChange} />
+        {/* Both tabs stay in the tab order and either arrow moves to the
+            other one. The WAI-ARIA pattern asks for a roving tabindex so Tab
+            skips the list into the panel; with exactly two tabs that buys
+            nothing and costs a rule to remember.
 
-        {fields().map((field, index) => (
-          <label className="modal__field" key={field.key}>
-            <span className="modal__label">{field.label}</span>
-            <input
-              ref={index === 0 ? first : undefined}
-              className="modal__search"
-              value={edited[field.key]}
-              disabled={skip || restarting}
-              spellCheck={false}
-              autoComplete="off"
-              onChange={(event) =>
-                setEdited({ ...edited, [field.key]: event.target.value })
-              }
+            Deliberately not disabled while restarting, unlike the fields and
+            buttons: those are disabled because an edit made on the way down
+            would be lost, and changing tab loses nothing. */}
+        <div className="modal__tabs" role="tablist" aria-label={t().setup.tabsLabel}>
+          {tabs.map(({ id, label, ref }) => (
+            <button
+              key={id}
+              ref={ref}
+              type="button"
+              role="tab"
+              id={`setup-tab-${id}`}
+              aria-selected={tab === id}
+              aria-controls={`setup-panel-${id}`}
+              className={`modal__tab${tab === id ? ' modal__tab--active' : ''}`}
+              onClick={() => setTab(id)}
+              onKeyDown={(event) => {
+                if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+                const other = id === 'stores' ? tabs[1]! : tabs[0]!
+                setTab(other.id)
+                other.ref.current?.focus()
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {tab === 'stores' ? (
+          <div role="tabpanel" id="setup-panel-stores" aria-labelledby="setup-tab-stores">
+            <StoreSelection enabled={enabledStores} onChange={onEnabledStoresChange} />
+            <p className="modal__sublabel">{t().setup.storesApplyAtOnce}</p>
+          </div>
+        ) : (
+          <div role="tabpanel" id="setup-panel-keys" aria-labelledby="setup-tab-keys">
+            <ApiKeyFields
+              values={edited}
+              onChange={setEdited}
+              skip={skip}
+              onSkipChange={setSkip}
+              restarting={restarting}
+              path={path}
+              firstFieldRef={first}
             />
-            <span className="modal__sublabel">
-              {field.hint}{' '}
-              {/* Opens in the system browser: the window's open handler
-                  denies in-app navigation and hands the URL to the shell. */}
-              <a className="modal__link" href={field.url} target="_blank" rel="noreferrer">
-                {t().setup.whereToGet}
-              </a>
-            </span>
-          </label>
-        ))}
-
-        <label className="modal__toggle modal__toggle--skip">
-          <input
-            type="checkbox"
-            checked={skip}
-            disabled={restarting}
-            onChange={(event) => setSkip(event.target.checked)}
-          />
-          <span>
-            {t().setup.skip}
-            <span className="modal__sublabel">{t().setup.skipHint}</span>
-          </span>
-        </label>
-
-        <p className="modal__sublabel">{t().setup.fileHint(path)}</p>
+          </div>
+        )}
 
         {error !== undefined && <p className="modal__error">{error}</p>}
 

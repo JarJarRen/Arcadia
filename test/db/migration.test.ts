@@ -195,4 +195,98 @@ describe('Schema migration', () => {
     ).not.toThrow()
     expect(repo.byId('epic:k')?.launchId).toBe('app')
   })
+
+  it('adds the launch columns to a database that predates them', () => {
+    const path = join(directory, 'old.db')
+    const old = new DatabaseSync(path)
+    old.exec(`CREATE TABLE games (
+      id TEXT PRIMARY KEY NOT NULL, store_id TEXT NOT NULL, store_game_id TEXT NOT NULL,
+      name TEXT NOT NULL, installed INTEGER NOT NULL DEFAULT 0,
+      first_seen INTEGER NOT NULL, last_seen INTEGER NOT NULL
+    )`)
+    old.close()
+
+    const db = openDatabase(path)
+    const columns = (
+      db.prepare('SELECT name FROM pragma_table_info(?)').all('games') as unknown as Array<{
+        name: string
+      }>
+    ).map((row) => row.name)
+    db.close()
+
+    expect(columns).toContain('launch_exe')
+    expect(columns).toContain('launch_args')
+  })
+
+  /**
+   * A database as an older version of Arcadia left it.
+   *
+   * Built raw rather than through `openDatabase`, and this is the whole point:
+   * `openDatabase` **is** the new code, so opening the file to seed it would
+   * run the migration first and write its marker while `enabled-stores` was
+   * still absent. What has to be modelled is a store choice that already
+   * existed before the migration ever saw the database. `CREATE TABLE IF NOT
+   * EXISTS` fills in everything else on the real open that follows.
+   */
+  function seedStoreChoice(path: string, value: string): void {
+    const old = new DatabaseSync(path)
+    old.exec('CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
+    old.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run('enabled-stores', value)
+    old.close()
+  }
+
+  function readStoreChoice(path: string): string | undefined {
+    const db = openDatabase(path)
+    const row = db.prepare("SELECT value FROM settings WHERE key = 'enabled-stores'").get() as
+      | { value: string }
+      | undefined
+    db.close()
+    return row?.value
+  }
+
+  it('adds the storeless store to a choice made before it existed', () => {
+    const path = join(directory, 'choice.db')
+    seedStoreChoice(path, 'steam,epic')
+
+    expect(readStoreChoice(path)).toBe('steam,epic,other')
+  })
+
+  it('leaves the storeless store switched off once the user has switched it off', () => {
+    const path = join(directory, 'off.db')
+    seedStoreChoice(path, 'steam,epic')
+
+    // The first real open runs the migration, which appends `other`.
+    expect(readStoreChoice(path)).toBe('steam,epic,other')
+
+    // The user now switches it off again.
+    const db = openDatabase(path)
+    db.prepare("UPDATE settings SET value = 'steam,epic' WHERE key = 'enabled-stores'").run()
+    db.close()
+
+    // Every later open must leave that alone.
+    expect(readStoreChoice(path)).toBe('steam,epic')
+  })
+
+  it('never revisits a choice made after the store already existed', () => {
+    // The case the unconditional marker exists for. A fresh install has no
+    // stored choice at all, so there is nothing to migrate — but the marker is
+    // still written, and that is what stops a choice made later from being
+    // treated as one that predates the store.
+    const path = join(directory, 'fresh.db')
+    const first = openDatabase(path)
+    first.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(
+      'enabled-stores',
+      'steam,epic'
+    )
+    first.close()
+
+    expect(readStoreChoice(path)).toBe('steam,epic')
+  })
+
+  it('respects a deliberate choice of no stores at all', () => {
+    const path = join(directory, 'none.db')
+    seedStoreChoice(path, '')
+
+    expect(readStoreChoice(path)).toBe('')
+  })
 })

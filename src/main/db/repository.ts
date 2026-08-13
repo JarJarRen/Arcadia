@@ -1,6 +1,8 @@
 import type { DatabaseSync } from 'node:sqlite'
 import { gameId, type Game, type RawGame, type StoreId } from '@shared/types'
 import { manualStoreGameId, storeGameIdLooksValid } from '@shared/manual'
+import { folderOf } from '@shared/executable'
+import { t } from '@shared/i18n'
 import type { MergeOverrides } from '@main/library/merge'
 
 interface MergeOverrideRow {
@@ -27,6 +29,8 @@ interface GameRow {
   launch_id: string | null
   shared_or_free: number
   manual: number
+  launch_exe: string | null
+  launch_args: string | null
   last_played: number | null
   favorite: number
   hidden: number
@@ -34,7 +38,26 @@ interface GameRow {
   last_seen: number
 }
 
+/**
+ * Reads the stored argument array.
+ *
+ * A malformed value yields no arguments rather than throwing: `all()` reads
+ * the entire library through `toGame`, and one damaged row must not empty it.
+ */
+function parseLaunchArgs(value: string | null): string[] | undefined {
+  if (value === null) return undefined
+  try {
+    const parsed: unknown = JSON.parse(value)
+    return Array.isArray(parsed) && parsed.every((part) => typeof part === 'string')
+      ? (parsed as string[])
+      : []
+  } catch {
+    return []
+  }
+}
+
 function toGame(row: GameRow): Game {
+  const launchArgs = parseLaunchArgs(row.launch_args)
   return {
     id: row.id,
     storeId: row.store_id as StoreId,
@@ -47,6 +70,8 @@ function toGame(row: GameRow): Game {
     launchId: row.launch_id ?? undefined,
     ...(row.shared_or_free === 1 ? { sharedOrFree: true } : {}),
     ...(row.manual === 1 ? { manual: true } : {}),
+    ...(row.launch_exe === null ? {} : { launchExe: row.launch_exe }),
+    ...(launchArgs === undefined ? {} : { launchArgs }),
     lastPlayed: row.last_played ?? undefined,
     favorite: row.favorite === 1,
     hidden: row.hidden === 1,
@@ -72,6 +97,19 @@ export class GameRepository {
     return row ? toGame(row) : undefined
   }
 
+  /**
+   * The storeless rows, for the adapter that scans them.
+   *
+   * The adapter reading rows Arcadia itself wrote is not accidental: for this
+   * store the user's own list **is** the catalogue.
+   */
+  storeless(): Game[] {
+    const rows = this.db
+      .prepare("SELECT * FROM games WHERE store_id = 'other' ORDER BY name COLLATE NOCASE")
+      .all() as unknown as GameRow[]
+    return rows.map(toGame)
+  }
+
   setFavorite(id: string, value: boolean): void {
     this.db.prepare('UPDATE games SET favorite = ? WHERE id = ?').run(value ? 1 : 0, id)
   }
@@ -79,9 +117,10 @@ export class GameRepository {
   /**
    * Records a game no adapter can see.
    *
-   * `installed` stays 0, and that is load-bearing rather than incidental:
-   * `upsertScan` only marks games gone that are currently installed, so a
-   * manual entry survives every scan of its store untouched.
+   * `installed` stays 0 for the five real stores, and that is load-bearing
+   * rather than incidental: `upsertScan` only marks games gone that are
+   * currently installed, so a manual entry survives every scan of its store
+   * untouched. The storeless store is the exception — see below.
    *
    * Giving a real store identifier is worthwhile where it is known. The row
    * then carries the same id an adapter would produce, so once the game is
@@ -91,11 +130,31 @@ export class GameRepository {
    * Returns the id, so the caller can select the new entry straight away.
    */
   addManualGame(
-    game: { storeId: StoreId; name: string; storeGameId?: string },
+    game: {
+      storeId: StoreId
+      name: string
+      storeGameId?: string
+      launchExe?: string
+      launchArgs?: string[]
+    },
     now: number
   ): string {
     const name = game.name.trim()
     if (name === '') throw new Error('A game needs a name.')
+
+    // Two mirrored rules. The storeless store is the only one with nothing to
+    // launch through, so it is the only one that must carry a program — and
+    // the only one that may. Without the second half this would quietly
+    // become "attach a program to any game", which is a different feature
+    // with a different question at its centre: what a later scan should do
+    // to the row.
+    if (game.storeId === 'other') {
+      if (game.launchExe === undefined || game.launchExe.trim() === '') {
+        throw new Error(t().errors.executableRequired)
+      }
+    } else if (game.launchExe !== undefined || game.launchArgs !== undefined) {
+      throw new Error(t().errors.executableNotAllowed)
+    }
 
     const supplied = game.storeGameId?.trim()
     if (supplied !== undefined && supplied !== '') {
@@ -107,22 +166,44 @@ export class GameRepository {
       }
     }
 
-    const storeGameId = supplied === undefined || supplied === ''
-      ? manualStoreGameId(name)
-      : supplied
+    const storeGameId =
+      supplied === undefined || supplied === '' ? manualStoreGameId(name) : supplied
     const id = gameId(game.storeId, storeGameId)
 
     if (this.byId(id) !== undefined) {
       throw new Error(`${name} is already in the library.`)
     }
 
+    // A storeless entry is installed at once: its file was picked from a
+    // dialog and checked before reaching this layer, and an entry that read
+    // "not installed" until the next sync would look broken. A hand-made
+    // entry for a real store stays uninstalled, because there it describes
+    // something Arcadia genuinely cannot see on disk.
+    const exe = game.launchExe
+    const installed = exe === undefined ? 0 : 1
+    const installPath = exe === undefined ? null : folderOf(exe)
+
     this.db
       .prepare(
         `INSERT INTO games (
-           id, store_id, store_game_id, name, installed, manual, first_seen, last_seen
-         ) VALUES (@id, @storeId, @storeGameId, @name, 0, 1, @now, @now)`
+           id, store_id, store_game_id, name, installed, install_path, manual,
+           launch_exe, launch_args, first_seen, last_seen
+         ) VALUES (
+           @id, @storeId, @storeGameId, @name, @installed, @installPath, 1,
+           @launchExe, @launchArgs, @now, @now
+         )`
       )
-      .run({ id, storeId: game.storeId, storeGameId, name, now })
+      .run({
+        id,
+        storeId: game.storeId,
+        storeGameId,
+        name,
+        installed,
+        installPath,
+        launchExe: exe ?? null,
+        launchArgs: game.launchArgs === undefined ? null : JSON.stringify(game.launchArgs),
+        now
+      })
 
     return id
   }
@@ -229,10 +310,12 @@ export class GameRepository {
       INSERT INTO games (
         id, store_id, store_game_id, name, installed, install_path,
         install_size, playtime_minutes, last_played, launch_id, shared_or_free,
+        manual, launch_exe, launch_args,
         first_seen, last_seen
       ) VALUES (
         @id, @storeId, @storeGameId, @name, @installed, @installPath,
         @installSize, @playtime, @lastPlayed, @launchId, @sharedOrFree,
+        @manual, @launchExe, @launchArgs,
         @now, @now
       )
       ON CONFLICT(id) DO UPDATE SET
@@ -247,11 +330,14 @@ export class GameRepository {
         -- mark has to disappear again. With COALESCE it would stay forever
         -- once it had been set.
         shared_or_free   = excluded.shared_or_free,
-        -- A scan that finds the game owns the row from now on. The entry
-        -- was a placeholder for something no adapter could see; that is no
-        -- longer true, and leaving the mark would keep offering a delete
-        -- button for a row the next scan brings straight back.
-        manual           = 0,
+        -- Taken from the scanned row rather than forced to 0. A scan that
+        -- finds a game still claims the row — no adapter sets this field, so
+        -- every store but 'other' writes 0 exactly as before. The storeless
+        -- store is the one that scans its own hand-made rows, and stripping
+        -- the mark there would take away their delete button forever.
+        manual           = excluded.manual,
+        launch_exe       = COALESCE(excluded.launch_exe, games.launch_exe),
+        launch_args      = COALESCE(excluded.launch_args, games.launch_args),
         last_seen        = excluded.last_seen
     `)
 
@@ -292,6 +378,9 @@ export class GameRepository {
           lastPlayed: game.lastPlayed ?? null,
           launchId: game.launchId ?? null,
           sharedOrFree: game.sharedOrFree === true ? 1 : 0,
+          manual: game.manual === true ? 1 : 0,
+          launchExe: game.launchExe ?? null,
+          launchArgs: game.launchArgs === undefined ? null : JSON.stringify(game.launchArgs),
           now
         })
       }

@@ -196,6 +196,9 @@ contextBridge.exposeInMainWorld('arcadia', {
   // checks that the dialog opens, validates and submits.
   addManualGame: async () => ({ ok: true, id: 'ea:manual-added-by-hand' }),
   removeManualGame: async () => ({ ok: true }),
+  // The smoke test does not open the file dialog; a closed one is the safe
+  // default, same reasoning as stubArcadia in test/renderer/fixtures.tsx.
+  pickExecutable: async () => ({ ok: false }),
   reportBrokenArtwork: async () => undefined,
   // No scan is running: the stub's library is already complete, and a true
   // here would put the "searching…" hint on screen in place of the tiles

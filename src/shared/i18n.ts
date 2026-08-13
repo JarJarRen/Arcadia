@@ -86,6 +86,13 @@ export interface Strings {
     idHint: string
     submit: string
     cancel: string
+    /** The storeless case: the program to start, and its arguments. */
+    executableLabel: string
+    executableHint: string
+    browse: string
+    noExecutable: string
+    argumentsLabel: string
+    argumentsHint: string
   }
 
   /**
@@ -100,10 +107,18 @@ export interface Strings {
     intro: string
     firstRunHint: string
     storesTitle: string
+    /** Label of the second tab; the first reuses storesTitle. */
+    tabKeys: string
+    /** Accessible name for the tablist itself. */
+    tabsLabel: string
+    /** Says the store ticks are already saved, which the Save button implies otherwise. */
+    storesApplyAtOnce: string
     storesHint: string
     storeChecking: string
     storeDetected: string
     storeNotFound: string
+    /** Accessible name and hover title for a store's detail button. */
+    storeDetails: (store: string) => string
     microsoftSignIn: string
     /** Shown on the sign-in button itself while the device code is being requested, so a second click cannot start a second flow before the first has anything to show for it. */
     microsoftSigningIn: string
@@ -160,6 +175,8 @@ export interface Strings {
     removeFavorite: string
     sharedOrFree: string
     sharedOrFreeTitle: string
+    /** A storeless game whose program is no longer where it was. */
+    fileNotFound: string
   }
 
   storeSwitch: {
@@ -240,6 +257,14 @@ export interface Strings {
     databaseUnusable: (detail: string) => string
     /** e.g. "The offer could not be opened: …" */
     claimFailed: (reason: string) => string
+    executableNotAbsolute: string
+    executableUnsupported: string
+    executableMissing: (path: string) => string
+    shortcutUnreadable: string
+    executableRequired: string
+    executableNotAllowed: string
+    /** The program picker itself failed to open — a destroyed window, for one. */
+    executablePickFailed: (detail: string) => string
   }
 
   freebies: {
@@ -253,6 +278,13 @@ export interface Strings {
     upcomingHeading: string
     /** Shown in place of the list when there is nothing free anywhere. */
     empty: string
+    /**
+     * Shown when the controls emptied a list that is not itself empty.
+     *
+     * Distinct from `empty` on purpose: that one is a claim about the world,
+     * this one is a claim about what was asked for.
+     */
+    noMatches: string
     /** Shown when every source failed and there is no cache either. */
     unavailable: string
     refresh: string
@@ -343,6 +375,14 @@ export interface Strings {
       missingXuid: string
       catalogFailed: (reason: string) => string
     }
+    other: {
+      /** Shown under the store's checkbox in the configuration screen. */
+      handAdded: string
+      noExecutable: (name: string) => string
+      fileMissing: (path: string) => string
+      nothingToInstall: string
+      notLaunchable: (name: string) => string
+    }
   }
 }
 
@@ -397,9 +437,7 @@ const en: Strings = {
   addDialog: {
     label: 'Add a game by hand',
     title: 'Add a game',
-    hint:
-      'For games no store reports — EA only lists what has been installed on ' +
-      'this machine.',
+    hint: 'For games no store reports, and for programs that belong to no store at all.',
     nameLabel: 'Name',
     storeLabel: 'Store',
     noStores:
@@ -410,7 +448,14 @@ const en: Strings = {
       'Leave empty if you do not know it. The entry then gets artwork and a ' +
       'description, but cannot be launched.',
     submit: 'Add',
-    cancel: 'Cancel'
+    cancel: 'Cancel',
+    executableLabel: 'Program',
+    executableHint:
+      'The program that starts the game. A desktop shortcut works too — it is followed to the program it points at.',
+    browse: 'Browse…',
+    noExecutable: 'No program chosen yet.',
+    argumentsLabel: 'Arguments (optional)',
+    argumentsHint: 'Passed to the program as they are. Put a value with spaces in "quotes".'
   },
 
   setup: {
@@ -424,6 +469,9 @@ const en: Strings = {
       'You will only be asked once. The gear in the toolbar reopens this at ' +
       'any time.',
     storesTitle: 'Stores',
+    tabKeys: 'API keys',
+    tabsLabel: 'Configuration sections',
+    storesApplyAtOnce: 'Changes here apply at once.',
     storesHint:
       'Only the ticked stores are searched, and only they appear in the ' +
       'store filter. Games from a store you switch off are hidden, not ' +
@@ -431,6 +479,7 @@ const en: Strings = {
     storeChecking: 'checking…',
     storeDetected: 'found on this machine',
     storeNotFound: 'not found on this machine',
+    storeDetails: (store) => `Details about ${store}`,
     microsoftSignIn: 'Connect a Microsoft account',
     microsoftSigningIn: 'Connecting…',
     microsoftSignOut: 'Disconnect',
@@ -486,7 +535,8 @@ const en: Strings = {
     addFavorite: 'Mark as favourite',
     removeFavorite: 'Remove favourite',
     sharedOrFree: 'Shared/Free',
-    sharedOrFreeTitle: 'Not licensed to your account'
+    sharedOrFreeTitle: 'Not licensed to your account',
+    fileNotFound: 'Program not found'
   },
 
   storeSwitch: {
@@ -569,7 +619,15 @@ const en: Strings = {
     databaseUnusable: (detail) =>
       `The database could not be opened (${detail}). Arcadia is running, but ` +
       'nothing it finds will be kept when you close it.',
-    claimFailed: (reason) => `The offer could not be opened: ${reason}`
+    claimFailed: (reason) => `The offer could not be opened: ${reason}`,
+    executableNotAbsolute: 'Choose a program by its full path.',
+    executableUnsupported:
+      'Choose a program (.exe). Batch files are not supported, because running one needs a command interpreter.',
+    executableMissing: (path) => `There is no file at ${path}.`,
+    shortcutUnreadable: 'That shortcut could not be read. Choose the program itself instead.',
+    executableRequired: 'Choose the program that starts this game.',
+    executableNotAllowed: 'Only a game without a store is started from a program on this computer.',
+    executablePickFailed: (detail) => `The program picker could not be opened: ${detail}`
   },
 
   freebies: {
@@ -579,6 +637,7 @@ const en: Strings = {
     currentHeading: 'Free to keep',
     upcomingHeading: 'Coming soon',
     empty: 'Nothing is free to keep in your stores right now.',
+    noMatches: 'Nothing here matches what you are looking for.',
     unavailable: 'The free-games lists could not be reached.',
     refresh: 'Refresh',
     refreshing: 'Refreshing…',
@@ -699,6 +758,13 @@ const en: Strings = {
         'Xbox Live did not return a player ID for this account, so the title history ' +
         'cannot be read.',
       catalogFailed: (reason) => `The Microsoft Store catalogue could not be read: ${reason}`
+    },
+    other: {
+      handAdded: 'Games you add by hand. Nothing is detected automatically.',
+      noExecutable: (name) => `${name} has no program to start.`,
+      fileMissing: (path) => `The program is no longer there: ${path}`,
+      nothingToInstall: 'This game was added by hand. There is nothing to install.',
+      notLaunchable: (name) => `${name} is started directly, not through a store.`
     }
   }
 }
@@ -761,9 +827,7 @@ const de: Strings = {
   addDialog: {
     label: 'Spiel von Hand hinzufügen',
     title: 'Spiel hinzufügen',
-    hint:
-      'Für Spiele, die kein Store meldet — EA listet nur, was auf diesem ' +
-      'Rechner installiert war.',
+    hint: 'Für Spiele, die kein Store meldet, und für Programme, die zu gar keinem Store gehören.',
     nameLabel: 'Name',
     storeLabel: 'Store',
     noStores:
@@ -774,7 +838,15 @@ const de: Strings = {
       'Leer lassen, wenn du sie nicht kennst. Der Eintrag bekommt dann Bild ' +
       'und Beschreibung, lässt sich aber nicht starten.',
     submit: 'Hinzufügen',
-    cancel: 'Abbrechen'
+    cancel: 'Abbrechen',
+    executableLabel: 'Programm',
+    executableHint:
+      'Das Programm, das das Spiel startet. Eine Verknüpfung vom Desktop geht auch — sie wird zum Programm dahinter aufgelöst.',
+    browse: 'Durchsuchen…',
+    noExecutable: 'Noch kein Programm gewählt.',
+    argumentsLabel: 'Argumente (optional)',
+    argumentsHint:
+      'Werden unverändert an das Programm übergeben. Werte mit Leerzeichen in "Anführungszeichen" setzen.'
   },
 
   setup: {
@@ -788,6 +860,9 @@ const de: Strings = {
       'Du wirst nur einmal gefragt. Das Zahnrad in der Leiste öffnet das ' +
       'hier jederzeit wieder.',
     storesTitle: 'Stores',
+    tabKeys: 'API-Schlüssel',
+    tabsLabel: 'Bereiche der Konfiguration',
+    storesApplyAtOnce: 'Änderungen hier wirken sofort.',
     storesHint:
       'Nur die angehakten Stores werden durchsucht, und nur sie erscheinen ' +
       'im Store-Filter. Spiele eines abgeschalteten Stores werden ' +
@@ -796,6 +871,7 @@ const de: Strings = {
     storeChecking: 'wird geprüft …',
     storeDetected: 'auf diesem Rechner gefunden',
     storeNotFound: 'auf diesem Rechner nicht gefunden',
+    storeDetails: (store) => `Details zu ${store}`,
     microsoftSignIn: 'Microsoft-Konto verbinden',
     microsoftSigningIn: 'Verbindung wird hergestellt…',
     microsoftSignOut: 'Trennen',
@@ -853,7 +929,8 @@ const de: Strings = {
     addFavorite: 'Als Favorit markieren',
     removeFavorite: 'Favorit entfernen',
     sharedOrFree: 'Geteilt/Gratis',
-    sharedOrFreeTitle: 'Nicht deinem Konto lizenziert'
+    sharedOrFreeTitle: 'Nicht deinem Konto lizenziert',
+    fileNotFound: 'Programm nicht gefunden'
   },
 
   storeSwitch: {
@@ -936,7 +1013,17 @@ const de: Strings = {
     databaseUnusable: (detail) =>
       `Die Datenbank konnte nicht geöffnet werden (${detail}). Arcadia läuft, ` +
       'aber nichts davon wird beim Beenden gespeichert.',
-    claimFailed: (reason) => `Das Angebot konnte nicht geöffnet werden: ${reason}`
+    claimFailed: (reason) => `Das Angebot konnte nicht geöffnet werden: ${reason}`,
+    executableNotAbsolute: 'Wähle ein Programm über seinen vollständigen Pfad.',
+    executableUnsupported:
+      'Wähle ein Programm (.exe). Batch-Dateien werden nicht unterstützt, weil dafür ein Kommandozeilen-Interpreter nötig wäre.',
+    executableMissing: (path) => `Unter ${path} liegt keine Datei.`,
+    shortcutUnreadable:
+      'Diese Verknüpfung ließ sich nicht lesen. Wähle stattdessen das Programm selbst.',
+    executableRequired: 'Wähle das Programm, das dieses Spiel startet.',
+    executableNotAllowed:
+      'Nur ein Spiel ohne Store wird über ein Programm auf diesem Rechner gestartet.',
+    executablePickFailed: (detail) => `Die Programmauswahl konnte nicht geöffnet werden: ${detail}`
   },
 
   freebies: {
@@ -946,6 +1033,7 @@ const de: Strings = {
     currentHeading: 'Dauerhaft gratis',
     upcomingHeading: 'Demnächst',
     empty: 'In deinen Stores ist gerade nichts dauerhaft gratis.',
+    noMatches: 'Hier passt nichts zu dem, wonach du suchst.',
     unavailable: 'Die Gratis-Listen waren nicht erreichbar.',
     refresh: 'Aktualisieren',
     refreshing: 'Wird aktualisiert…',
@@ -1074,6 +1162,14 @@ const de: Strings = {
         'Spielverlauf nicht gelesen werden.',
       catalogFailed: (reason) =>
         `Der Microsoft-Store-Katalog konnte nicht gelesen werden: ${reason}`
+    },
+    other: {
+      handAdded: 'Spiele, die du von Hand hinzufügst. Es wird nichts automatisch erkannt.',
+      noExecutable: (name) => `${name} hat kein Programm zum Starten.`,
+      fileMissing: (path) => `Das Programm ist nicht mehr da: ${path}`,
+      nothingToInstall:
+        'Dieses Spiel wurde von Hand hinzugefügt. Es gibt nichts zu installieren.',
+      notLaunchable: (name) => `${name} wird direkt gestartet, nicht über einen Store.`
     }
   }
 }

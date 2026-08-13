@@ -25,6 +25,7 @@ const api: ArcadiaApi = {
   saveEnvConfig: (values) => ipcRenderer.invoke(IPC.envConfigSave, values),
   addManualGame: (game) => ipcRenderer.invoke(IPC.libraryAddManual, game),
   removeManualGame: (gameId) => ipcRenderer.invoke(IPC.libraryRemoveManual, gameId),
+  pickExecutable: () => ipcRenderer.invoke(IPC.libraryPickExecutable),
   reportBrokenArtwork: (mergeKey, kind) => ipcRenderer.invoke(IPC.artworkBroken, mergeKey, kind),
   isScanning: () => ipcRenderer.invoke(IPC.libraryScanState),
   getStartupNotice: () => ipcRenderer.invoke(IPC.startupNotice),

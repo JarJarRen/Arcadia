@@ -15,6 +15,11 @@ CREATE TABLE IF NOT EXISTS games (
   install_size     INTEGER,
   playtime_minutes INTEGER,
   launch_id        TEXT,
+  -- The program a storeless game starts, and its arguments as a JSON array.
+  -- Only the \`other\` store fills these; every adapter-backed game launches
+  -- through a URI or a store command instead.
+  launch_exe       TEXT,
+  launch_args      TEXT,
   -- Playable, but not licensed to this account. See shared/types.ts.
   shared_or_free   INTEGER NOT NULL DEFAULT 0,
   -- Added by hand for a game no adapter can see. EA used to be the reason:
@@ -166,7 +171,12 @@ const MIGRATIONS: ReadonlyArray<{ table: string; column: string; definition: str
   { table: 'games', column: 'shared_or_free', definition: 'INTEGER NOT NULL DEFAULT 0' },
   // Added by hand, not found by any adapter. Marks the rows that may be
   // deleted again, and the ones a scan must leave alone.
-  { table: 'games', column: 'manual', definition: 'INTEGER NOT NULL DEFAULT 0' }
+  { table: 'games', column: 'manual', definition: 'INTEGER NOT NULL DEFAULT 0' },
+  // The program a storeless game starts. Absent for every other store.
+  { table: 'games', column: 'launch_exe', definition: 'TEXT' },
+  // Its arguments, as a JSON array. Stored already split, so nothing is
+  // re-parsed — and never handed to a shell.
+  { table: 'games', column: 'launch_args', definition: 'TEXT' }
 ]
 
 function migrate(db: DatabaseSync): void {
@@ -363,6 +373,56 @@ function setAside(path: string, stamp: string): string {
 }
 
 /**
+ * Adds `other` to a store choice made before that store existed.
+ *
+ * `enabled-stores` holds an explicit list. Anyone who had ever opened the
+ * store settings therefore had a saved list that could not contain `other`,
+ * so the new store would have arrived switched **off** — and since the add
+ * dialog only offers enabled stores, the feature would have been invisible
+ * to exactly the people who had configured the app.
+ *
+ * Deliberately **not** routed through `runOnce`: that records a repair only
+ * when it changed something, so a user who later switched the storeless
+ * store back off would have it switched on again at every start, forever.
+ * The marker here is written unconditionally, which is what makes this run
+ * exactly once over the life of a database.
+ *
+ * An empty value is left alone. It means "no store at all", which is a real
+ * choice rather than an absent one, and adding a store to it would override
+ * a decision rather than complete one.
+ *
+ * The comma handling is deliberately not `parseEnabledStores` /
+ * `serializeEnabledStores` from shared/stores.ts, though they parse the same
+ * setting. Those filter the value against the **running** version's
+ * `STORE_IDS`, which is right for reading a setting and wrong here: this walks
+ * over databases written by other versions, and an id this build has never
+ * heard of would be silently dropped from a list it was only meant to append
+ * one entry to.
+ */
+function migrateEnabledStoresForOther(db: DatabaseSync): void {
+  const MARKER = 'migrate:enabled-stores-other'
+  if (db.prepare('SELECT value FROM settings WHERE key = ?').get(MARKER) !== undefined) return
+
+  const row = db.prepare("SELECT value FROM settings WHERE key = 'enabled-stores'").get() as
+    | { value: string }
+    | undefined
+
+  if (row !== undefined && row.value !== '') {
+    const stores = row.value
+      .split(',')
+      .map((part) => part.trim())
+      .filter((part) => part !== '')
+    if (!stores.includes('other')) {
+      db.prepare("UPDATE settings SET value = ? WHERE key = 'enabled-stores'").run(
+        [...stores, 'other'].join(',')
+      )
+    }
+  }
+
+  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(MARKER, 'done')
+}
+
+/**
  * Opens and prepares a database, leaving no handle behind if it fails.
  *
  * `new DatabaseSync` succeeds even on a corrupt file — the throw comes later,
@@ -380,6 +440,7 @@ function prepare(path: string): DatabaseSync {
     db.exec(SCHEMA)
     migrate(db)
     backfillMetadataText(db)
+    migrateEnabledStoresForOther(db)
     runOnce(db, 'repair:hero-gaps', repairHeroGaps)
     return db
   } catch (error) {
