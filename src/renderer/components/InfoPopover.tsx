@@ -48,13 +48,14 @@ export function InfoPopover({ label, items }: Props): ReactElement | null {
     /**
      * Deliberately not `useDismiss`, and this is the whole reason.
      *
-     * That hook also closes on Escape, from a listener on `document` — and
-     * `SetupDialog` has one there too, which closes the configuration
-     * screen. Both would fire, so dismissing this panel would take the
-     * screen with it, and `stopPropagation` between two document-level
-     * listeners cannot prevent that. Escape is handled on the panel instead,
-     * where stopping it actually works. Only the outside-press half lives
-     * here, and that collides with nothing.
+     * That hook also closes on Escape, from a listener on `document`, and
+     * `SetupDialog` closes the configuration screen from one on `window`.
+     * Both sit above this panel in the bubble path, so both would fire and
+     * dismissing this panel would take the screen with it — and between two
+     * listeners on the same target, `stopPropagation` cannot decide which
+     * wins. Escape is handled on the panel element instead, below both of
+     * them, where stopping it genuinely prevents either from seeing the key.
+     * Only the outside-press half lives here, and that collides with nothing.
      *
      * `mousedown` rather than `click`, matching useDismiss: the panel must
      * be gone before whatever sits underneath it reacts.
