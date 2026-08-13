@@ -278,6 +278,13 @@ export interface Strings {
     upcomingHeading: string
     /** Shown in place of the list when there is nothing free anywhere. */
     empty: string
+    /**
+     * Shown when the controls emptied a list that is not itself empty.
+     *
+     * Distinct from `empty` on purpose: that one is a claim about the world,
+     * this one is a claim about what was asked for.
+     */
+    noMatches: string
     /** Shown when every source failed and there is no cache either. */
     unavailable: string
     refresh: string
@@ -630,6 +637,7 @@ const en: Strings = {
     currentHeading: 'Free to keep',
     upcomingHeading: 'Coming soon',
     empty: 'Nothing is free to keep in your stores right now.',
+    noMatches: 'Nothing here matches what you are looking for.',
     unavailable: 'The free-games lists could not be reached.',
     refresh: 'Refresh',
     refreshing: 'Refreshing…',
@@ -1025,6 +1033,7 @@ const de: Strings = {
     currentHeading: 'Dauerhaft gratis',
     upcomingHeading: 'Demnächst',
     empty: 'In deinen Stores ist gerade nichts dauerhaft gratis.',
+    noMatches: 'Hier passt nichts zu dem, wonach du suchst.',
     unavailable: 'Die Gratis-Listen waren nicht erreichbar.',
     refresh: 'Aktualisieren',
     refreshing: 'Wird aktualisiert…',

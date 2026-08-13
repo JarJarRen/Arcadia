@@ -1,8 +1,11 @@
 import { useState, type ReactElement } from 'react'
 import type { Freebie, FreebieKind } from '@shared/freebies'
+import type { StoreId } from '@shared/types'
 import { t } from '@shared/i18n'
+import { filterFreebies } from '../filter'
 import { useFreebies } from '../hooks/useFreebies'
 import { FreebieCard } from '../components/FreebieCard'
+import { FilterControls } from '../components/FilterControls'
 import { SettingsMenu } from '../components/SettingsMenu'
 
 type KindFilter = 'all' | FreebieKind
@@ -66,25 +69,46 @@ interface Props {
   /** Reopens the configuration screen — the gear needs this page's own
       copy since the page covers the toolbar that would otherwise host it. */
   onOpenSetup: () => void
+  /** The library's search text. One filter serves both pages. */
+  search: string
+  /** The stores to show, ORed. Empty means every store. */
+  stores: StoreId[]
+  /** The stores switched on in the configuration screen. */
+  availableStores: StoreId[]
+  onSearchChange: (search: string) => void
+  onStoresChange: (stores: StoreId[]) => void
 }
 
-export function FreeGames({ onClose, onOpenSetup }: Props): ReactElement {
+export function FreeGames({
+  onClose,
+  onOpenSetup,
+  search,
+  stores,
+  availableStores,
+  onSearchChange,
+  onStoresChange
+}: Props): ReactElement {
   const { list, loading, error, refresh, claim } = useFreebies()
   const [kind, setKind] = useState<KindFilter>('all')
   const now = Date.now()
   const refreshLabel = loading ? t().freebies.refreshing : t().freebies.refresh
 
-  const current = keepKind(list.current, kind)
-  const upcoming = keepKind(list.upcoming, kind)
+  const current = filterFreebies(keepKind(list.current, kind), search, stores)
+  const upcoming = filterFreebies(keepKind(list.upcoming, kind), search, stores)
 
   // Nothing found and nothing fetched are different states. The first is
   // news about the world; the second is news about Arcadia.
   const unreachable = list.fetchedAt === undefined && list.failures.length > 0
-  // Unfiltered: `empty` is a claim about the world ("nothing is free"), and
-  // a chip is a claim about what the user asked to see. Deriving this from
+  // Unfiltered: `empty` is a claim about the world ("nothing is free"), while
+  // every control on this page — the chip, the search, the store filter —
+  // narrows what was asked for instead. Deriving this from
   // `current`/`upcoming` after the DLC chip narrows five Epic games to zero
   // DLC rows would say the first thing while meaning the second.
   const empty = list.current.length === 0 && list.upcoming.length === 0
+  // The other half of that split. Without it, a search matching nothing would
+  // claim nothing is free — and the chip, which could always narrow to zero,
+  // would leave the page silently blank as it did before.
+  const narrowedToNothing = !empty && current.length === 0 && upcoming.length === 0
 
   // One handler shared by both sections, rather than an inline arrow
   // repeated per Section: the two would otherwise be indistinguishable to
@@ -94,15 +118,17 @@ export function FreeGames({ onClose, onOpenSetup }: Props): ReactElement {
   return (
     <section className="freebies">
       <header className="freebies__header">
-        {/* First in reading order, same shape as detail__back, so it reads
-            as "go back" rather than "dismiss" — a bare × gave no hint that
-            this returns to the library rather than closing something. */}
-        {/* No title: the toolbar's aria-label + title pairing is for
-            icon-only controls. Here the words are already on screen, and a
-            tooltip repeating them just covers them up on hover. */}
-        <button type="button" className="button freebies__back" onClick={onClose}>
-          {t().freebies.back}
-        </button>
+        {/* First, and in the same order as the library toolbar: switching
+            pages must not move the control under the cursor. Only these two
+            have to line up — everything after them is free to differ, which
+            is what lets this page keep its own title, chips and refresh. */}
+        <FilterControls
+          search={search}
+          stores={stores}
+          available={availableStores}
+          onSearchChange={onSearchChange}
+          onStoresChange={onStoresChange}
+        />
         <h2>{t().freebies.title}</h2>
         <div className="freebies__chips" role="group">
           {CHIPS.map((value) => (
@@ -143,6 +169,13 @@ export function FreeGames({ onClose, onOpenSetup }: Props): ReactElement {
             )}
           </span>
         )}
+        {/* Last rather than first: the search box and the store filter have
+            to start this row to line up with the library's. The label still
+            says where it goes, which is what stopped a bare × from reading
+            as "dismiss" when it led the row. */}
+        <button type="button" className="button freebies__back" onClick={onClose}>
+          {t().freebies.back}
+        </button>
         {/* The gear the library toolbar renders — this page covers the
             toolbar while it is open, so without its own copy the
             configuration screen and the language switch are unreachable
@@ -171,6 +204,9 @@ export function FreeGames({ onClose, onOpenSetup }: Props): ReactElement {
             explanations for the same bare page. */}
         {!unreachable && empty && !loading && error === undefined && (
           <p className="freebies__empty">{t().freebies.empty}</p>
+        )}
+        {!unreachable && narrowedToNothing && !loading && error === undefined && (
+          <p className="freebies__empty">{t().freebies.noMatches}</p>
         )}
 
         <Section

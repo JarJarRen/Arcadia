@@ -977,4 +977,30 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Free now' })).toBeTruthy()
     consoleError.mockRestore()
   })
+
+  it('carries the library search into the free-games page', async () => {
+    // One filter, two pages. The box does not reset when the page changes,
+    // and it does not move either — both headers render the same component
+    // first.
+    stubArcadia({
+      getGames: async () => [TF2, PORTAL],
+      getFreebies: async () => ({ current: [freebie()], upcoming: [], failures: [] })
+    })
+    render(<App />)
+
+    const search = await screen.findByPlaceholderText(t().toolbar.searchPlaceholder)
+    fireEvent.change(search, { target: { value: 'ghost' } })
+
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(t().freebies.title, 'i') }))
+
+    await waitFor(() => expect(screen.getByText('Ghostrunner')).toBeDefined())
+
+    // Scoped to this page's own header: the library toolbar stays mounted
+    // behind the overlay, so a search across the whole document would find
+    // its box still holding the text and pass whether or not the value
+    // reached here.
+    const header = document.querySelector('.freebies__header')!
+    const box = header.querySelector('.toolbar__search') as HTMLInputElement
+    expect(box.value).toBe('ghost')
+  })
 })

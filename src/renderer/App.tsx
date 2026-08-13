@@ -414,7 +414,15 @@ export function App(): ReactElement {
   const freebiesOverlay =
     overlay?.kind === 'freebies' ? (
       <div className="detailoverlay">
-        <FreeGames onClose={close} onOpenSetup={() => void openSetup()} />
+        <FreeGames
+          onClose={close}
+          onOpenSetup={() => void openSetup()}
+          search={filter.search}
+          stores={filter.stores}
+          availableStores={enabledStores}
+          onSearchChange={(search) => setFilter({ ...filter, search })}
+          onStoresChange={(stores) => setFilter({ ...filter, stores })}
+        />
       </div>
     ) : null
 
