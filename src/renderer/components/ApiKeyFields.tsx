@@ -70,6 +70,10 @@ export function ApiKeyFields({
 }: Props): ReactElement {
   return (
     <>
+      {/* Sits here rather than above the tabs: "all three are optional" is
+          about these three keys, and means nothing beside the store list. */}
+      <p className="modal__hint">{t().setup.intro}</p>
+
       {fields().map((field, index) => (
         <label className="modal__field" key={field.key}>
           <span className="modal__label">{field.label}</span>

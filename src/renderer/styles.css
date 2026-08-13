@@ -896,6 +896,27 @@ button:focus-visible {
   font-size: 12px;
 }
 
+.modal__tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal__tab {
+  padding: 8px 14px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--text-dim);
+  font: inherit;
+  cursor: pointer;
+}
+
+.modal__tab--active {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+}
+
 .modal__error {
   margin: 0;
   color: #ffb4b4;

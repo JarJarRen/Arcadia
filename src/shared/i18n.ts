@@ -107,6 +107,12 @@ export interface Strings {
     intro: string
     firstRunHint: string
     storesTitle: string
+    /** Label of the second tab; the first reuses storesTitle. */
+    tabKeys: string
+    /** Accessible name for the tablist itself. */
+    tabsLabel: string
+    /** Says the store ticks are already saved, which the Save button implies otherwise. */
+    storesApplyAtOnce: string
     storesHint: string
     storeChecking: string
     storeDetected: string
@@ -456,6 +462,9 @@ const en: Strings = {
       'You will only be asked once. The gear in the toolbar reopens this at ' +
       'any time.',
     storesTitle: 'Stores',
+    tabKeys: 'API keys',
+    tabsLabel: 'Configuration sections',
+    storesApplyAtOnce: 'Changes here apply at once.',
     storesHint:
       'Only the ticked stores are searched, and only they appear in the ' +
       'store filter. Games from a store you switch off are hidden, not ' +
@@ -843,6 +852,9 @@ const de: Strings = {
       'Du wirst nur einmal gefragt. Das Zahnrad in der Leiste öffnet das ' +
       'hier jederzeit wieder.',
     storesTitle: 'Stores',
+    tabKeys: 'API-Schlüssel',
+    tabsLabel: 'Bereiche der Konfiguration',
+    storesApplyAtOnce: 'Änderungen hier wirken sofort.',
     storesHint:
       'Nur die angehakten Stores werden durchsucht, und nur sie erscheinen ' +
       'im Store-Filter. Spiele eines abgeschalteten Stores werden ' +
