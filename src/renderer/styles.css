@@ -1033,6 +1033,35 @@ button:focus-visible {
   right: 0;
 }
 
+/* The "i" beside a store's status. Round and small because it sits inside a
+   line of text rather than in a toolbar. */
+.button--info {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 11px;
+  line-height: 1;
+}
+
+/* Wider than the toolbar's menus and free to wrap: this holds sentences,
+   not menu items. */
+.popover__panel--info {
+  max-width: 320px;
+  white-space: normal;
+}
+
+.popover__notes {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .popover__label {
   margin: 4px 8px 6px;
   color: var(--text-dim);
