@@ -3,7 +3,7 @@ import { t } from '@shared/i18n'
 import type { StoreId } from '@shared/types'
 import type { LibraryFilter, SharedFilter, SortDirection, SortKey, ViewMode } from '../filter'
 import { SettingsMenu } from './SettingsMenu'
-import { StoreFilterMenu } from './StoreFilterMenu'
+import { FilterControls } from './FilterControls'
 
 interface Props {
   filter: LibraryFilter
@@ -40,18 +40,12 @@ export function LibraryToolbar(props: Props): ReactElement {
 
   return (
     <header className="toolbar">
-      <input
-        type="search"
-        className="toolbar__search"
-        placeholder={t().toolbar.searchPlaceholder}
-        value={filter.search}
-        onChange={(event) => onFilterChange({ ...filter, search: event.target.value })}
-      />
-
-      <StoreFilterMenu
+      <FilterControls
+        search={filter.search}
         stores={filter.stores}
         available={props.availableStores}
-        onChange={(stores) => onFilterChange({ ...filter, stores })}
+        onSearchChange={(search) => onFilterChange({ ...filter, search })}
+        onStoresChange={(stores) => onFilterChange({ ...filter, stores })}
       />
 
       <select
