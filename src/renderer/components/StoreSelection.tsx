@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactElement } from 'react'
 import { STORE_IDS, type AvailabilityResult, type StoreId } from '@shared/types'
 import { t } from '@shared/i18n'
 import { STORE_LABELS } from './storeLabels'
+import { InfoPopover } from './InfoPopover'
 
 interface Props {
   enabled: StoreId[]
@@ -110,110 +111,131 @@ export function StoreSelection({ enabled, onChange }: Props): ReactElement {
       <legend className="modal__label">{t().setup.storesTitle}</legend>
       <p className="modal__sublabel">{t().setup.storesHint}</p>
 
-      {STORE_IDS.map((id) => (
-        <div key={id}>
-          <label className="modal__toggle modal__toggle--store">
-            <input
-              type="checkbox"
-              checked={enabled.includes(id)}
-              onChange={() => toggle(id)}
-            />
-            <span>
-              {STORE_LABELS[id] ?? id}
-              <span className="modal__sublabel">{note(availability, id)}</span>
+      {STORE_IDS.map((id) => {
+        const { status, detail } = storeNote(availability, id)
+        const name = STORE_LABELS[id] ?? id
+
+        return (
+          <div key={id}>
+            {/* The detail button is a sibling of the label, never a child: a
+                <button> inside a <label> joins the label's click target, and
+                pressing it would toggle the store off. */}
+            <span className="modal__toggle--row">
+              <label className="modal__toggle modal__toggle--store">
+                <input
+                  type="checkbox"
+                  checked={enabled.includes(id)}
+                  onChange={() => toggle(id)}
+                />
+                <span>
+                  {name}
+                  <span className="modal__sublabel">{status}</span>
+                </span>
+              </label>
+              <InfoPopover label={t().setup.storeDetails(name)} items={detail} />
             </span>
-          </label>
-          {id === 'microsoft' && (
-            <span className="modal__sublabel">
-              {auth.signedIn ? (
-                <>
-                  {t().setup.microsoftSignedInAs(auth.gamertag ?? '')}{' '}
+            {id === 'microsoft' && (
+              <span className="modal__sublabel">
+                {auth.signedIn ? (
+                  <>
+                    {t().setup.microsoftSignedInAs(auth.gamertag ?? '')}{' '}
+                    <button
+                      type="button"
+                      className="button button--link"
+                      onClick={() => {
+                        setPending(undefined)
+                        void window.arcadia.signOutOfMicrosoft()
+                      }}
+                    >
+                      {t().setup.microsoftSignOut}
+                    </button>
+                  </>
+                ) : pending === undefined ? (
                   <button
                     type="button"
                     className="button button--link"
+                    disabled={signingIn}
                     onClick={() => {
-                      setPending(undefined)
-                      void window.arcadia.signOutOfMicrosoft()
+                      setAuthError(undefined)
+                      setSigningIn(true)
+                      window.arcadia
+                        .signInToMicrosoft()
+                        .then((started) => {
+                          if (started.ok && started.userCode !== undefined && started.verificationUri !== undefined) {
+                            setPending({
+                              userCode: started.userCode,
+                              verificationUri: started.verificationUri
+                            })
+                          } else {
+                            setAuthError(started.error)
+                          }
+                        })
+                        .catch((error: unknown) =>
+                          setAuthError(error instanceof Error ? error.message : String(error))
+                        )
+                        .finally(() => setSigningIn(false))
                     }}
                   >
-                    {t().setup.microsoftSignOut}
+                    {signingIn ? t().setup.microsoftSigningIn : t().setup.microsoftSignIn}
                   </button>
-                </>
-              ) : pending === undefined ? (
-                <button
-                  type="button"
-                  className="button button--link"
-                  disabled={signingIn}
-                  onClick={() => {
-                    setAuthError(undefined)
-                    setSigningIn(true)
-                    window.arcadia
-                      .signInToMicrosoft()
-                      .then((started) => {
-                        if (started.ok && started.userCode !== undefined && started.verificationUri !== undefined) {
-                          setPending({
-                            userCode: started.userCode,
-                            verificationUri: started.verificationUri
-                          })
-                        } else {
-                          setAuthError(started.error)
-                        }
-                      })
-                      .catch((error: unknown) =>
-                        setAuthError(error instanceof Error ? error.message : String(error))
-                      )
-                      .finally(() => setSigningIn(false))
-                  }}
-                >
-                  {signingIn ? t().setup.microsoftSigningIn : t().setup.microsoftSignIn}
-                </button>
-              ) : (
-                <>
-                  {t().setup.microsoftCodeHint(pending.userCode)}{' '}
-                  {/* An ordinary link: the window's open handler denies
-                      in-app navigation and hands the URL to the shell. */}
-                  <a
-                    className="modal__link"
-                    href={pending.verificationUri}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {t().setup.microsoftOpenLink}
-                  </a>
-                </>
-              )}
-              {authError !== undefined && <span className="modal__error">{authError}</span>}
-              {/* Where the system has no keyring the refresh token is
-                  written to the database as it is. Worth doing rather than
-                  refusing to store one at all — but not worth doing
-                  silently. */}
-              {!encrypted && (
-                <span className="modal__sublabel">{t().setup.microsoftNoEncryption}</span>
-              )}
-            </span>
-          )}
-        </div>
-      ))}
+                ) : (
+                  <>
+                    {t().setup.microsoftCodeHint(pending.userCode)}{' '}
+                    {/* An ordinary link: the window's open handler denies
+                        in-app navigation and hands the URL to the shell. */}
+                    <a
+                      className="modal__link"
+                      href={pending.verificationUri}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {t().setup.microsoftOpenLink}
+                    </a>
+                  </>
+                )}
+                {authError !== undefined && <span className="modal__error">{authError}</span>}
+                {/* Where the system has no keyring the refresh token is
+                    written to the database as it is. Worth doing rather than
+                    refusing to store one at all — but not worth doing
+                    silently. */}
+                {!encrypted && (
+                  <span className="modal__sublabel">{t().setup.microsoftNoEncryption}</span>
+                )}
+              </span>
+            )}
+          </div>
+        )
+      })}
     </fieldset>
   )
 }
 
 /**
- * What a row says about the store beneath its name.
+ * A store's status, and whatever else is worth saying about it.
  *
- * Limitations as well as the reason: that is how a Ubisoft user learns their
- * owned games come from a local cache without having to read the source.
+ * Split apart rather than joined into one string: the status is what the
+ * reader came for and stays on the row, while the detail — EA's four
+ * sentences about entitlement stores and registry trees, Microsoft's about
+ * playtime and install size — goes behind a button. Keeping the detail a
+ * list rather than joined prose is what lets the panel show one entry per
+ * point.
+ *
+ * An unavailable store's reason becomes a one-element list, so the panel has
+ * exactly one shape of content to render.
  */
-function note(
+function storeNote(
   availability: Record<string, AvailabilityResult> | undefined,
   id: StoreId
-): string {
-  if (availability === undefined) return t().setup.storeChecking
-  const result = availability[id]
-  if (result === undefined) return t().setup.storeChecking
-  if (!result.available) return result.reason ?? t().setup.storeNotFound
-  const limitations = result.limitations ?? []
-  return limitations.length === 0
-    ? t().setup.storeDetected
-    : `${t().setup.storeDetected} — ${limitations.join(' ')}`
+): { status: string; detail: string[] } {
+  const result = availability?.[id]
+  if (result === undefined) return { status: t().setup.storeChecking, detail: [] }
+
+  if (!result.available) {
+    return {
+      status: t().setup.storeNotFound,
+      detail: result.reason === undefined ? [] : [result.reason]
+    }
+  }
+
+  return { status: t().setup.storeDetected, detail: result.limitations ?? [] }
 }

@@ -180,4 +180,22 @@ describe('SetupDialog', () => {
     )
     expect(props.onClose).not.toHaveBeenCalled()
   })
+
+  it('stays open when Escape dismisses a store detail popover', async () => {
+    stubArcadia({
+      getStoreAvailability: async () => ({
+        ubisoft: { available: true, limitations: ['Owned games from a local cache.'] }
+      })
+    })
+    const props = renderSetup()
+
+    fireEvent.click(await screen.findByRole('button', { name: /details about ubisoft/i }))
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
+
+    // The panel closes; the configuration screen behind it does not. Both
+    // used to listen for Escape on document, which is why this is asserted
+    // against the real dialog rather than against a stub of it.
+    expect(screen.queryByText(/Owned games from a local cache\./)).toBeNull()
+    expect(props.onClose).not.toHaveBeenCalled()
+  })
 })

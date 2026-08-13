@@ -111,6 +111,8 @@ export interface Strings {
     storeChecking: string
     storeDetected: string
     storeNotFound: string
+    /** Accessible name and hover title for a store's detail button. */
+    storeDetails: (store: string) => string
     microsoftSignIn: string
     /** Shown on the sign-in button itself while the device code is being requested, so a second click cannot start a second flow before the first has anything to show for it. */
     microsoftSigningIn: string
@@ -461,6 +463,7 @@ const en: Strings = {
     storeChecking: 'checking…',
     storeDetected: 'found on this machine',
     storeNotFound: 'not found on this machine',
+    storeDetails: (store) => `Details about ${store}`,
     microsoftSignIn: 'Connect a Microsoft account',
     microsoftSigningIn: 'Connecting…',
     microsoftSignOut: 'Disconnect',
@@ -848,6 +851,7 @@ const de: Strings = {
     storeChecking: 'wird geprüft …',
     storeDetected: 'auf diesem Rechner gefunden',
     storeNotFound: 'auf diesem Rechner nicht gefunden',
+    storeDetails: (store) => `Details zu ${store}`,
     microsoftSignIn: 'Microsoft-Konto verbinden',
     microsoftSigningIn: 'Verbindung wird hergestellt…',
     microsoftSignOut: 'Trennen',

@@ -1217,6 +1217,13 @@ button:focus-visible {
   display: block;
 }
 
+/* Puts the detail button on the store's first line rather than under it. */
+.modal__toggle--row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
 /* The details page in grid mode, laid over the library.
  *
  * It covers rather than replaces, so the list underneath keeps its scroll
