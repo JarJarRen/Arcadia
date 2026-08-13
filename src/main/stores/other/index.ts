@@ -46,10 +46,14 @@ export class OtherAdapter implements StoreAdapter {
    * Every storeless row, with its install state re-derived from the disk.
    *
    * Rows whose program has gone are **returned**, marked uninstalled, rather
-   * than omitted. `upsertScan`'s mark-gone pass only touches rows absent from
-   * a scan, and it reports each such row as newly uninstalled — omitting them
-   * would announce the same transition on every scan from then on. Flipping
-   * `installed` through the upsert says it once.
+   * than omitted. Omitting them would leave `upsertScan`'s mark-gone pass to
+   * notice, and that pass knows only that a row vanished: it clears
+   * `installed` and stops there. Returning the row carries the rest of what is
+   * still true — the name, the program it points at, its folder — so the
+   * interface can say *which* program moved and offer to open the folder it
+   * left. `install_path` is also written through `COALESCE`, so a row that
+   * stopped appearing would keep whatever path it last had with nothing
+   * refreshing it.
    *
    * `manual` travels with each row. Without it the first scan would clear the
    * mark and take the delete button with it, leaving entries that could never

@@ -390,6 +390,14 @@ function setAside(path: string, stamp: string): string {
  * An empty value is left alone. It means "no store at all", which is a real
  * choice rather than an absent one, and adding a store to it would override
  * a decision rather than complete one.
+ *
+ * The comma handling is deliberately not `parseEnabledStores` /
+ * `serializeEnabledStores` from shared/stores.ts, though they parse the same
+ * setting. Those filter the value against the **running** version's
+ * `STORE_IDS`, which is right for reading a setting and wrong here: this walks
+ * over databases written by other versions, and an id this build has never
+ * heard of would be silently dropped from a list it was only meant to append
+ * one entry to.
  */
 function migrateEnabledStoresForOther(db: DatabaseSync): void {
   const MARKER = 'migrate:enabled-stores-other'

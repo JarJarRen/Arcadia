@@ -29,21 +29,19 @@ export type Platform =
   | 'cygwin'
   | 'netbsd'
 
-/** Extensions that cannot be spawned without a shell, or at all. */
-const REFUSED = new Set(['.bat', '.cmd', '.lnk'])
-
 /**
  * Checks a path without touching the disk.
  *
  * Existence is deliberately **not** checked here: that needs I/O, and this
  * runs in places that have none. The caller stats separately.
  *
- * On Windows the file must be a `.exe`. A `.lnk` is refused because `spawn`
- * cannot run one — it has to be resolved to its target first, which the
- * picker does, so anything still carrying that extension by the time it gets
- * here was never resolved. `.bat` and `.cmd` are refused because they need a
- * shell interpreter, and passing a user-supplied path through a shell is what
- * the argument array exists to avoid.
+ * On Windows the file must be a `.exe`, which refuses three kinds of path
+ * worth naming. A `.lnk` cannot be spawned at all — it has to be resolved to
+ * its target first, which the picker does, so anything still carrying that
+ * extension by the time it gets here was never resolved. `.bat` and `.cmd`
+ * need a shell interpreter, and passing a user-supplied path through a shell
+ * is what the argument array exists to avoid. Everything else is simply not a
+ * program.
  *
  * Away from Windows there is no meaningful extension rule, so only the
  * absolute-path requirement applies.
@@ -59,8 +57,10 @@ export function executableProblem(
 
   if (platform !== 'win32') return undefined
 
-  const extension = extensionOf(path)
-  if (REFUSED.has(extension) || extension !== '.exe') return 'unsupportedType'
+  // One check, not a list of refused extensions beside it: an allow-list of
+  // exactly `.exe` already excludes every one of them, and a second list would
+  // only be somewhere for the two to disagree.
+  if (extensionOf(path) !== '.exe') return 'unsupportedType'
   return undefined
 }
 
