@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import type { Freebie } from '@shared/freebies'
 import {
+  filterFreebies,
   filterGames,
   formatPlaytime,
   formatSize,
@@ -331,5 +333,52 @@ describe('formatSize', () => {
 
   it('returns undefined for a missing value', () => {
     expect(formatSize(undefined)).toBeUndefined()
+  })
+})
+
+describe('filterFreebies', () => {
+  function offer(overrides: Partial<Freebie> = {}): Freebie {
+    return {
+      id: 'epic:control',
+      storeId: 'epic',
+      title: 'Control',
+      kind: 'game',
+      source: 'epic',
+      claim: 'unclaimed',
+      ...overrides
+    }
+  }
+
+  const doom = offer({ id: 'steam:doom', storeId: 'steam', title: 'Doom' })
+
+  it('keeps everything when nothing is asked for', () => {
+    expect(filterFreebies([offer(), doom], '', [])).toHaveLength(2)
+  })
+
+  it('matches the title regardless of case', () => {
+    expect(filterFreebies([offer(), doom], 'CONTROL', []).map((r) => r.title)).toEqual(['Control'])
+  })
+
+  it('matches part of a title', () => {
+    expect(filterFreebies([offer({ title: 'The Witcher 3' })], 'witch', [])).toHaveLength(1)
+  })
+
+  it('ignores surrounding spaces in the query', () => {
+    expect(filterFreebies([offer()], '  control  ', [])).toHaveLength(1)
+  })
+
+  it('narrows to the chosen stores', () => {
+    expect(filterFreebies([offer(), doom], '', ['steam']).map((r) => r.title)).toEqual(['Doom'])
+  })
+
+  it('treats an empty store selection as every store', () => {
+    // The same rule LibraryFilter.stores already documents, so the control
+    // behaves identically on both pages.
+    expect(filterFreebies([offer(), doom], '', [])).toHaveLength(2)
+  })
+
+  it('applies both at once', () => {
+    const rows = [offer(), offer({ id: 'steam:control', storeId: 'steam' }), doom]
+    expect(filterFreebies(rows, 'control', ['steam']).map((r) => r.id)).toEqual(['steam:control'])
   })
 })
