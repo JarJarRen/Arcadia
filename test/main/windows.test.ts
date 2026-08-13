@@ -329,15 +329,33 @@ describe('runWindowAgent against the real script', () => {
   it.skipIf(process.platform !== 'win32')(
     'starts cmd.exe through the real spawn when there are arguments',
     async () => {
+      const began = Date.now()
       const handle = runWindowAgent(
         request({ exe: 'cmd.exe', args: ['/c', 'exit'], timeoutMs: 2000, guardMs: 200 })
       )
 
-      expect(await handle.started).toBe(true)
+      // Asserted as one object, detail and elapsed time included, because
+      // `started: false` on its own names none of the three things that
+      // produce it: the script's own Start-Process threw (detail carries the
+      // exception), PowerShell died before printing anything (no detail, and
+      // quick, since stderr is discarded), or the guard outlasted it (no
+      // detail, and roughly timeoutMs + guardMs + 15s). Only the first is a
+      // bug in this code, and a CI failure reading `expected false to be
+      // true` cannot say which of them happened.
+      const outcome = {
+        started: await handle.started,
+        detail: await handle.startedDetail,
+        elapsedMs: Date.now() - began
+      }
       // Only the launch matters here; no window is ever going to appear for
       // `cmd.exe /c exit`, and waiting for the placement timeout would make
-      // this slow for nothing.
+      // this slow for nothing. Cancelled before the assertion rather than
+      // after so a failure does not leave PowerShell running to its guard.
       handle.cancel()
+
+      // The detail is the round trip the @() bug broke — exe and args as this
+      // side actually parsed them, not as they were sent.
+      expect(outcome).toMatchObject({ started: true, detail: 'cmd.exe /c exit' })
     },
     20_000
   )
@@ -345,12 +363,23 @@ describe('runWindowAgent against the real script', () => {
   it.skipIf(process.platform !== 'win32')(
     'starts cmd.exe through the real spawn when there are no arguments',
     async () => {
+      const began = Date.now()
       const handle = runWindowAgent(
         request({ exe: 'cmd.exe', args: [], timeoutMs: 2000, guardMs: 200 })
       )
 
-      expect(await handle.started).toBe(true)
+      // Same shape as the test above, for the same reason. No detail is
+      // asserted: with no arguments the script joins an empty list onto the
+      // exe name, and pinning that spacing down would test PowerShell's
+      // -join rather than anything this code does.
+      const outcome = {
+        started: await handle.started,
+        detail: await handle.startedDetail,
+        elapsedMs: Date.now() - began
+      }
       handle.cancel()
+
+      expect(outcome).toMatchObject({ started: true })
     },
     20_000
   )
