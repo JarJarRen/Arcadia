@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react'
 import { t } from '@shared/i18n'
-import { emptyEnvConfig, type EnvConfigKey, type EnvConfigValues } from '@shared/env-config'
+import { emptyEnvConfig, type EnvConfigValues } from '@shared/env-config'
 import type { StoreId } from '@shared/types'
 import { StoreSelection } from './StoreSelection'
+import { ApiKeyFields } from './ApiKeyFields'
 
 interface Props {
   values: EnvConfigValues
@@ -20,37 +21,6 @@ interface Props {
   /** Saves at once — no restart, unlike the keys below it. */
   onEnabledStoresChange: (stores: StoreId[]) => void
   onClose: () => void
-}
-
-interface Field {
-  key: EnvConfigKey
-  label: string
-  hint: string
-  url: string
-}
-
-/** The three keys, in the order the `.env` template lists them. */
-function fields(): Field[] {
-  return [
-    {
-      key: 'STEAM_WEB_API_KEY',
-      label: t().setup.steamKeyLabel,
-      hint: t().setup.steamKeyHint,
-      url: 'https://steamcommunity.com/dev/apikey'
-    },
-    {
-      key: 'STEAM_ID64',
-      label: t().setup.steamIdLabel,
-      hint: t().setup.steamIdHint,
-      url: 'https://steamcommunity.com/'
-    },
-    {
-      key: 'STEAMGRIDDB_API_KEY',
-      label: t().setup.gridKeyLabel,
-      hint: t().setup.gridKeyHint,
-      url: 'https://www.steamgriddb.com/profile/preferences/api'
-    }
-  ]
 }
 
 /**
@@ -133,45 +103,15 @@ export function SetupDialog({
 
         <StoreSelection enabled={enabledStores} onChange={onEnabledStoresChange} />
 
-        {fields().map((field, index) => (
-          <label className="modal__field" key={field.key}>
-            <span className="modal__label">{field.label}</span>
-            <input
-              ref={index === 0 ? first : undefined}
-              className="modal__search"
-              value={edited[field.key]}
-              disabled={skip || restarting}
-              spellCheck={false}
-              autoComplete="off"
-              onChange={(event) =>
-                setEdited({ ...edited, [field.key]: event.target.value })
-              }
-            />
-            <span className="modal__sublabel">
-              {field.hint}{' '}
-              {/* Opens in the system browser: the window's open handler
-                  denies in-app navigation and hands the URL to the shell. */}
-              <a className="modal__link" href={field.url} target="_blank" rel="noreferrer">
-                {t().setup.whereToGet}
-              </a>
-            </span>
-          </label>
-        ))}
-
-        <label className="modal__toggle modal__toggle--skip">
-          <input
-            type="checkbox"
-            checked={skip}
-            disabled={restarting}
-            onChange={(event) => setSkip(event.target.checked)}
-          />
-          <span>
-            {t().setup.skip}
-            <span className="modal__sublabel">{t().setup.skipHint}</span>
-          </span>
-        </label>
-
-        <p className="modal__sublabel">{t().setup.fileHint(path)}</p>
+        <ApiKeyFields
+          values={edited}
+          onChange={setEdited}
+          skip={skip}
+          onSkipChange={setSkip}
+          restarting={restarting}
+          path={path}
+          firstFieldRef={first}
+        />
 
         {error !== undefined && <p className="modal__error">{error}</p>}
 
