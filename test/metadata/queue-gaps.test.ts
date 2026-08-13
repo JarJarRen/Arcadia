@@ -138,8 +138,14 @@ describe('applyManualMatch', () => {
       }),
       now: () => T0,
       // No real Steam-CDN network check here — that path belongs to
-      // verifiedSteamArtwork and is exercised via runMetadataPass in
-      // queue.test.ts. This deterministically declines every image.
+      // verifiedSteamArtwork and is exercised with an injected stub in
+      // artworkVerify.test.ts. This deterministically declines every image.
+      //
+      // An earlier version of this comment named queue.test.ts as the place
+      // the real path was exercised. It was not exercised there so much as
+      // escaping there: that file omitted `imageExists` entirely, so its
+      // pass really did call Valve, which is what made it time out at
+      // random. No test in this repo should reach the network.
       imageExists: async () => false
     })
 

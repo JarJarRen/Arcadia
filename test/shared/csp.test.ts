@@ -20,7 +20,10 @@ describe('Content-Security-Policy', () => {
     for (const host of [
       'https://cdn1.epicgames.com',
       'https://*.akamai.steamstatic.com',
-      'https://cdn2.steamgriddb.com'
+      'https://cdn2.steamgriddb.com',
+      // The aggregator serves its own thumbnails; the free-games page is
+      // the only place they appear.
+      'https://www.gamerpower.com'
     ]) {
       expect(imgSrc, `${host} is missing`).toContain(host)
     }

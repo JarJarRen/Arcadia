@@ -11,6 +11,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { LibraryToolbar } from '@renderer/components/LibraryToolbar'
 import type { LibraryFilter } from '@renderer/filter'
+import { STORE_IDS } from '@shared/types'
 
 const FILTER: LibraryFilter = {
   search: 'far cry',
@@ -29,6 +30,7 @@ function renderToolbar(overrides: Partial<Parameters<typeof LibraryToolbar>[0]> 
     total: 312,
     shown: 7,
     syncing: false,
+    availableStores: [...STORE_IDS],
     onFilterChange: vi.fn(),
     onSortChange: vi.fn(),
     onSortDirectionChange: vi.fn(),
@@ -36,6 +38,8 @@ function renderToolbar(overrides: Partial<Parameters<typeof LibraryToolbar>[0]> 
     onAddGame: vi.fn(),
     onSync: vi.fn(),
     onOpenSetup: vi.fn(),
+    freebieCount: 0,
+    onOpenFreebies: vi.fn(),
     ...overrides
   }
   render(<LibraryToolbar {...props} />)
@@ -154,5 +158,26 @@ describe('LibraryToolbar', () => {
     fireEvent.click(screen.getByText('+ Add game'))
 
     expect(props.onAddGame).toHaveBeenCalledOnce()
+  })
+})
+
+describe('the free games button', () => {
+  it('opens the page', () => {
+    const onOpenFreebies = vi.fn()
+    renderToolbar({ freebieCount: 0, onOpenFreebies })
+    fireEvent.click(screen.getByRole('button', { name: /Free now/ }))
+    expect(onOpenFreebies).toHaveBeenCalled()
+  })
+
+  it('shows how many are unclaimed', () => {
+    renderToolbar({ freebieCount: 3, onOpenFreebies: vi.fn() })
+    expect(screen.getByRole('button', { name: 'Free now · 3' })).toBeTruthy()
+  })
+
+  it('stays reachable when there is nothing free', () => {
+    // The badge goes, the button does not: a page you cannot open is worse
+    // than an empty one.
+    renderToolbar({ freebieCount: 0, onOpenFreebies: vi.fn() })
+    expect(screen.getByRole('button', { name: 'Free now' })).toBeTruthy()
   })
 })

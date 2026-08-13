@@ -1,3 +1,4 @@
+import { renameSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
 
 const SCHEMA = `
@@ -14,6 +15,11 @@ CREATE TABLE IF NOT EXISTS games (
   install_size     INTEGER,
   playtime_minutes INTEGER,
   launch_id        TEXT,
+  -- The program a storeless game starts, and its arguments as a JSON array.
+  -- Only the \`other\` store fills these; every adapter-backed game launches
+  -- through a URI or a store command instead.
+  launch_exe       TEXT,
+  launch_args      TEXT,
   -- Playable, but not licensed to this account. See shared/types.ts.
   shared_or_free   INTEGER NOT NULL DEFAULT 0,
   -- Added by hand for a game no adapter can see. EA used to be the reason:
@@ -108,6 +114,40 @@ CREATE TABLE IF NOT EXISTS artwork (
   url     TEXT NOT NULL,
   PRIMARY KEY (game_id, kind)
 );
+
+/**
+ * The cached free-games list.
+ *
+ * Rewritten wholesale on every successful refresh, so an ended promotion
+ * disappears without a separate expiry job. A failed refresh leaves the
+ * previous contents alone, which is what makes the page usable offline.
+ */
+CREATE TABLE IF NOT EXISTS freebies (
+  id            TEXT PRIMARY KEY,
+  store_id      TEXT NOT NULL,
+  title         TEXT NOT NULL,
+  kind          TEXT NOT NULL,
+  store_game_id TEXT,
+  claim_url     TEXT,
+  image_url     TEXT,
+  starts_at     INTEGER,
+  ends_at       INTEGER,
+  source        TEXT NOT NULL,
+  seen_at       INTEGER NOT NULL
+);
+
+/**
+ * What the user has already opened, and what has since turned up.
+ *
+ * A separate table so a claim outlives the promotion that produced it: a
+ * game claimed last Thursday should still read as claimed after the
+ * giveaway ends and its freebies row is gone.
+ */
+CREATE TABLE IF NOT EXISTS freebie_claims (
+  freebie_id   TEXT PRIMARY KEY,
+  opened_at    INTEGER NOT NULL,
+  confirmed_at INTEGER
+);
 `
 
 /**
@@ -131,7 +171,12 @@ const MIGRATIONS: ReadonlyArray<{ table: string; column: string; definition: str
   { table: 'games', column: 'shared_or_free', definition: 'INTEGER NOT NULL DEFAULT 0' },
   // Added by hand, not found by any adapter. Marks the rows that may be
   // deleted again, and the ones a scan must leave alone.
-  { table: 'games', column: 'manual', definition: 'INTEGER NOT NULL DEFAULT 0' }
+  { table: 'games', column: 'manual', definition: 'INTEGER NOT NULL DEFAULT 0' },
+  // The program a storeless game starts. Absent for every other store.
+  { table: 'games', column: 'launch_exe', definition: 'TEXT' },
+  // Its arguments, as a JSON array. Stored already split, so nothing is
+  // re-parsed — and never handed to a shell.
+  { table: 'games', column: 'launch_args', definition: 'TEXT' }
 ]
 
 function migrate(db: DatabaseSync): void {
@@ -278,14 +323,173 @@ export function repairHeroGaps(db: DatabaseSync): number {
   return Number(result.changes)
 }
 
-export function openDatabase(path: string): DatabaseSync {
+/**
+ * SQLite result codes for a file that reopening cannot mend.
+ *
+ * 11 is SQLITE_CORRUPT ("database disk image is malformed"), 26 is
+ * SQLITE_NOTADB ("file is not a database"). Matched on `errcode` rather than
+ * on the message, because the message is English prose that SQLite is free to
+ * reword. Verified against a genuinely corrupted file: `node:sqlite` throws an
+ * Error carrying `code: 'ERR_SQLITE_ERROR'` and `errcode: 11`.
+ */
+const UNUSABLE_FILE_ERRCODES = new Set([11, 26])
+
+/** What `openDatabase` reports when it had to set a damaged file aside. */
+export interface DatabaseRecovery {
+  /** Where the unusable file was kept. Nothing is ever deleted. */
+  movedTo: string
+}
+
+function isUnusableFile(error: unknown): boolean {
+  const errcode = (error as { errcode?: unknown } | null)?.errcode
+  return typeof errcode === 'number' && UNUSABLE_FILE_ERRCODES.has(errcode)
+}
+
+/**
+ * Renames the database and its sidecars out of the way.
+ *
+ * The `-wal` and `-shm` files have to travel with it. Left behind, SQLite
+ * would replay the old write-ahead log into the newly created database and
+ * corrupt that one too — the failure would look like it had followed the app
+ * through a reinstall.
+ *
+ * Returns where the database itself went, which is what the user is told.
+ */
+function setAside(path: string, stamp: string): string {
+  const movedTo = `${path}.corrupt-${stamp}`
+  renameSync(path, movedTo)
+
+  for (const suffix of ['-wal', '-shm']) {
+    // Best effort: a missing sidecar is the normal case, and a locked one
+    // must not stop the recovery that is already under way.
+    try {
+      renameSync(`${path}${suffix}`, `${movedTo}${suffix}`)
+    } catch {
+      // Nothing to move, or nothing that can be moved. Either is survivable.
+    }
+  }
+
+  return movedTo
+}
+
+/**
+ * Adds `other` to a store choice made before that store existed.
+ *
+ * `enabled-stores` holds an explicit list. Anyone who had ever opened the
+ * store settings therefore had a saved list that could not contain `other`,
+ * so the new store would have arrived switched **off** — and since the add
+ * dialog only offers enabled stores, the feature would have been invisible
+ * to exactly the people who had configured the app.
+ *
+ * Deliberately **not** routed through `runOnce`: that records a repair only
+ * when it changed something, so a user who later switched the storeless
+ * store back off would have it switched on again at every start, forever.
+ * The marker here is written unconditionally, which is what makes this run
+ * exactly once over the life of a database.
+ *
+ * An empty value is left alone. It means "no store at all", which is a real
+ * choice rather than an absent one, and adding a store to it would override
+ * a decision rather than complete one.
+ *
+ * The comma handling is deliberately not `parseEnabledStores` /
+ * `serializeEnabledStores` from shared/stores.ts, though they parse the same
+ * setting. Those filter the value against the **running** version's
+ * `STORE_IDS`, which is right for reading a setting and wrong here: this walks
+ * over databases written by other versions, and an id this build has never
+ * heard of would be silently dropped from a list it was only meant to append
+ * one entry to.
+ */
+function migrateEnabledStoresForOther(db: DatabaseSync): void {
+  const MARKER = 'migrate:enabled-stores-other'
+  if (db.prepare('SELECT value FROM settings WHERE key = ?').get(MARKER) !== undefined) return
+
+  const row = db.prepare("SELECT value FROM settings WHERE key = 'enabled-stores'").get() as
+    | { value: string }
+    | undefined
+
+  if (row !== undefined && row.value !== '') {
+    const stores = row.value
+      .split(',')
+      .map((part) => part.trim())
+      .filter((part) => part !== '')
+    if (!stores.includes('other')) {
+      db.prepare("UPDATE settings SET value = ? WHERE key = 'enabled-stores'").run(
+        [...stores, 'other'].join(',')
+      )
+    }
+  }
+
+  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(MARKER, 'done')
+}
+
+/**
+ * Opens and prepares a database, leaving no handle behind if it fails.
+ *
+ * `new DatabaseSync` succeeds even on a corrupt file — the throw comes later,
+ * from the first statement that has to read a page. The close in the catch is
+ * therefore load-bearing rather than tidiness: Windows will not rename a file
+ * that is still open, and setting the damaged one aside is exactly what the
+ * caller is about to try.
+ */
+function prepare(path: string): DatabaseSync {
   const db = new DatabaseSync(path)
-  // node:sqlite has no db.pragma() — PRAGMAs go through exec().
-  db.exec('PRAGMA journal_mode = WAL')
-  db.exec('PRAGMA foreign_keys = ON')
-  db.exec(SCHEMA)
-  migrate(db)
-  backfillMetadataText(db)
-  runOnce(db, 'repair:hero-gaps', repairHeroGaps)
-  return db
+  try {
+    // node:sqlite has no db.pragma() — PRAGMAs go through exec().
+    db.exec('PRAGMA journal_mode = WAL')
+    db.exec('PRAGMA foreign_keys = ON')
+    db.exec(SCHEMA)
+    migrate(db)
+    backfillMetadataText(db)
+    migrateEnabledStoresForOther(db)
+    runOnce(db, 'repair:hero-gaps', repairHeroGaps)
+    return db
+  } catch (error) {
+    try {
+      db.close()
+    } catch {
+      // Too broken to close. The rename that follows is the real test of
+      // whether the handle was released.
+    }
+    throw error
+  }
+}
+
+/**
+ * Opens the database, surviving a file that has been damaged.
+ *
+ * A corrupt database used to be fatal in a way that was almost impossible to
+ * read: the throw happened partway through `app.whenReady()`, so
+ * `registerIpcHandlers` further down never ran, and the window came up with
+ * every channel missing. What the user saw was "No handler registered for
+ * 'library:sync'" — three layers downstream of the real cause, and naming the
+ * wrong subsystem entirely.
+ *
+ * So corruption is handled here instead. The damaged file is renamed aside —
+ * never deleted, because its contents are usually still recoverable with
+ * `sqlite3 .recover` even when the b-tree is past repair — and a fresh
+ * database takes its place. `onRecovered` carries the new location out so the
+ * interface can say what happened; without it the reset would be silent, and
+ * a library that emptied itself with no explanation is its own kind of bug.
+ *
+ * Anything that is not corruption still throws. A permission error or a full
+ * disk is a real problem the caller has to decide about, and quietly starting
+ * over would destroy a perfectly good database on a transient fault.
+ */
+export function openDatabase(
+  path: string,
+  onRecovered?: (recovery: DatabaseRecovery) => void
+): DatabaseSync {
+  try {
+    return prepare(path)
+  } catch (error) {
+    // ':memory:' is new on every open, so there is nothing to set aside and
+    // nothing that a retry could do differently.
+    if (path === ':memory:' || !isUnusableFile(error)) throw error
+
+    // `prepare` has already closed its handle, so the file can be renamed.
+    const movedTo = setAside(path, String(Date.now()))
+    const db = prepare(path)
+    onRecovered?.({ movedTo })
+    return db
+  }
 }

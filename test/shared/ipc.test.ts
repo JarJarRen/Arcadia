@@ -91,7 +91,14 @@ describe('IPC contract', () => {
     // list: a list gets forgotten with the next store, and the test would
     // stay silently green while exactly that file broke the rule. With
     // every new adapter the check here grows by itself.
-    const forbiddenIn = ['src/main/stores', 'src/main/platform', 'src/main/db']
+    const forbiddenIn = [
+      'src/main/stores',
+      'src/main/platform',
+      'src/main/db',
+      // The freebies modules are parsers and a service, held to the same
+      // rule for the same reason: they have to be testable without Electron.
+      'src/main/freebies'
+    ]
     const allowed = new Set([
       'src/main/index.ts',
       'src/main/ipc.ts',

@@ -2,10 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } 
 import type { LibraryEntry } from '@shared/library'
 import { t } from '@shared/i18n'
 import type { EnvConfigState } from '@shared/env-config'
-import type { StoreId } from '@shared/types'
+import { STORE_IDS, type StoreId } from '@shared/types'
 import { useLibrary } from './hooks/useLibrary'
+import { useOverlay } from './hooks/useOverlay'
 import {
   filterGames,
+  pruneStores,
   sortGames,
   type LibraryFilter,
   type SortDirection,
@@ -20,6 +22,7 @@ import { STORE_LABELS } from './components/storeLabels'
 import { isMouseBackButton, isMouseForwardButton } from './navigation'
 import { LibraryToolbar } from './components/LibraryToolbar'
 import { GameDetail } from './pages/GameDetail'
+import { FreeGames } from './pages/FreeGames'
 import './styles.css'
 
 const INITIAL_FILTER: LibraryFilter = {
@@ -55,7 +58,7 @@ export function App(): ReactElement {
   // merge key, not the entry itself — the entry is rebuilt on every refresh,
   // and a captured copy would keep showing the old state once the metadata
   // arrives.
-  const [openKey, setOpenKey] = useState<string | undefined>()
+  const { overlay, openDetail, openFreebies, close, dismiss, back, forward } = useOverlay()
   const [addOpen, setAddOpen] = useState(false)
   /**
    * The `.env` as the main process reads it, or undefined until it answers.
@@ -70,8 +73,6 @@ export function App(): ReactElement {
   const [setupIsGate, setSetupIsGate] = useState(false)
   // The id of a just-added game, waiting for the library to catch up.
   const [pendingSelect, setPendingSelect] = useState<string | undefined>()
-  /** The page most recently closed, so the forward button can reopen it. */
-  const lastClosed = useRef<string | undefined>(undefined)
   const [installPending, setInstallPending] = useState<StoreId | undefined>()
   /**
    * Which install the overlay belongs to.
@@ -80,6 +81,40 @@ export function App(): ReactElement {
    * the older answer close the newer overlay.
    */
   const installSequence = useRef(0)
+  /**
+   * The stores switched on in the configuration screen.
+   *
+   * Starts as all of them rather than empty: the answer arrives over IPC a
+   * beat after mount, and an empty list would blank the store filter for
+   * that beat.
+   */
+  const [enabledStores, setEnabledStores] = useState<StoreId[]>([...STORE_IDS])
+  /**
+   * How many offers are unclaimed right now.
+   *
+   * Kept in App rather than in the page: the badge has to be right before
+   * anybody opens the page, which is the whole reason the list is cached.
+   */
+  const [freebieCount, setFreebieCount] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+    const load = (): void => {
+      window.arcadia
+        .getFreebies()
+        .then((list) => {
+          if (cancelled) return
+          setFreebieCount(list.current.filter((row) => row.claim === 'unclaimed').length)
+        })
+        .catch((error: unknown) => console.error('The freebies could not be read:', error))
+    }
+    load()
+    const stop = window.arcadia.onFreebiesChanged(load)
+    return () => {
+      cancelled = true
+      stop()
+    }
+  }, [])
 
   const visible = useMemo(
     () => sortGames(filterGames(entries, filter), sort, sortDirection),
@@ -111,6 +146,35 @@ export function App(): ReactElement {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    window.arcadia
+      .getEnabledStores()
+      .then((stores) => {
+        if (!cancelled) setEnabledStores(stores)
+      })
+      .catch((error: unknown) => console.error('Store selection could not be read:', error))
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  /**
+   * Drops a switched-off store from the active filter.
+   *
+   * Left alone, the selection would still name a store the menu no longer
+   * offers: the grid would filter on it, the library would look empty, and
+   * nothing on screen would say why.
+   */
+  useEffect(() => {
+    setFilter((current) => {
+      const pruned = pruneStores(current.stores, enabledStores)
+      // Same array back means nothing changed — returning `current` keeps
+      // this from queueing a render on every enabled-store update.
+      return pruned === current.stores ? current : { ...current, stores: pruned }
+    })
+  }, [enabledStores])
 
   /** Reopens the screen from the gear, with what the file says right now. */
   const openSetup = useCallback(async (): Promise<void> => {
@@ -175,9 +239,37 @@ export function App(): ReactElement {
     void window.arcadia.cancelInstall()
   }, [])
 
-  const visibleError = launchError ?? error
+  /**
+   * Whatever startup could not report at the time.
+   *
+   * Asked once on mount. It outranks the other two in the banner because it
+   * explains them: a library that came up empty because its database had to
+   * be replaced would otherwise look like a scan that found nothing.
+   *
+   * A failure to ask is swallowed — being unable to read a notice is no
+   * reason to put a different error in its place.
+   */
+  const [startupNotice, setStartupNotice] = useState<string | undefined>()
+
+  useEffect(() => {
+    let cancelled = false
+    window.arcadia
+      .getStartupNotice()
+      .then((notice) => {
+        if (!cancelled) setStartupNotice(notice)
+      })
+      .catch((caught: unknown) => console.error('Startup notice could not be read:', caught))
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const visibleError = startupNotice ?? launchError ?? error
 
   const dismissError = (): void => {
+    // The startup notice too, or the banner could never be closed: nothing
+    // re-fetches it, so it would sit there for the life of the window.
+    setStartupNotice(undefined)
     setLaunchError(undefined)
     clearError()
   }
@@ -214,16 +306,23 @@ export function App(): ReactElement {
       </p>
     )
 
-  const opened = entries.find((entry) => entry.key === openKey)
+  const opened = entries.find(
+    (entry) => overlay?.kind === 'detail' && entry.key === overlay.key
+  )
 
   // The entry can disappear — a scan splits a merged game apart and the key
   // points nowhere. Forget the key then, otherwise the view would jump back
   // to the page later, the moment that key happens to exist again.
+  //
+  // `dismiss`, not `close`: the user never asked to leave this page, so
+  // forward must not offer to bring it back. It also keeps this effect,
+  // which re-fires for as long as the key stays missing, from repeatedly
+  // overwriting whatever a real `back()` had stored.
   useEffect(() => {
-    if (openKey !== undefined && opened === undefined && entries.length > 0) {
-      setOpenKey(undefined)
+    if (overlay?.kind === 'detail' && opened === undefined && entries.length > 0) {
+      dismiss()
     }
-  }, [openKey, opened, entries.length])
+  }, [overlay, opened, entries.length, dismiss])
 
   /**
    * Opens a newly added game once the library has actually reloaded.
@@ -243,9 +342,9 @@ export function App(): ReactElement {
       entry.sources.some((source) => source.id === pendingSelect)
     )
     if (added === undefined) return
-    setOpenKey(added.key)
+    openDetail(added.key)
     setPendingSelect(undefined)
-  }, [entries, pendingSelect])
+  }, [entries, pendingSelect, openDetail])
 
   /**
    * The mouse's back button, as in a browser: it closes the details page, or
@@ -261,20 +360,6 @@ export function App(): ReactElement {
    * can still be taken back by releasing elsewhere.
    */
   useEffect(() => {
-    // A history one step deep: the library, and one game on top of it.
-    // Back remembers what it closed so forward can put it back, exactly as
-    // a browser does.
-    const back = (): void => {
-      setOpenKey((current) => {
-        if (current !== undefined) lastClosed.current = current
-        return undefined
-      })
-    }
-
-    const forward = (): void => {
-      setOpenKey((current) => (current === undefined ? lastClosed.current : current))
-    }
-
     const onMouseUp = (event: MouseEvent): void => {
       const isBack = isMouseBackButton(event)
       if (!isBack && !isMouseForwardButton(event)) return
@@ -294,7 +379,7 @@ export function App(): ReactElement {
       stopBack()
       stopForward()
     }
-  }, [])
+  }, [back, forward])
 
   /**
    * The details page in grid mode, laid over the library rather than
@@ -317,14 +402,26 @@ export function App(): ReactElement {
         <GameDetail
           key={opened.key}
           entry={opened}
-          onClose={() => {
-            lastClosed.current = opened.key
-            setOpenKey(undefined)
-          }}
+          onClose={close}
           onLaunch={(entry) => void launch(entry)}
           onToggleFavorite={(entry) => void toggleFavorite(entry)}
           onSelectStore={(entry, gameId) => void setPreferredStore(entry, gameId)}
           onInstall={(entry) => void install(entry)}
+        />
+      </div>
+    ) : null
+
+  const freebiesOverlay =
+    overlay?.kind === 'freebies' ? (
+      <div className="detailoverlay">
+        <FreeGames
+          onClose={close}
+          onOpenSetup={() => void openSetup()}
+          search={filter.search}
+          stores={filter.stores}
+          availableStores={enabledStores}
+          onSearchChange={(search) => setFilter({ ...filter, search })}
+          onStoresChange={(stores) => setFilter({ ...filter, stores })}
         />
       </div>
     ) : null
@@ -339,6 +436,7 @@ export function App(): ReactElement {
         total={entries.length}
         shown={visible.length}
         syncing={syncing}
+        availableStores={enabledStores}
         onFilterChange={setFilter}
         onSortChange={setSort}
         onSortDirectionChange={setSortDirection}
@@ -346,13 +444,17 @@ export function App(): ReactElement {
           // Drop the selection when the mode changes. The same key means
           // "selected row" in the list and "this page fills the window" in
           // the grid — carrying it over would drop the user into a full-page
-          // detail they never opened.
-          setOpenKey(undefined)
+          // detail they never opened. `dismiss`, not `close`: switching view
+          // modes is not the user closing a page, so forward must not offer
+          // to reopen it.
+          dismiss()
           setView(next)
         }}
         onAddGame={() => setAddOpen(true)}
         onSync={() => void sync()}
         onOpenSetup={() => void openSetup()}
+        freebieCount={freebieCount}
+        onOpenFreebies={openFreebies}
       />
 
       {errorBanner}
@@ -363,12 +465,28 @@ export function App(): ReactElement {
           values={envConfig.values}
           path={envConfig.path}
           firstRun={setupIsGate}
+          enabledStores={enabledStores}
+          onEnabledStoresChange={(stores) => {
+            // Optimistic: the checkbox reacts at once and the library
+            // reloads when main sends library:changed. A failed write is
+            // logged, and the next start reads what is actually stored.
+            setEnabledStores(stores)
+            window.arcadia
+              .setEnabledStores(stores)
+              .catch((error: unknown) =>
+                console.error('Store selection could not be saved:', error)
+              )
+          }}
           onClose={() => setSetupOpen(false)}
         />
       )}
 
       {addOpen && (
         <AddGameDialog
+          // The same list the store filter offers. A game filed under a
+          // switched-off store would be written and then filtered straight
+          // back out of the visible library, with no way to reach it again.
+          availableStores={enabledStores}
           onClose={() => setAddOpen(false)}
           // Only remembered here, not selected: the library reloads through
           // an IPC event, so at this moment `entries` is still the list from
@@ -388,7 +506,7 @@ export function App(): ReactElement {
         loading={loading}
         scanning={syncing}
         selected={opened}
-        onSelect={(entry) => setOpenKey(entry.key)}
+        onSelect={(entry) => openDetail(entry.key)}
         onLaunch={(entry) => void launch(entry)}
         onInstall={(entry) => void install(entry)}
         onToggleFavorite={(entry) => void toggleFavorite(entry)}
@@ -397,6 +515,7 @@ export function App(): ReactElement {
       />
 
       {detailOverlay}
+      {freebiesOverlay}
     </div>
   )
 }

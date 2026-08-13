@@ -102,6 +102,68 @@ function check(result) {
         'or the test address is out of date.'
     )
   }
+
+  // The free-games grid. A closed overlay and an open-but-empty one are
+  // different bugs — the first means the toolbar button did nothing, the
+  // second means the page itself is broken — so they get different
+  // messages rather than both reading as "no cards".
+  if (!result.freebiesOpened) {
+    problems.push('The freebies button did nothing — the free-games page never opened.')
+  } else if (result.freebieCount === 0) {
+    problems.push('The free-games page rendered no cards.')
+  } else if (result.freebieHeight < MIN_CARD_HEIGHT) {
+    problems.push(
+      `Free-games card height ${result.freebieHeight}px is below ${MIN_CARD_HEIGHT}px — ` +
+        'the cards have collapsed.'
+    )
+  }
+
+  // Every card's claim button (or, once confirmed, its "In your library"
+  // text) has to sit on the same bottom edge as its row neighbours — a card
+  // with a two-line title must not push its button lower than a card with a
+  // one-line title. `margin-top: auto` only does that when the flex column
+  // above it actually stretches to fill the card; this is what catches it
+  // silently not doing so.
+  const rowsWithAction = (result.freebieRows ?? []).filter((row) => row.actionBottom !== null)
+  if (rowsWithAction.length > 1) {
+    const bottoms = rowsWithAction.map((row) => row.actionBottom)
+    const min = Math.min(...bottoms)
+    const max = Math.max(...bottoms)
+    if (max - min > 1) {
+      problems.push(
+        `Free-games action elements do not share a bottom edge: ` +
+          rowsWithAction.map((row) => `"${row.title}" at ${row.actionBottom}px`).join(', ') +
+          '.'
+      )
+    }
+  }
+
+  // Neither bar may need more width than it has at the app's default window
+  // size — that is what "wraps to a second line" means for a flex-wrap row.
+  // One pixel of tolerance for rounding between getBoundingClientRect and
+  // the integer scrollWidth/clientWidth.
+  if (result.toolbarScrollWidth > result.toolbarClientWidth + 1) {
+    problems.push(
+      `The library toolbar needs ${result.toolbarScrollWidth}px but only has ` +
+        `${result.toolbarClientWidth}px — it wraps to a second line.`
+    )
+  }
+  if (result.freebiesHeaderScrollWidth > result.freebiesHeaderClientWidth + 1) {
+    problems.push(
+      `The free-games header needs ${result.freebiesHeaderScrollWidth}px but only has ` +
+        `${result.freebiesHeaderClientWidth}px — it wraps to a second line.`
+    )
+  }
+
+  // The two bars are meant to look like one continuous piece of chrome as
+  // the page changes underneath them; a height mismatch is exactly what
+  // gave that away before .freebies__header picked up .toolbar's min-height.
+  if (Math.abs(result.toolbarHeight - result.freebiesHeaderHeight) > 1) {
+    problems.push(
+      `The library toolbar is ${result.toolbarHeight}px tall but the free-games header is ` +
+        `${result.freebiesHeaderHeight}px — they no longer match.`
+    )
+  }
   return problems
 }
 
@@ -140,7 +202,10 @@ process.on('unhandledRejection', (reason) => {
 
 app.whenReady().then(async () => {
   const win = new BrowserWindow({
-    width: 1400,
+    // Mirrors createWindow's default in src/main/index.ts — the toolbar
+    // no-wrap assertions below are only meaningful measured at the size the
+    // app actually opens at.
+    width: 1480,
     height: 900,
     show: false,
     webPreferences: {
@@ -174,15 +239,82 @@ app.whenReady().then(async () => {
   // React has to run once before anything can be measured.
   await new Promise((resolve) => setTimeout(resolve, 1500))
 
-  const result = await win.webContents.executeJavaScript(`(() => {
+  const result = await win.webContents.executeJavaScript(`(async () => {
     const card = document.querySelector('.card')
     const art = card && card.querySelector('.card__art')
     const title = card && card.querySelector('.card__title')
     const button = card && card.querySelector('.button--primary')
     const box = (el) => (el ? el.getBoundingClientRect() : { height: 0, width: 0 })
     const sw = card && card.querySelector('.storeswitch')
+
+    // Toolbar geometry: height, and the width the row needs versus the width
+    // it has. Both bars use \`flex-wrap: wrap\`, so a row that runs out of
+    // space grows a second line rather than overflowing horizontally, and
+    // forcing \`nowrap\` alone is not enough to see that either: the search
+    // field (\`flex: 1 1 240px\`) just shrinks to absorb the missing space
+    // instead of overflowing. \`width: max-content\` removes the parent's
+    // width constraint so the row reports what it would need at its natural,
+    // unshrunk size. Both are restored immediately after the read.
+    const measureRow = (el) => {
+      if (!el) return { height: 0, scrollWidth: 0, clientWidth: 0 }
+      const height = Math.round(el.getBoundingClientRect().height)
+      const clientWidth = el.clientWidth
+      const prevWrap = el.style.flexWrap
+      const prevWidth = el.style.width
+      el.style.flexWrap = 'nowrap'
+      el.style.width = 'max-content'
+      const scrollWidth = el.scrollWidth
+      el.style.flexWrap = prevWrap
+      el.style.width = prevWidth
+      return { height, scrollWidth: Math.round(scrollWidth), clientWidth: Math.round(clientWidth) }
+    }
+    const toolbarGeometry = measureRow(document.querySelector('.toolbar'))
+
+    // The free-games grid. Measured for the same reason as the library
+    // tiles above: a CSS bug once collapsed all 193 of them to 6 pixels
+    // with every unit test green, and jsdom computes no layout.
+    //
+    // Whether the overlay opened at all is checked separately from whether
+    // it holds any cards. A button that silently does nothing and a page
+    // that opens onto an empty grid are different bugs; a bare
+    // \`cardCount === 0\` could not tell them apart, and would blame "no
+    // cards" on a click that never landed.
+    document.querySelector('.toolbar__freebies')?.click()
+    let freebiesOpened = false
+    let freebie = null
+    for (let waited = 0; waited < 2000; waited += 50) {
+      freebiesOpened = document.querySelector('.freebies') !== null
+      freebie = document.querySelector('.freebie')
+      if (freebie !== null) break
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    const freebieCard = freebie === null ? null : freebie.getBoundingClientRect()
+    const freebiesHeaderGeometry = measureRow(document.querySelector('.freebies__header'))
+
+    // Bottom edge of every card's action element (the claim button, or the
+    // "In your library" text once confirmed) and of the card itself. A card
+    // with a two-line title has more content above the button than one with
+    // a one-line title; \`margin-top: auto\` is only supposed to absorb that
+    // difference so every button still lands on the same line.
+    const freebieRows = [...document.querySelectorAll('.freebie')].map((el) => {
+      const action = el.querySelector('.freebie__claim, .freebie__claimed')
+      const title = el.querySelector('.freebie__title')
+      return {
+        title: title ? title.textContent : null,
+        cardBottom: Math.round(el.getBoundingClientRect().bottom),
+        cardHeight: Math.round(el.getBoundingClientRect().height),
+        actionBottom: action ? Math.round(action.getBoundingClientRect().bottom) : null
+      }
+    })
+
     return {
       stylesheets: document.styleSheets.length,
+      toolbarHeight: toolbarGeometry.height,
+      toolbarScrollWidth: toolbarGeometry.scrollWidth,
+      toolbarClientWidth: toolbarGeometry.clientWidth,
+      freebiesHeaderHeight: freebiesHeaderGeometry.height,
+      freebiesHeaderScrollWidth: freebiesHeaderGeometry.scrollWidth,
+      freebiesHeaderClientWidth: freebiesHeaderGeometry.clientWidth,
       cardCount: document.querySelectorAll('.card').length,
       cardHeight: Math.round(box(card).height),
       artHeight: Math.round(box(art).height),
@@ -230,7 +362,12 @@ app.whenReady().then(async () => {
             ? installed.querySelector('.badge--shared') !== null
             : true
         }
-      })()
+      })(),
+
+      freebiesOpened,
+      freebieCount: document.querySelectorAll('.freebie').length,
+      freebieHeight: freebieCard === null ? 0 : Math.round(freebieCard.height),
+      freebieRows
     }
   })()`)
 
@@ -819,11 +956,19 @@ app.whenReady().then(async () => {
     await wait()
 
     const opened = box() !== null
+
+    // The screen opens on the stores tab; everything measured below — the
+    // three key fields, their links, and the skip answer — is on the other.
+    // Selected by position, the way the Close button below is: there are
+    // exactly two, stores first.
+    box().querySelectorAll('[role="tab"]')[1].click()
+    await wait()
+
     const inputs = () => [...box().querySelectorAll('.modal__field input')]
     const prefilled = inputs().map((i) => i.value)
     const links = box().querySelectorAll('.modal__link').length
 
-    const skip = box().querySelector('.modal__toggle input')
+    const skip = box().querySelector('.modal__toggle--skip input')
     skip.click()
     await wait()
     const disabledAfterSkip = inputs().every((i) => i.disabled)

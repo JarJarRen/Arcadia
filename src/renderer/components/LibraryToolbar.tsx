@@ -1,8 +1,9 @@
 import type { ReactElement } from 'react'
 import { t } from '@shared/i18n'
+import type { StoreId } from '@shared/types'
 import type { LibraryFilter, SharedFilter, SortDirection, SortKey, ViewMode } from '../filter'
 import { SettingsMenu } from './SettingsMenu'
-import { StoreFilterMenu } from './StoreFilterMenu'
+import { FilterControls } from './FilterControls'
 
 interface Props {
   filter: LibraryFilter
@@ -12,6 +13,8 @@ interface Props {
   total: number
   shown: number
   syncing: boolean
+  /** The stores switched on in the configuration screen. */
+  availableStores: StoreId[]
   onFilterChange: (filter: LibraryFilter) => void
   onSortChange: (sort: SortKey) => void
   onSortDirectionChange: (direction: SortDirection) => void
@@ -19,6 +22,9 @@ interface Props {
   onAddGame: () => void
   onSync: () => void
   onOpenSetup: () => void
+  /** Unclaimed current offers for the enabled stores. Zero hides the badge. */
+  freebieCount: number
+  onOpenFreebies: () => void
 }
 
 export function LibraryToolbar(props: Props): ReactElement {
@@ -34,17 +40,12 @@ export function LibraryToolbar(props: Props): ReactElement {
 
   return (
     <header className="toolbar">
-      <input
-        type="search"
-        className="toolbar__search"
-        placeholder={t().toolbar.searchPlaceholder}
-        value={filter.search}
-        onChange={(event) => onFilterChange({ ...filter, search: event.target.value })}
-      />
-
-      <StoreFilterMenu
+      <FilterControls
+        search={filter.search}
         stores={filter.stores}
-        onChange={(stores) => onFilterChange({ ...filter, stores })}
+        available={props.availableStores}
+        onSearchChange={(search) => onFilterChange({ ...filter, search })}
+        onStoresChange={(stores) => onFilterChange({ ...filter, stores })}
       />
 
       <select
@@ -169,6 +170,16 @@ export function LibraryToolbar(props: Props): ReactElement {
 
       <button type="button" className="button" onClick={props.onAddGame}>
         + {t().toolbar.addGame}
+      </button>
+
+      <button
+        type="button"
+        className="button toolbar__freebies"
+        onClick={props.onOpenFreebies}
+      >
+        {props.freebieCount > 0
+          ? t().freebies.buttonWithCount(props.freebieCount)
+          : t().freebies.title}
       </button>
 
       <SettingsMenu onOpenSetup={props.onOpenSetup} />

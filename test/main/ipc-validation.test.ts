@@ -11,8 +11,9 @@
  * Written as one table because the assertion is identical for all of them —
  * the interesting part is the list of channels, not the body.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 // Static, because a type cannot be destructured out of a dynamic import.
@@ -330,6 +331,101 @@ describe('IPC input validation', () => {
         expect(result.ok).toBe(true)
         expect(result.restarting).toBe(false)
       }
+    })
+  })
+
+  describe('adding a storeless game', () => {
+    let dir: string
+    let existingExe: string
+
+    beforeAll(() => {
+      dir = mkdtempSync(join(tmpdir(), 'arcadia-exe-'))
+      existingExe = join(dir, process.platform === 'win32' ? 'mc.exe' : 'mc')
+      writeFileSync(existingExe, '')
+    })
+
+    afterAll(() => rmSync(dir, { recursive: true, force: true }))
+
+    it('records the program and its arguments', async () => {
+      const result = await invoke(IPC.libraryAddManual, {
+        storeId: 'other',
+        name: 'Minecraft Launcher',
+        launchExe: existingExe,
+        launchArgs: ['--offline']
+      })
+
+      expect(result).toMatchObject({ ok: true })
+    })
+
+    it('refuses arguments that are not a list of strings', async () => {
+      const result = await invoke(IPC.libraryAddManual, {
+        storeId: 'other',
+        name: 'X',
+        launchExe: existingExe,
+        launchArgs: [1, 2]
+      })
+      expect(result).toMatchObject({ ok: false })
+    })
+
+    it('refuses a program that is not on this machine', async () => {
+      const result = await invoke(IPC.libraryAddManual, {
+        storeId: 'other',
+        name: 'X',
+        launchExe: 'C:\\nowhere\\nothing.exe'
+      })
+      // Checked again here rather than trusting the picker: the renderer can
+      // call this channel with anything, wherever the path came from.
+      expect(result).toMatchObject({ ok: false })
+    })
+
+    it('refuses a relative path', async () => {
+      const result = await invoke(IPC.libraryAddManual, {
+        storeId: 'other',
+        name: 'X',
+        launchExe: 'mc.exe'
+      })
+      expect(result).toMatchObject({ ok: false })
+    })
+
+    it('trims surrounding whitespace from the program path before storing it', async () => {
+      const result = (await invoke(IPC.libraryAddManual, {
+        storeId: 'other',
+        name: 'Padded Launcher',
+        launchExe: `  ${existingExe}  `
+      })) as { ok: boolean; id?: string }
+
+      expect(result).toMatchObject({ ok: true })
+      const stored = harness.repo.byId(result.id!)
+      expect(stored?.launchExe).toBe(existingExe)
+    })
+
+    it('refuses a whitespace-only program on the storeless store', async () => {
+      const result = await invoke(IPC.libraryAddManual, {
+        storeId: 'other',
+        name: 'Blank Launcher',
+        launchExe: '   '
+      })
+
+      // Whitespace collapses to no program at all, and the storeless store
+      // is the one store that needs one — the repository's own rule is what
+      // refuses this, not a check on the raw string here.
+      expect(result).toMatchObject({ ok: false })
+    })
+
+    it('drops a whitespace-only program on a store other than the storeless one', async () => {
+      const result = (await invoke(IPC.libraryAddManual, {
+        storeId: 'steam',
+        name: 'Blank Steam Entry',
+        launchExe: '   '
+      })) as { ok: boolean; id?: string }
+
+      // Whitespace collapses to `undefined` before the mirrored rule (a
+      // program is only for the storeless store) is ever evaluated, so this
+      // is accepted with the field simply dropped — not refused for
+      // carrying a program it shouldn't.
+      expect(result).toMatchObject({ ok: true })
+      const stored = harness.repo.byId(result.id!)
+      expect(stored?.launchExe).toBeUndefined()
     })
   })
 })

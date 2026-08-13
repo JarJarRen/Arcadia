@@ -1,10 +1,11 @@
-import { ipcMain, screen, shell, type BrowserWindow } from 'electron'
+import { dialog, ipcMain, screen, shell, type BrowserWindow } from 'electron'
 import { stat } from 'node:fs/promises'
-import { IPC } from '@shared/ipc'
+import { IPC, type LaunchResult } from '@shared/ipc'
 import { getLanguage, parseLanguage, setLanguage, t } from '@shared/i18n'
-import { STORE_IDS, type StoreId } from '@shared/types'
+import { STORE_IDS, type Game, type StoreId } from '@shared/types'
 import type { LibraryEntry } from '@shared/library'
 import type { ArtworkRef, GameMetadata } from '@shared/metadata'
+import type { FreebieList } from '@shared/freebies'
 import type { GameRepository } from '@main/db/repository'
 import { MetadataRepository } from '@main/db/metadata'
 import type { SettingsRepository } from '@main/db/settings'
@@ -13,18 +14,45 @@ import { mergeLibrary } from '@main/library/merge'
 import { runSync } from '@main/sync'
 import type { ScanState } from '@main/scan-state'
 import { cancelInstall, installGame, launchGame, type InstallFrame } from '@main/launch-bridge'
+import { pickExecutable } from '@main/pick-executable'
 import { decodeWindowHandle } from '@main/platform/windows'
 import type { SteamAppList } from '@main/metadata/steamAppList'
 import { applyManualMatch } from '@main/metadata/queue'
 import { readEnvConfig, saveEnvConfig } from '@main/env-config'
+import { executableProblem } from '@shared/executable'
+import { parseEnabledStores, serializeEnabledStores } from '@shared/stores'
+import { enabledAdapters } from '@main/stores/enabled'
 import { envValueIsWritable } from '@main/env-file'
 import { ENV_CONFIG_KEYS, type EnvConfigValues } from '@shared/env-config'
+import type { MicrosoftSession } from '@main/stores/microsoft/session'
+import type { DeviceCode, MicrosoftTokens } from '@main/stores/microsoft/auth'
+import type { FreebieService } from '@main/freebies/service'
+import { confirmClaims } from '@main/freebies/confirm'
+import type { FreebieRepository } from '@main/db/freebies'
+
+/**
+ * What the program dialog offers.
+ *
+ * Shortcuts are listed because that is what sits on a desktop; they are
+ * resolved to their target before anything is stored.
+ */
+const FILTERS = [
+  { name: 'Programs', extensions: ['exe', 'lnk'] },
+  { name: 'All files', extensions: ['*'] }
+]
 
 export interface IpcContext {
   repo: GameRepository
   metadata: MetadataRepository
   settings: SettingsRepository
   adapters: StoreAdapter[]
+  freebies: FreebieService
+  /**
+   * Held separately from `freebies` because `confirmClaims` — run after
+   * every scan, here and in `main/index.ts` — takes the repository
+   * directly; the service does not expose it.
+   */
+  freebiesRepo: FreebieRepository
   getWindow: () => BrowserWindow | undefined
   /**
    * The shared record of whether a scan is running.
@@ -66,6 +94,63 @@ export interface IpcContext {
    * for the next start of the app, which is the behaviour this replaces.
    */
   onArtworkGap?: () => void
+  /**
+   * Whether `safeStorage` can encrypt on this machine.
+   *
+   * Injected rather than read here, because `safeStorage` is Electron's and
+   * these handlers are tested without it. Absent counts as available: the
+   * only caller is a warning, and a warning shown on no evidence would be
+   * worse than none.
+   */
+  secureStorageAvailable?: () => boolean
+  /**
+   * Something that went wrong before the window could report it.
+   *
+   * Startup happens before the renderer exists, so its failures have nowhere
+   * to go. A damaged database is the case this was built for: it is replaced
+   * rather than allowed to be fatal, which empties the library, and that
+   * needs saying.
+   */
+  startupNotice?: string
+  /**
+   * The Microsoft account, where one can exist.
+   *
+   * Optional because everything else works without it — on Linux there is
+   * no Microsoft Store at all — and the handlers answer "signed out" rather
+   * than failing when it is absent.
+   */
+  microsoft?: {
+    session: MicrosoftSession
+    requestDeviceCode: () => Promise<DeviceCode>
+    /**
+     * `cancelled` is checked before every poll, and is what ends a flow
+     * that has been superseded or signed out from under. Without it a
+     * started poll ran to the server's expiry with nothing able to stop it.
+     */
+    pollForTokens: (code: DeviceCode, cancelled: () => boolean) => Promise<MicrosoftTokens>
+  }
+}
+
+/**
+ * A device-code sign-in that is still running.
+ *
+ * At most one exists. A second `microsoft:sign-in` — which is one dialog
+ * close and reopen away, since closing it clears the code from the screen
+ * but not the poll from this process — used to start a competing device
+ * code and a second poll loop, each of which triggered a full five-store
+ * rescan on success.
+ */
+interface SignInFlow {
+  /** Read by the poll before each request. */
+  cancelled: boolean
+  /**
+   * Whether a later sign-in took this one's place.
+   *
+   * A superseded flow reports nothing when it ends: the screen is already
+   * showing the newer code, and "The sign-in was cancelled" arriving on top
+   * of it would wipe the very code the user was about to type.
+   */
+  superseded: boolean
 }
 
 /**
@@ -74,12 +159,23 @@ export interface IpcContext {
  * Artwork and metadata are attached here, not in `mergeLibrary` — that way
  * the merge stays free of database access and testable without a database.
  *
+ * The rows are filtered by `enabled` BEFORE the merge, not after. That is
+ * what makes a game owned on two stores behave: the switched-off source
+ * drops away and the entry stays, under the store that is still on. Filtered
+ * afterwards, the whole entry would vanish whenever its active source
+ * happened to be the disabled one.
+ *
  * The active store entry is consulted first, then the remaining sources:
  * for a merged game the image can hang off the Epic row while Steam is the
  * active store.
  */
-function library(repo: GameRepository, metadata: MetadataRepository): LibraryEntry[] {
-  return mergeLibrary(repo.all(), repo.readMergeOverrides()).map((entry) => {
+function library(
+  repo: GameRepository,
+  metadata: MetadataRepository,
+  enabled: StoreId[]
+): LibraryEntry[] {
+  const rows = repo.all().filter((game) => enabled.includes(game.storeId))
+  return mergeLibrary(rows, repo.readMergeOverrides()).map((entry) => {
     const order = [entry.active, ...entry.sources.filter((s) => s.id !== entry.active.id)]
 
     let artwork: ArtworkRef[] = []
@@ -150,13 +246,44 @@ export function registerIpcHandlers(context: IpcContext): void {
     context.getWindow()?.webContents.send(IPC.libraryChanged)
   }
 
-  ipcMain.handle(IPC.libraryGet, () => library(context.repo, context.metadata))
+  /**
+   * Runs after every scan, here and at startup in `main/index.ts`.
+   *
+   * A claim made before a scan is only ever confirmed by this hook — there
+   * is no other point in the app that revisits it — so every `runSync` call
+   * site needs it, not only the button that started the scan the user was
+   * looking at.
+   */
+  const confirmFreebieClaims = (games: Game[]): void => {
+    if (confirmClaims(context.freebiesRepo, games, Date.now()).length > 0) {
+      context.getWindow()?.webContents.send(IPC.freebiesChanged)
+    }
+  }
+
+  /**
+   * The library as the user has asked to see it.
+   *
+   * Read fresh each time rather than captured: the setting can change while
+   * the app runs, and a captured list would keep a switched-off store on
+   * screen until the next restart.
+   */
+  const visibleLibrary = (): LibraryEntry[] =>
+    library(
+      context.repo,
+      context.metadata,
+      parseEnabledStores(context.settings.get('enabled-stores'))
+    )
+
+  ipcMain.handle(IPC.libraryGet, () => visibleLibrary())
 
   ipcMain.handle(IPC.libraryScanState, () => context.scan.isScanning())
 
+  ipcMain.handle(IPC.startupNotice, () => context.startupNotice)
+
   ipcMain.handle(IPC.librarySync, async () => {
+    const adapters = enabledAdapters(context.adapters, context.settings.get('enabled-stores'))
     const result = await context.scan.track(() =>
-      runSync(context.adapters, context.repo, Math.floor(Date.now() / 1000))
+      runSync(adapters, context.repo, Math.floor(Date.now() / 1000), confirmFreebieClaims)
     )
     notifyChanged()
     return result
@@ -218,7 +345,7 @@ export function registerIpcHandlers(context: IpcContext): void {
       // Set it on every source: a merged entry counts as a favourite as
       // soon as one source is. Toggling only the active one would make it
       // impossible to clear while another source still had it set.
-      const entry = library(context.repo, context.metadata).find((e) => e.key === mergeKey)
+      const entry = visibleLibrary().find((e) => e.key === mergeKey)
       if (entry === undefined) return
       for (const source of entry.sources) {
         context.repo.setFavorite(source.id, value)
@@ -250,7 +377,7 @@ export function registerIpcHandlers(context: IpcContext): void {
   ipcMain.handle(IPC.gameOpenFolder, async (_event, mergeKey: unknown) => {
     if (typeof mergeKey !== 'string') return { ok: false, error: t().errors.invalidKey }
     try {
-      const entry = library(context.repo, context.metadata).find((e) => e.key === mergeKey)
+      const entry = visibleLibrary().find((e) => e.key === mergeKey)
       const path = entry?.installPath
       if (path === undefined || path === '') {
         return { ok: false, error: t().errors.noFolderKnown }
@@ -283,7 +410,7 @@ export function registerIpcHandlers(context: IpcContext): void {
       return { ok: false, error: t().errors.invalidInput }
     }
     try {
-      const entry = library(context.repo, context.metadata).find((e) => e.key === mergeKey)
+      const entry = visibleLibrary().find((e) => e.key === mergeKey)
       if (entry === undefined) return { ok: false, error: t().errors.unknownGameShort }
 
       // Applied to the active source: that is where the library reads
@@ -314,17 +441,18 @@ export function registerIpcHandlers(context: IpcContext): void {
   /**
    * Adds a game by hand.
    *
-   * Every field is validated in the repository rather than here, because
+   * Most fields are validated in the repository rather than here, because
    * that is the layer the constraint belongs to — a store identifier must
    * not reach a launch URI unchecked, no matter which caller supplied it.
-   * This handler only converts a thrown error into a message the interface
-   * can show.
+   * The program path is the exception: this handler is the validation
+   * boundary for it, since checking it means touching the filesystem, which
+   * the repository does not otherwise do.
    */
-  ipcMain.handle(IPC.libraryAddManual, (_event, game: unknown) => {
+  ipcMain.handle(IPC.libraryAddManual, async (_event, game: unknown) => {
     if (typeof game !== 'object' || game === null) {
       return { ok: false, error: t().errors.invalidInput }
     }
-    const { storeId, name, storeGameId } = game as Record<string, unknown>
+    const { storeId, name, storeGameId, launchExe, launchArgs } = game as Record<string, unknown>
     if (typeof storeId !== 'string' || typeof name !== 'string') {
       return { ok: false, error: t().errors.invalidInput }
     }
@@ -334,10 +462,53 @@ export function registerIpcHandlers(context: IpcContext): void {
     if (storeGameId !== undefined && typeof storeGameId !== 'string') {
       return { ok: false, error: t().errors.invalidInput }
     }
+    if (launchExe !== undefined && typeof launchExe !== 'string') {
+      return { ok: false, error: t().errors.invalidInput }
+    }
+    if (
+      launchArgs !== undefined &&
+      (!Array.isArray(launchArgs) || launchArgs.some((part) => typeof part !== 'string'))
+    ) {
+      return { ok: false, error: t().errors.invalidInput }
+    }
+
+    // Trimmed here, ahead of validation, so surrounding whitespace can never
+    // reach the database: this value becomes both `launch_exe` and (via
+    // `folderOf`) `install_path`, and `spawn` is given it as a working
+    // directory verbatim. An empty result after trimming is treated as no
+    // program at all rather than as a path to check.
+    const trimmedExe = typeof launchExe === 'string' ? launchExe.trim() : undefined
+    const exe = trimmedExe === '' ? undefined : trimmedExe
+
+    // Checked here as well as in the picker, because the picker is not the
+    // only way to reach this channel. Whatever the renderer sends, the path
+    // that ends up in the database is one this process has looked at.
+    if (exe !== undefined) {
+      const problem = executableProblem(exe, process.platform)
+      if (problem === 'notAbsolute') {
+        return { ok: false, error: t().errors.executableNotAbsolute }
+      }
+      if (problem === 'unsupportedType') {
+        return { ok: false, error: t().errors.executableUnsupported }
+      }
+      try {
+        if (!(await stat(exe)).isFile()) {
+          return { ok: false, error: t().errors.executableMissing(exe) }
+        }
+      } catch {
+        return { ok: false, error: t().errors.executableMissing(exe) }
+      }
+    }
 
     try {
       const id = context.repo.addManualGame(
-        { storeId: storeId as StoreId, name, ...(storeGameId === undefined ? {} : { storeGameId }) },
+        {
+          storeId: storeId as StoreId,
+          name,
+          ...(storeGameId === undefined ? {} : { storeGameId }),
+          ...(exe === undefined ? {} : { launchExe: exe }),
+          ...(launchArgs === undefined ? {} : { launchArgs: launchArgs as string[] })
+        },
         Math.floor(Date.now() / 1000)
       )
       notifyChanged()
@@ -361,6 +532,37 @@ export function registerIpcHandlers(context: IpcContext): void {
     }
   })
 
+  ipcMain.handle(IPC.libraryPickExecutable, async () => {
+    const window = context.getWindow()
+    try {
+      return await pickExecutable({
+        showOpenDialog: () =>
+          // Modal to Arcadia's own window where there is one: a dialog that can
+          // be lost behind the library is worse than no dialog.
+          window === undefined
+            ? dialog.showOpenDialog({ properties: ['openFile'], filters: FILTERS })
+            : dialog.showOpenDialog(window, { properties: ['openFile'], filters: FILTERS }),
+        readShortcutLink: (path) => shell.readShortcutLink(path),
+        exists: async (path) => {
+          try {
+            return (await stat(path)).isFile()
+          } catch {
+            return false
+          }
+        },
+        platform: process.platform
+      })
+    } catch (error) {
+      // Matches the shape every other contract-bearing handler here
+      // promises. Without this, a rejected `showOpenDialog` — a destroyed
+      // window at call time, for instance — would reach the renderer as a
+      // rejected `invoke()` promise instead, and the Add-game dialog does
+      // not wrap this call in a try/catch of its own.
+      const message = error instanceof Error ? error.message : String(error)
+      return { ok: false, error: t().errors.executablePickFailed(message) }
+    }
+  })
+
   /**
    * Forgets artwork the renderer could not load.
    *
@@ -380,7 +582,7 @@ export function registerIpcHandlers(context: IpcContext): void {
     if (typeof mergeKey !== 'string') return
     if (kind !== 'grid' && kind !== 'hero' && kind !== 'logo') return
     try {
-      const entry = library(context.repo, context.metadata).find((e) => e.key === mergeKey)
+      const entry = visibleLibrary().find((e) => e.key === mergeKey)
       if (entry === undefined) return
       // The artwork hangs off one of the sources, and which one is not
       // knowable from the renderer — `library()` takes the first source
@@ -432,6 +634,67 @@ export function registerIpcHandlers(context: IpcContext): void {
     }
   })
 
+  ipcMain.handle(IPC.settingsGetStores, () =>
+    parseEnabledStores(context.settings.get('enabled-stores'))
+  )
+
+  /**
+   * Records which stores are scanned and shown.
+   *
+   * Rejected whole rather than filtered when an id is unknown: the renderer
+   * offers only ids it got from `STORE_IDS`, so anything else is a bug worth
+   * failing on rather than a value worth salvaging.
+   *
+   * `notifyChanged` because the visible library depends on this setting —
+   * without it the grid would keep showing a store that has just been
+   * switched off until the next scan.
+   */
+  ipcMain.handle(IPC.settingsSetStores, (_event, stores: unknown) => {
+    if (!Array.isArray(stores)) return
+    const valid = stores.every(
+      (id) => typeof id === 'string' && STORE_IDS.includes(id as StoreId)
+    )
+    if (!valid) return
+
+    try {
+      context.settings.set('enabled-stores', serializeEnabledStores(stores as StoreId[]))
+      notifyChanged()
+    } catch (error) {
+      console.error('Store selection could not be saved:', error)
+    }
+  })
+
+  /**
+   * Probes every store, for the configuration screen.
+   *
+   * Reuses what the adapters already implement for `runSync`, so the
+   * renderer needs no per-store knowledge. A probe that throws answers
+   * "unavailable" with its own message rather than rejecting the whole call
+   * — one broken adapter must not blank the list.
+   */
+  ipcMain.handle(IPC.storesAvailability, async () => {
+    const probes = await Promise.all(
+      context.adapters.map(async (adapter) => {
+        try {
+          return [adapter.id, await adapter.isAvailable()] as const
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : String(error)
+          return [adapter.id, { available: false, reason }] as const
+        }
+      })
+    )
+    return Object.fromEntries(probes)
+  })
+
+  /**
+   * Whether the Microsoft refresh token can be encrypted where it is kept.
+   *
+   * The configuration screen says so on the Microsoft row when it cannot —
+   * the token then sits in `arcadia.db` in the clear, and the user is
+   * entitled to know that before connecting an account.
+   */
+  ipcMain.handle(IPC.storesSecureStorage, () => context.secureStorageAvailable?.() ?? true)
+
   ipcMain.handle(IPC.envConfigGet, () => readEnvConfig(context.envFilePaths))
 
   /**
@@ -460,6 +723,206 @@ export function registerIpcHandlers(context: IpcContext): void {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       return { ok: false, error: t().errors.envSaveFailed(message), restarting: false }
+    }
+  })
+
+  /**
+   * Tells the renderer the sign-in state moved, and why when it moved
+   * because a poll ended without one.
+   *
+   * `error` is already the localised sentence `auth.ts` threw — expired,
+   * declined, cancelled, or the raw failure — passed straight through
+   * rather than rewrapped, so main throws nothing away that the screen
+   * could otherwise show.
+   */
+  const notifyAuthChanged = (error?: string): void => {
+    context.getWindow()?.webContents.send(IPC.microsoftAuthChanged, error)
+  }
+
+  /**
+   * The sign-in in progress, if there is one.
+   *
+   * Held in the closure rather than at module scope: `registerIpcHandlers`
+   * is called exactly once in a real process, so the two are equivalent
+   * there, and a closure cannot leak one test's half-finished flow into the
+   * next.
+   */
+  let signInFlow: SignInFlow | undefined
+
+  ipcMain.handle(IPC.microsoftAuthState, () => {
+    const session = context.microsoft?.session
+    if (session === undefined || !session.isSignedIn()) return { signedIn: false }
+    const gamertag = session.gamertag()
+    return { signedIn: true, ...(gamertag === undefined ? {} : { gamertag }) }
+  })
+
+  /**
+   * Starts the sign-in and returns the code, not the result.
+   *
+   * The polling then runs on in this process. A handler that waited for it
+   * would leave the configuration screen with nothing to show for as long as
+   * the user took in their browser — which is exactly when they need to see
+   * the code.
+   *
+   * A second attempt replaces the first rather than racing it. Closing the
+   * dialog clears the code from the screen but not the poll from here, so
+   * reopening it and clicking Sign in is an ordinary thing to do — and it
+   * used to start a second device code and a second poll loop, each of
+   * which triggered a full five-store rescan when it succeeded. Replacing
+   * is the right way round rather than answering with the old code,
+   * because it is also the only way a poll can be stopped at all: the user
+   * clicking Sign in again is what says the first attempt is over.
+   */
+  ipcMain.handle(IPC.microsoftSignIn, async () => {
+    const microsoft = context.microsoft
+    if (microsoft === undefined) {
+      return { ok: false, error: t().stores.microsoft.windowsOnly }
+    }
+
+    if (signInFlow !== undefined) {
+      signInFlow.cancelled = true
+      signInFlow.superseded = true
+    }
+
+    // Registered before the device-code request, not after: that request is
+    // an await, and a second invocation that enters while this one is still
+    // in flight must find a flow here to supersede. Registering it only
+    // after the await left a window where two overlapping invocations each
+    // saw signInFlow as undefined and neither cancelled the other — the
+    // first would go on to report its own expiry as an error and clear
+    // whatever code the second one had already put on screen.
+    const flow: SignInFlow = { cancelled: false, superseded: false }
+    signInFlow = flow
+
+    let code: DeviceCode
+    try {
+      code = await microsoft.requestDeviceCode()
+    } catch (error) {
+      // Only clears the slot if nothing newer has already taken it — a
+      // concurrent invocation may have superseded this flow while the
+      // request was in flight.
+      if (signInFlow === flow) signInFlow = undefined
+      return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    }
+
+    void microsoft
+      .pollForTokens(code, () => flow.cancelled)
+      .then(async (tokens) => {
+        // The poll can only notice a cancellation between requests, so it
+        // can still come back with tokens for a flow that has since been
+        // signed out or replaced. Connecting an account on the strength of
+        // that would undo whatever cancelled it.
+        if (flow.cancelled) return
+        microsoft.session.signIn(tokens)
+        notifyAuthChanged()
+        // At once, not at the next refresh: the owned library only becomes
+        // readable now, and waiting would look as though nothing happened.
+        await context.scan.track(() =>
+          runSync(
+            enabledAdapters(context.adapters, context.settings.get('enabled-stores')),
+            context.repo,
+            Math.floor(Date.now() / 1000),
+            confirmFreebieClaims
+          )
+        )
+        notifyChanged()
+        // signIn() writes the token but does not itself learn the gamertag —
+        // that only arrives from Xbox Live, through session.tokens(), which
+        // the scan just above is what actually calls. The first
+        // notifyAuthChanged, right after signIn(), told the screen a sign-in
+        // was in progress; this second one is what lets it pick up the name
+        // once the scan has had the chance to fetch it.
+        notifyAuthChanged()
+      })
+      .catch((error: unknown) => {
+        console.error('Microsoft sign-in failed:', error)
+        // A flow that was replaced says nothing: the screen is already
+        // showing the newer code, and its own cancellation arriving as an
+        // error would clear the code the user is halfway through typing.
+        if (flow.superseded) return
+        notifyAuthChanged(error instanceof Error ? error.message : String(error))
+      })
+      .finally(() => {
+        if (signInFlow === flow) signInFlow = undefined
+      })
+
+    return { ok: true, userCode: code.userCode, verificationUri: code.verificationUri }
+  })
+
+  /**
+   * Signs out and rescans.
+   *
+   * The rescan is the point: without it the owned-but-not-installed games
+   * would sit in the library as rows nothing can account for.
+   *
+   * A sign-in still polling is cancelled as well, and told so — it is not
+   * superseded by anything, so its own reason reaches the screen. Left
+   * running it would connect an account moments after the user disconnected
+   * one, which reads as the button having done nothing.
+   */
+  ipcMain.handle(IPC.microsoftSignOut, async () => {
+    if (signInFlow !== undefined) signInFlow.cancelled = true
+    context.microsoft?.session.signOut()
+    notifyAuthChanged()
+    await context.scan.track(() =>
+      runSync(
+        enabledAdapters(context.adapters, context.settings.get('enabled-stores')),
+        context.repo,
+        Math.floor(Date.now() / 1000),
+        confirmFreebieClaims
+      )
+    )
+    notifyChanged()
+  })
+
+  ipcMain.handle(IPC.freebiesGet, async (): Promise<FreebieList> => {
+    const stores = parseEnabledStores(context.settings.get('enabled-stores'))
+    // Refreshed behind the answer rather than before it: the page opens on
+    // the cache at once, and the event that follows updates it.
+    //
+    // The event fires only when `refresh` reports that something the
+    // renderer can see actually changed — the cache was written, or the
+    // failure list differs. Firing it unconditionally would loop: the
+    // renderer reloads on the event and the reload lands back in this
+    // handler. See the two-timestamp note in `service.ts` for why a TTL
+    // skip alone was not a sufficient guard.
+    void context.freebies
+      .refresh(Date.now(), false)
+      .then((changed) => {
+        if (changed) context.getWindow()?.webContents.send(IPC.freebiesChanged)
+      })
+      .catch((error: unknown) => console.error('The freebies could not be refreshed:', error))
+    return context.freebies.getList(stores, Date.now())
+  })
+
+  ipcMain.handle(IPC.freebiesRefresh, async (): Promise<FreebieList> => {
+    const stores = parseEnabledStores(context.settings.get('enabled-stores'))
+    await context.freebies.refresh(Date.now(), true)
+    // The page's own subscriber updates from this handler's return value, so
+    // it looks right without this. The toolbar badge does not: it only ever
+    // updates on mount or on this event, so without it a forced refresh
+    // pressed from inside the page leaves the badge showing whatever it
+    // showed when the page was opened for the rest of the session. This
+    // cannot loop — the reload it triggers calls freebies:get, whose
+    // refresh(now, false) hits the TTL guard this forced refresh just
+    // re-armed.
+    context.getWindow()?.webContents.send(IPC.freebiesChanged)
+    return context.freebies.getList(stores, Date.now())
+  })
+
+  ipcMain.handle(IPC.freebiesClaim, async (_event, id: unknown): Promise<LaunchResult> => {
+    if (typeof id !== 'string') return { ok: false, error: t().errors.claimFailed('bad id') }
+    try {
+      // Building the target validates the address and throws on anything
+      // it cannot vouch for.
+      const target = context.freebies.claimById(id)
+      await shell.openExternal(target)
+      context.freebies.markOpened(id, Date.now())
+      context.getWindow()?.webContents.send(IPC.freebiesChanged)
+      return { ok: true }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      return { ok: false, error: t().errors.claimFailed(message) }
     }
   })
 }

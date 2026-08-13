@@ -5,5 +5,11 @@ export const STORE_LABELS: Record<StoreId, string> = {
   steam: 'Steam',
   epic: 'Epic',
   ea: 'EA',
-  ubisoft: 'Ubisoft'
+  ubisoft: 'Ubisoft',
+  // The short name, because this list feeds a toolbar button that joins two
+  // of them. The adapter's own displayName is the full "Microsoft Store",
+  // the same split Ubisoft already has against "Ubisoft Connect".
+  microsoft: 'Microsoft',
+  // Games added by hand that belong to no store at all.
+  other: 'Other'
 }

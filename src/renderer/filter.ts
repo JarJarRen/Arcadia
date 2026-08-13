@@ -1,5 +1,6 @@
 import { STORE_IDS, type StoreId } from '@shared/types'
 import type { LibraryEntry } from '@shared/library'
+import type { Freebie } from '@shared/freebies'
 import { t } from '@shared/i18n'
 import { STORE_LABELS } from './components/storeLabels'
 
@@ -83,6 +84,21 @@ export function storeFilterTitle(stores: StoreId[]): string {
   return t().toolbar.storeFilterTitle(selection)
 }
 
+/**
+ * The store selection, with anything no longer offered removed.
+ *
+ * Returns the **same array** when nothing changed, so a caller can hand the
+ * result straight to `setState` without causing a render on every pass.
+ *
+ * Without this a store switched off in the configuration screen would stay
+ * in the filter: the grid would keep filtering on it, the menu would no
+ * longer list it, and the library would look empty for no visible reason.
+ */
+export function pruneStores(selected: StoreId[], enabled: StoreId[]): StoreId[] {
+  const pruned = selected.filter((id) => enabled.includes(id))
+  return pruned.length === selected.length ? selected : pruned
+}
+
 export function filterGames(entries: LibraryEntry[], filter: LibraryFilter): LibraryEntry[] {
   const needle = filter.search.trim().toLowerCase()
 
@@ -101,6 +117,24 @@ export function filterGames(entries: LibraryEntry[], filter: LibraryFilter): Lib
     if (filter.shared === 'only' && !entry.sharedOrFree) return false
     if (filter.shared === 'exclude' && entry.sharedOrFree) return false
     if (needle !== '' && !entry.name.toLowerCase().includes(needle)) return false
+    return true
+  })
+}
+
+/**
+ * Narrows a list of offers by the two controls the free-games page shares
+ * with the library.
+ *
+ * Takes the two values rather than a `LibraryFilter` on purpose: an offer has
+ * no install state, no favourite and no shared licence, so handing this the
+ * whole filter would invite reading fields that mean nothing here.
+ */
+export function filterFreebies(rows: Freebie[], search: string, stores: StoreId[]): Freebie[] {
+  const needle = search.trim().toLowerCase()
+
+  return rows.filter((row) => {
+    if (stores.length > 0 && !stores.includes(row.storeId)) return false
+    if (needle !== '' && !row.title.toLowerCase().includes(needle)) return false
     return true
   })
 }

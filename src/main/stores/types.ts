@@ -44,6 +44,27 @@ export interface StoreAdapter {
   launchUri(game: Game): string
 
   /**
+   * How to launch, where a URI cannot do it.
+   *
+   * The Microsoft Store is the case: a packaged game is activated through
+   * `shell:AppsFolder\<AUMID>`, which is a shell namespace path rather than
+   * a protocol, and `shell.openExternal` cannot open it.
+   *
+   * Returned as plain data for the same reason as `GuidedInstall`: the
+   * bridge is the only place that starts a process, so adapters stay free of
+   * Electron and testable without it. When this is absent — every store but
+   * Microsoft — `launchUri` is used exactly as before.
+   *
+   * Throws when the game cannot be launched. The message reaches the user.
+   *
+   * `cwd` is optional and absent for every store-backed game — those are
+   * started by the store, which chooses its own. The storeless store sets it
+   * to the program's own folder, because a launcher that reads its
+   * configuration relative to the working directory misbehaves otherwise.
+   */
+  launchCommand?(game: Game): { exe: string; args: string[]; cwd?: string }
+
+  /**
    * Returns the URI that makes the store download the game.
    *
    * Same mechanism as `launchUri`, only with a different verb — all four

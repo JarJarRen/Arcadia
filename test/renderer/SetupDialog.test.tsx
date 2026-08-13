@@ -17,6 +17,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { SetupDialog } from '@renderer/components/SetupDialog'
 import { stubArcadia } from './fixtures'
 import type { EnvConfigValues } from '@shared/env-config'
+import { STORE_IDS } from '@shared/types'
+import { t } from '@shared/i18n'
 
 const VALUES: EnvConfigValues = {
   STEAM_WEB_API_KEY: 'existing-web-key',
@@ -29,6 +31,8 @@ function renderSetup(overrides: Partial<Parameters<typeof SetupDialog>[0]> = {})
     values: VALUES,
     path: 'C:\\Users\\test\\.env',
     firstRun: false,
+    enabledStores: [...STORE_IDS],
+    onEnabledStoresChange: vi.fn(),
     onClose: vi.fn(),
     ...overrides
   }
@@ -36,10 +40,103 @@ function renderSetup(overrides: Partial<Parameters<typeof SetupDialog>[0]> = {})
   return props
 }
 
+/** The dialog opens on the stores tab; most of these tests want the other. */
+function showKeys(): void {
+  fireEvent.click(screen.getByRole('tab', { name: /api keys/i }))
+}
+
 describe('SetupDialog', () => {
+  it('opens on the stores tab', () => {
+    stubArcadia()
+    renderSetup()
+
+    expect(screen.getByRole('checkbox', { name: /steam/i })).toBeDefined()
+    // The keys are one click away, not on screen. Queried by value to match
+    // how the rest of this file finds these fields.
+    expect(screen.queryByDisplayValue('existing-web-key')).toBeNull()
+  })
+
+  it('shows the keys and hides the stores on the other tab', () => {
+    stubArcadia()
+    renderSetup()
+
+    showKeys()
+
+    expect(screen.getByDisplayValue('existing-web-key')).toBeDefined()
+    // Asserted on the line that exists only in the stores panel: the store
+    // checkboxes' accessible names carry their status text too, which makes
+    // an anchored name match fragile.
+    expect(screen.queryByText(t().setup.storesApplyAtOnce)).toBeNull()
+  })
+
+  it('says the store ticks need no saving', () => {
+    stubArcadia()
+    renderSetup()
+
+    // Otherwise the shared Save button implies they are still pending.
+    expect(screen.getByText(t().setup.storesApplyAtOnce)).toBeDefined()
+  })
+
+  it('can be saved from the stores tab', async () => {
+    stubArcadia()
+    const saveEnvConfig = vi.fn(async () => ({ ok: true, restarting: false }))
+    window.arcadia.saveEnvConfig = saveEnvConfig
+    const props = renderSetup()
+
+    // Never navigating to the keys tab must still answer the question. On a
+    // first run this button is the only way out of the dialog, so if it
+    // lived inside the keys panel the user would be stranded here.
+    fireEvent.click(screen.getByRole('button', { name: t().setup.save }))
+
+    await waitFor(() => expect(saveEnvConfig).toHaveBeenCalled())
+    await waitFor(() => expect(props.onClose).toHaveBeenCalled())
+  })
+
+  it('offers no close on either tab during the first run', () => {
+    stubArcadia()
+    renderSetup({ firstRun: true })
+
+    expect(screen.queryByRole('button', { name: t().setup.close })).toBeNull()
+    showKeys()
+    expect(screen.queryByRole('button', { name: t().setup.close })).toBeNull()
+  })
+
+  it('closes on Escape from the keys tab too', () => {
+    stubArcadia()
+    const props = renderSetup()
+
+    showKeys()
+    fireEvent.keyDown(window, { key: 'Escape' })
+
+    expect(props.onClose).toHaveBeenCalled()
+  })
+
+  it('focuses the first key field when its tab appears', () => {
+    stubArcadia()
+    renderSetup()
+
+    showKeys()
+
+    expect(document.activeElement).toBe(screen.getByDisplayValue('existing-web-key'))
+  })
+
+  it('moves between tabs with the arrow keys', () => {
+    stubArcadia()
+    renderSetup()
+    const stores = screen.getByRole('tab', { name: t().setup.storesTitle })
+
+    fireEvent.keyDown(stores, { key: 'ArrowRight' })
+
+    expect(screen.getByRole('tab', { name: /api keys/i }).getAttribute('aria-selected')).toBe(
+      'true'
+    )
+  })
+
   it('prefills the three key fields from values', () => {
     stubArcadia()
     renderSetup()
+
+    showKeys()
 
     expect(screen.getByDisplayValue('existing-web-key')).toBeDefined()
     expect(screen.getByDisplayValue('76561198000000042')).toBeDefined()
@@ -50,6 +147,8 @@ describe('SetupDialog', () => {
     stubArcadia()
     renderSetup({ path: 'D:\\game\\stuff\\.env' })
 
+    showKeys()
+
     expect(screen.getByText('Stored in D:\\game\\stuff\\.env')).toBeDefined()
   })
 
@@ -57,6 +156,8 @@ describe('SetupDialog', () => {
     const saveEnvConfig = vi.fn(async () => ({ ok: true, restarting: false }))
     stubArcadia({ saveEnvConfig })
     renderSetup()
+
+    showKeys()
 
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
@@ -75,6 +176,8 @@ describe('SetupDialog', () => {
     const saveEnvConfig = vi.fn(async () => ({ ok: true, restarting: false }))
     stubArcadia({ saveEnvConfig })
     renderSetup()
+
+    showKeys()
 
     fireEvent.change(screen.getByLabelText(/^Steam Web API key/), {
       target: { value: 'new-web-key' }
@@ -120,6 +223,8 @@ describe('SetupDialog', () => {
     const saveEnvConfig = vi.fn(async () => ({ ok: true, restarting: false }))
     stubArcadia({ saveEnvConfig })
     renderSetup({ firstRun: true })
+
+    showKeys()
 
     fireEvent.click(screen.getByRole('checkbox', { name: /^Skip configuration/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Continue without keys' }))
@@ -175,6 +280,24 @@ describe('SetupDialog', () => {
     await waitFor(() =>
       expect(screen.getByText('Could not write the file: EACCES')).toBeDefined()
     )
+    expect(props.onClose).not.toHaveBeenCalled()
+  })
+
+  it('stays open when Escape dismisses a store detail popover', async () => {
+    stubArcadia({
+      getStoreAvailability: async () => ({
+        ubisoft: { available: true, limitations: ['Owned games from a local cache.'] }
+      })
+    })
+    const props = renderSetup()
+
+    fireEvent.click(await screen.findByRole('button', { name: /details about ubisoft/i }))
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
+
+    // The panel closes; the configuration screen behind it does not. Both
+    // used to listen for Escape on document, which is why this is asserted
+    // against the real dialog rather than against a stub of it.
+    expect(screen.queryByText(/Owned games from a local cache\./)).toBeNull()
     expect(props.onClose).not.toHaveBeenCalled()
   })
 })

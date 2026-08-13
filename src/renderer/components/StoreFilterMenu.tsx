@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, type ReactElement } from 'react'
-import { STORE_IDS, type StoreId } from '@shared/types'
+import { type StoreId } from '@shared/types'
 import { t } from '@shared/i18n'
 import { storeFilterLabel, storeFilterTitle, toggleStore } from '../filter'
 import { useDismiss } from '../hooks/useDismiss'
@@ -7,6 +7,15 @@ import { STORE_LABELS } from './storeLabels'
 
 interface Props {
   stores: StoreId[]
+  /**
+   * The stores that may be filtered on — the ones switched on in the
+   * configuration screen.
+   *
+   * A prop rather than STORE_IDS: a menu listing a store the user has
+   * switched off would filter the library down to nothing and give no
+   * indication why.
+   */
+  available: StoreId[]
   onChange: (stores: StoreId[]) => void
 }
 
@@ -18,7 +27,7 @@ interface Props {
  * single-row toolbar, and it only multi-selects through ctrl-click — a
  * gesture nothing on screen hints at.
  */
-export function StoreFilterMenu({ stores, onChange }: Props): ReactElement {
+export function StoreFilterMenu({ stores, available, onChange }: Props): ReactElement {
   const [open, setOpen] = useState(false)
   const root = useRef<HTMLDivElement>(null)
   const close = useCallback(() => setOpen(false), [])
@@ -63,7 +72,7 @@ export function StoreFilterMenu({ stores, onChange }: Props): ReactElement {
             {t().toolbar.allStores}
           </button>
 
-          {STORE_IDS.map((id) => {
+          {available.map((id) => {
             const selected = stores.includes(id)
             return (
               <button

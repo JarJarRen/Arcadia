@@ -1,5 +1,7 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, safeStorage, shell } from 'electron'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
+import type { DatabaseSync } from 'node:sqlite'
 import { config as loadDotenv } from 'dotenv'
 import { openDatabase } from '@main/db/schema'
 import { GameRepository } from '@main/db/repository'
@@ -14,9 +16,16 @@ import { SteamAppList } from '@main/metadata/steamAppList'
 import { fetchAppDetails } from '@main/metadata/steamStore'
 import { SECURE_WEB_PREFERENCES } from '@main/window-options'
 import { IPC } from '@shared/ipc'
-import { parseLanguage, setLanguage } from '@shared/i18n'
+import { getLanguage, parseLanguage, setLanguage, t } from '@shared/i18n'
 import { envFileCandidates } from '@main/env-file'
 import { createScanState } from '@main/scan-state'
+import { enabledAdapters } from '@main/stores/enabled'
+import { MicrosoftSession, type TokenStore } from '@main/stores/microsoft/session'
+import { pollForTokens, requestDeviceCode } from '@main/stores/microsoft/auth'
+import { FreebieRepository } from '@main/db/freebies'
+import { FreebieService } from '@main/freebies/service'
+import { confirmClaims } from '@main/freebies/confirm'
+import { resolveStoreCountry } from '@main/locale-country'
 
 let mainWindow: BrowserWindow | undefined
 
@@ -47,7 +56,25 @@ function loadApiKeys(paths: string[]): void {
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
-    width: 1400,
+    // Wide enough for the library toolbar to lay out on one line rather
+    // than wrapping to a second row.
+    //
+    // The toolbar's own controls (search field, store filter, sort, the two
+    // checkboxes, shared filter, view toggle, count, refresh, add game,
+    // free games, settings) need 1318px in a single line at their default
+    // state — the `toolbarScrollWidth` the smoke test measures by
+    // temporarily forcing the row to lay out unwrapped. A requested window
+    // width does not all reach the page: Chromium's frame and scrollbar
+    // took 16px of the previous 1400px request (measured `toolbarClientWidth`
+    // was 1384, not 1400). 1480 leaves about 145px of slack above the
+    // 1318+16 floor — room for a longer freebie-count badge or a store
+    // selection wider than "All stores", and for the German bundle in
+    // i18n.ts, whose labels ("Bibliothek durchsuchen…", "Spiel hinzufügen")
+    // run measurably longer than the English ones this was measured with.
+    //
+    // Re-measure `toolbarScrollWidth` via `npm run smoke` and recompute this
+    // if a control is added to or widened in LibraryToolbar.tsx.
+    width: 1480,
     height: 900,
     minWidth: 940,
     minHeight: 600,
@@ -110,6 +137,55 @@ function createWindow(): BrowserWindow {
   return win
 }
 
+const MICROSOFT_TOKEN_KEY = 'microsoft-refresh-token'
+/** Marks a value as encrypted, so a plaintext fallback stays readable. */
+const ENCRYPTED_PREFIX = 'enc:'
+
+/**
+ * Where the Microsoft refresh token is kept.
+ *
+ * In the database rather than the `.env`: that file holds keys the user
+ * typed, and Arcadia writing a rotating credential into it would be a
+ * surprise. Encrypted through safeStorage, which is DPAPI on Windows.
+ *
+ * Where encryption is unavailable — some Linux desktops have no keyring —
+ * the token is stored as it is. That is worth doing rather than refusing:
+ * the file already sits in the user's own profile, and the alternative is
+ * signing in again on every start. The configuration screen says so.
+ */
+function microsoftTokenStore(settings: SettingsRepository): TokenStore {
+  return {
+    read: () => {
+      const stored = settings.get(MICROSOFT_TOKEN_KEY)
+      if (stored === undefined || stored === '') return undefined
+      if (!stored.startsWith(ENCRYPTED_PREFIX)) return stored
+      try {
+        return safeStorage.decryptString(
+          Buffer.from(stored.slice(ENCRYPTED_PREFIX.length), 'base64')
+        )
+      } catch {
+        // Encrypted by another machine or another user account. The token is
+        // unusable, and reporting it as absent asks for a fresh sign-in.
+        return undefined
+      }
+    },
+    write: (value) => {
+      if (value === undefined) {
+        settings.set(MICROSOFT_TOKEN_KEY, '')
+        return
+      }
+      if (!safeStorage.isEncryptionAvailable()) {
+        settings.set(MICROSOFT_TOKEN_KEY, value)
+        return
+      }
+      settings.set(
+        MICROSOFT_TOKEN_KEY,
+        ENCRYPTED_PREFIX + safeStorage.encryptString(value).toString('base64')
+      )
+    }
+  }
+}
+
 app.whenReady().then(() => {
   // The window before the setup, not after it.
   //
@@ -140,10 +216,70 @@ app.whenReady().then(() => {
   // Before anything reads process.env — the adapters below do.
   loadApiKeys(envFilePaths)
 
-  const db = openDatabase(join(app.getPath('userData'), 'arcadia.db'))
+  /**
+   * Opening the database must not be able to stop the app from starting.
+   *
+   * This used to be a bare `openDatabase`, and a corrupt file made it throw
+   * — partway through this function, so `registerIpcHandlers` below never
+   * ran. Arcadia then came up with a window, a rendered library and every
+   * IPC channel missing, reporting "No handler registered for
+   * 'library:sync'": a message that names the wrong subsystem and gives no
+   * hint that a file on disk is at fault.
+   *
+   * `openDatabase` now sets a damaged file aside by itself, so the common
+   * case never reaches this catch. What is left for it is everything a
+   * retry cannot mend — no permission, a full disk, a path that is a
+   * directory. Those fall back to an in-memory database: the app is
+   * useless-but-honest for that run rather than dead and inexplicable, and
+   * `startupNotice` carries the reason to the banner.
+   */
+  let startupNotice: string | undefined
+  let db: DatabaseSync
+  try {
+    db = openDatabase(join(app.getPath('userData'), 'arcadia.db'), ({ movedTo }) => {
+      console.warn(`Database was damaged; kept the old file as ${movedTo}`)
+      startupNotice = t().errors.databaseRecovered(movedTo)
+    })
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    console.error('Database could not be opened:', error)
+    startupNotice = t().errors.databaseUnusable(detail)
+    db = openDatabase(':memory:')
+  }
+
   const repo = new GameRepository(db)
   const metadata = new MetadataRepository(db)
   const settings = new SettingsRepository(db)
+
+  // Held in its own name rather than inlined: the confirmation hook below
+  // needs the repository, not the service.
+  const freebieRepo = new FreebieRepository(db)
+
+  const freebies = new FreebieService({
+    repo: freebieRepo,
+    settings,
+    // The store country prefers the OS's own ISO 3166 code — the real
+    // region, not a guess parsed out of a language tag — and only falls
+    // back to the locale when the OS has none to offer. See
+    // resolveStoreCountry for the order and why. Falls back to US as a last
+    // resort, which is the region Epic's feed defaults to.
+    locale: () => ({
+      language: getLanguage(),
+      country: resolveStoreCountry(app.getLocaleCountryCode(), app.getLocale())
+    }),
+    // Read fresh per call, not captured once: a game bought after the
+    // giveaway appeared must show as owned on the very next list request.
+    games: () => repo.all()
+  })
+
+  const microsoftSession = new MicrosoftSession({
+    store: microsoftTokenStore(settings),
+    // A scan can sign itself out: a refresh token the service has refused
+    // is discarded on the spot, with no IPC handler involved to announce
+    // it. Without this the configuration screen would keep showing
+    // "Signed in as …" until it was closed and reopened.
+    onChanged: () => mainWindow?.webContents.send(IPC.microsoftAuthChanged)
+  })
 
   // Still before the renderer can ask, which is what actually matters: the
   // window is created above, but the language reaches the interface through
@@ -173,7 +309,16 @@ app.whenReady().then(() => {
     ea: { catalogCachePath: join(app.getPath('userData'), 'ea-catalog.json') },
     // Names for the games from localconfig.vdf. The local file knows only
     // identifiers; without a name a game is skipped.
-    resolveSteamName: (appId) => appList.nameFor(appId)
+    resolveSteamName: (appId) => appList.nameFor(appId),
+    microsoft: { catalogCachePath: join(app.getPath('userData'), 'microsoft-catalog.json') },
+    microsoftSession,
+    // Read fresh per scan, not captured once: a game added a moment ago has
+    // to appear in the very next sync. `existsSync` rather than an async stat
+    // because `scanInstalled` runs over a handful of rows, not a library.
+    other: {
+      listStoreless: () => repo.storeless(),
+      fileExists: (path) => existsSync(path)
+    }
   })
 
   // Closes gaps the app opens itself. The renderer reports images that fail
@@ -202,11 +347,29 @@ app.whenReady().then(() => {
     metadata,
     settings,
     adapters,
+    freebies,
+    freebiesRepo: freebieRepo,
     scan,
     appList,
+    // Built above in whatever language the module currently holds, which is
+    // English: the stored language lives in the very database that failed,
+    // so there is nothing else it could truthfully be.
+    ...(startupNotice === undefined ? {} : { startupNotice }),
     fetchDetails: fetchAppDetails,
     getWindow: () => mainWindow,
     onArtworkGap: () => artworkGaps.request(),
+    // Asked at the moment the screen asks, not captured here: a keyring can
+    // be unlocked while Arcadia runs, and a cached "no" would go on warning
+    // about a file that is encrypted by then.
+    secureStorageAvailable: () => safeStorage.isEncryptionAvailable(),
+    microsoft: {
+      session: microsoftSession,
+      requestDeviceCode: () => requestDeviceCode(),
+      // `cancelled` was declared and checked in pollForTokens but never
+      // supplied, so a started poll ran to the server's expiry with nothing
+      // able to stop it. The handler owns the flow and decides.
+      pollForTokens: (code, cancelled) => pollForTokens(code, { cancelled })
+    },
     envFilePaths,
     // The keys reach the adapters at startup and nowhere else, so a changed
     // key only takes effect in a process that starts after it was written.
@@ -215,6 +378,10 @@ app.whenReady().then(() => {
       app.exit(0)
     }
   })
+
+  // A year. The table is tiny; this exists so it cannot grow without bound
+  // over the life of an installation.
+  freebieRepo.pruneClaims(Date.now() - 365 * 86_400_000)
 
   // First scan in the background: the UI shows the cache immediately and
   // refreshes once the scan is through.
@@ -231,7 +398,16 @@ app.whenReady().then(() => {
   void scan
     .track(async () => {
       await appList.loadCache(join(app.getPath('userData'), 'steam-apps.json'))
-      return runSync(adapters, repo, Math.floor(Date.now() / 1000))
+      return runSync(
+        enabledAdapters(adapters, settings.get('enabled-stores')),
+        repo,
+        Math.floor(Date.now() / 1000),
+        (games) => {
+          if (confirmClaims(freebieRepo, games, Date.now()).length > 0) {
+            mainWindow?.webContents.send(IPC.freebiesChanged)
+          }
+        }
+      )
     })
     .then((result) => {
       console.log(`Scan finished: ${result.totalGames} games`)
@@ -251,6 +427,22 @@ app.whenReady().then(() => {
       })
     })
     .catch((error: unknown) => console.error('Scan failed:', error))
+
+  // Kicked off after the window exists, so the event this can send has
+  // somewhere to go.
+  //
+  // Forced, unlike every other caller of refresh — the freebies:get handler,
+  // the renderer's reload-on-event — which all still go through the TTL
+  // guard. This call happens once per process launch, not once per event,
+  // so it cannot become the request storm attempted-at was introduced to
+  // stop; it just means a restart inside the six-hour window still shows a
+  // fresh list instead of silently serving the cache.
+  void freebies
+    .refresh(Date.now(), true)
+    .then((changed) => {
+      if (changed) mainWindow?.webContents.send(IPC.freebiesChanged)
+    })
+    .catch((error: unknown) => console.error('The freebies could not be fetched:', error))
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) mainWindow = createWindow()

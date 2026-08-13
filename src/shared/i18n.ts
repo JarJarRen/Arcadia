@@ -80,10 +80,19 @@ export interface Strings {
     hint: string
     nameLabel: string
     storeLabel: string
+    /** Shown in place of the store list when every store is switched off. */
+    noStores: string
     idLabel: string
     idHint: string
     submit: string
     cancel: string
+    /** The storeless case: the program to start, and its arguments. */
+    executableLabel: string
+    executableHint: string
+    browse: string
+    noExecutable: string
+    argumentsLabel: string
+    argumentsHint: string
   }
 
   /**
@@ -97,6 +106,28 @@ export interface Strings {
     title: string
     intro: string
     firstRunHint: string
+    storesTitle: string
+    /** Label of the second tab; the first reuses storesTitle. */
+    tabKeys: string
+    /** Accessible name for the tablist itself. */
+    tabsLabel: string
+    /** Says the store ticks are already saved, which the Save button implies otherwise. */
+    storesApplyAtOnce: string
+    storesHint: string
+    storeChecking: string
+    storeDetected: string
+    storeNotFound: string
+    /** Accessible name and hover title for a store's detail button. */
+    storeDetails: (store: string) => string
+    microsoftSignIn: string
+    /** Shown on the sign-in button itself while the device code is being requested, so a second click cannot start a second flow before the first has anything to show for it. */
+    microsoftSigningIn: string
+    microsoftSignOut: string
+    microsoftSignedInAs: (gamertag: string) => string
+    microsoftCodeHint: (code: string) => string
+    microsoftOpenLink: string
+    /** Shown where safeStorage reports it cannot encrypt anything. */
+    microsoftNoEncryption: string
     /** e.g. "Saved to C:\Users\…\.env" */
     fileHint: (path: string) => string
     steamKeyLabel: string
@@ -144,6 +175,8 @@ export interface Strings {
     removeFavorite: string
     sharedOrFree: string
     sharedOrFreeTitle: string
+    /** A storeless game whose program is no longer where it was. */
+    fileNotFound: string
   }
 
   storeSwitch: {
@@ -218,6 +251,72 @@ export interface Strings {
     installNameFailed: (name: string, detail: string) => string
     /** The `.env` could not be written — read-only file, no permission. */
     envSaveFailed: (detail: string) => string
+    /** The database was damaged and has been set aside; a fresh one took over. */
+    databaseRecovered: (path: string) => string
+    /** The database could not be opened at all, so this run keeps nothing. */
+    databaseUnusable: (detail: string) => string
+    /** e.g. "The offer could not be opened: …" */
+    claimFailed: (reason: string) => string
+    executableNotAbsolute: string
+    executableUnsupported: string
+    executableMissing: (path: string) => string
+    shortcutUnreadable: string
+    executableRequired: string
+    executableNotAllowed: string
+    /** The program picker itself failed to open — a destroyed window, for one. */
+    executablePickFailed: (detail: string) => string
+  }
+
+  freebies: {
+    /** The toolbar button. */
+    title: string
+    /** e.g. "Free now · 3" — the count is of unclaimed current offers. */
+    buttonWithCount: (count: number) => string
+    /** The page's own close control — worded like detail.back, not shared with it: each section owns its strings here. */
+    back: string
+    currentHeading: string
+    upcomingHeading: string
+    /** Shown in place of the list when there is nothing free anywhere. */
+    empty: string
+    /**
+     * Shown when the controls emptied a list that is not itself empty.
+     *
+     * Distinct from `empty` on purpose: that one is a claim about the world,
+     * this one is a claim about what was asked for.
+     */
+    noMatches: string
+    /** Shown when every source failed and there is no cache either. */
+    unavailable: string
+    refresh: string
+    /** Mirrors toolbar.refreshing — the icon button's accessible name while a fetch is in flight. */
+    refreshing: string
+    /** e.g. "as of 10 Aug, 14:02" */
+    asOf: (when: string) => string
+    sourceFailed: (source: string) => string
+    kind: { all: string; game: string; dlc: string; loot: string }
+    /** The kind chips' tooltips — what each filter does, not a repeat of its short label. */
+    kindHint: { all: string; game: string; dlc: string; loot: string }
+    /** e.g. "ends in 2 days" */
+    endsIn: (days: number) => string
+    endsToday: string
+    /** e.g. "from 14 August" */
+    startsOn: (date: string) => string
+    claim: {
+      /** e.g. "Claim in Epic" */
+      inStore: (store: string) => string
+      inBrowser: string
+      /** The label for a pending claim's button — worded as the action,
+          since Arcadia has nothing truthful to say about when it was last
+          opened without displaying a clock time no one asked to see. */
+      pending: string
+      confirmed: string
+      /** The tooltip on a pending row. */
+      pendingHint: string
+      /** The tooltip on an unclaimed row whose button opens the store app. */
+      inStoreHint: (store: string) => string
+      /** The tooltip on an unclaimed row whose button opens a browser page. */
+      inBrowserHint: string
+    }
   }
 
   stores: {
@@ -257,6 +356,32 @@ export interface Strings {
       notFound: string
       ownedFromLocalCache: string
       invalidGameId: (id: string) => string
+    }
+    microsoft: {
+      windowsOnly: string
+      noPlaytime: string
+      noInstallSize: string
+      signedOutOnlyXboxApp: string
+      notInstalledCannotLaunch: (name: string) => string
+      noProductId: (name: string) => string
+      signInFailed: (reason: string) => string
+      signInExpired: string
+      signInDeclined: string
+      signInCancelled: string
+      xboxAuthFailed: (reason: string) => string
+      noXboxProfile: string
+      childAccount: string
+      titleHistoryFailed: (reason: string) => string
+      missingXuid: string
+      catalogFailed: (reason: string) => string
+    }
+    other: {
+      /** Shown under the store's checkbox in the configuration screen. */
+      handAdded: string
+      noExecutable: (name: string) => string
+      fileMissing: (path: string) => string
+      nothingToInstall: string
+      notLaunchable: (name: string) => string
     }
   }
 }
@@ -312,17 +437,25 @@ const en: Strings = {
   addDialog: {
     label: 'Add a game by hand',
     title: 'Add a game',
-    hint:
-      'For games no store reports — EA only lists what has been installed on ' +
-      'this machine.',
+    hint: 'For games no store reports, and for programs that belong to no store at all.',
     nameLabel: 'Name',
     storeLabel: 'Store',
+    noStores:
+      'No store is switched on. Switch one on under Stores in the ' +
+      'configuration screen, then add the game.',
     idLabel: 'Store ID (optional)',
     idHint:
       'Leave empty if you do not know it. The entry then gets artwork and a ' +
       'description, but cannot be launched.',
     submit: 'Add',
-    cancel: 'Cancel'
+    cancel: 'Cancel',
+    executableLabel: 'Program',
+    executableHint:
+      'The program that starts the game. A desktop shortcut works too — it is followed to the program it points at.',
+    browse: 'Browse…',
+    noExecutable: 'No program chosen yet.',
+    argumentsLabel: 'Arguments (optional)',
+    argumentsHint: 'Passed to the program as they are. Put a value with spaces in "quotes".'
   },
 
   setup: {
@@ -335,6 +468,28 @@ const en: Strings = {
     firstRunHint:
       'You will only be asked once. The gear in the toolbar reopens this at ' +
       'any time.',
+    storesTitle: 'Stores',
+    tabKeys: 'API keys',
+    tabsLabel: 'Configuration sections',
+    storesApplyAtOnce: 'Changes here apply at once.',
+    storesHint:
+      'Only the ticked stores are searched, and only they appear in the ' +
+      'store filter. Games from a store you switch off are hidden, not ' +
+      'deleted — switching it back on brings them straight back.',
+    storeChecking: 'checking…',
+    storeDetected: 'found on this machine',
+    storeNotFound: 'not found on this machine',
+    storeDetails: (store) => `Details about ${store}`,
+    microsoftSignIn: 'Connect a Microsoft account',
+    microsoftSigningIn: 'Connecting…',
+    microsoftSignOut: 'Disconnect',
+    microsoftSignedInAs: (gamertag) => `Signed in as ${gamertag}`,
+    microsoftCodeHint: (code) => `Enter the code ${code} in your browser:`,
+    microsoftOpenLink: 'Open the sign-in page',
+    microsoftNoEncryption:
+      'This system offers no keyring, so the Microsoft sign-in is stored ' +
+      'unencrypted in Arcadia’s database. The file sits in your own user ' +
+      'profile; anyone who can read it can read the token.',
     fileHint: (path) => `Stored in ${path}`,
     steamKeyLabel: 'Steam Web API key',
     steamKeyHint:
@@ -380,7 +535,8 @@ const en: Strings = {
     addFavorite: 'Mark as favourite',
     removeFavorite: 'Remove favourite',
     sharedOrFree: 'Shared/Free',
-    sharedOrFreeTitle: 'Not licensed to your account'
+    sharedOrFreeTitle: 'Not licensed to your account',
+    fileNotFound: 'Program not found'
   },
 
   storeSwitch: {
@@ -455,7 +611,58 @@ const en: Strings = {
     installUriFailed: (uri, detail) => `Install via ${uri} failed: ${detail}`,
     launchNameFailed: (name, detail) => `Launching “${name}” failed: ${detail}`,
     installNameFailed: (name, detail) => `Installing “${name}” failed: ${detail}`,
-    envSaveFailed: (detail) => `The settings could not be saved: ${detail}`
+    envSaveFailed: (detail) => `The settings could not be saved: ${detail}`,
+    databaseRecovered: (path) =>
+      'Arcadia’s database was damaged and had to be started over, so the ' +
+      'library is being scanned again. Nothing was deleted — the old file is ' +
+      `still there as ${path}.`,
+    databaseUnusable: (detail) =>
+      `The database could not be opened (${detail}). Arcadia is running, but ` +
+      'nothing it finds will be kept when you close it.',
+    claimFailed: (reason) => `The offer could not be opened: ${reason}`,
+    executableNotAbsolute: 'Choose a program by its full path.',
+    executableUnsupported:
+      'Choose a program (.exe). Batch files are not supported, because running one needs a command interpreter.',
+    executableMissing: (path) => `There is no file at ${path}.`,
+    shortcutUnreadable: 'That shortcut could not be read. Choose the program itself instead.',
+    executableRequired: 'Choose the program that starts this game.',
+    executableNotAllowed: 'Only a game without a store is started from a program on this computer.',
+    executablePickFailed: (detail) => `The program picker could not be opened: ${detail}`
+  },
+
+  freebies: {
+    title: 'Free now',
+    buttonWithCount: (count: number) => `Free now · ${count}`,
+    back: '← Back to library',
+    currentHeading: 'Free to keep',
+    upcomingHeading: 'Coming soon',
+    empty: 'Nothing is free to keep in your stores right now.',
+    noMatches: 'Nothing here matches what you are looking for.',
+    unavailable: 'The free-games lists could not be reached.',
+    refresh: 'Refresh',
+    refreshing: 'Refreshing…',
+    asOf: (when: string) => `as of ${when}`,
+    sourceFailed: (source: string) => `${source}'s list could not be fetched.`,
+    kind: { all: 'All', game: 'Games', dlc: 'DLC', loot: 'Loot' },
+    kindHint: {
+      all: 'Show every kind of offer.',
+      game: 'Show only full games.',
+      dlc: 'Show only DLC and expansions.',
+      loot: 'Show only in-game loot and bonuses.'
+    },
+    endsIn: (days: number) => (days === 1 ? 'ends tomorrow' : `ends in ${days} days`),
+    endsToday: 'ends today',
+    startsOn: (date: string) => `from ${date}`,
+    claim: {
+      inStore: (store: string) => `Claim in ${store}`,
+      inBrowser: 'Open in browser',
+      pending: 'Open again',
+      confirmed: '✓ In your library',
+      pendingHint:
+        'Arcadia opened the store page. It marks this as claimed once the game turns up in a scan.',
+      inStoreHint: (store: string) => `Opens ${store} so you can claim the offer there.`,
+      inBrowserHint: 'Opens the offer’s page in your browser.'
+    }
   },
 
   stores: {
@@ -520,6 +727,44 @@ const en: Strings = {
         'local caches and reflect the last time it signed in; a game it does ' +
         'not name is left out.',
       invalidGameId: (id) => `Invalid Ubisoft game ID: ${id}`
+    },
+    microsoft: {
+      windowsOnly: 'The Microsoft Store only exists on Windows.',
+      noPlaytime: 'Xbox reports no playtime, only when a game was last played.',
+      noInstallSize: 'The install size of a Store game is not reported.',
+      signedOutOnlyXboxApp:
+        'Without a Microsoft account only games installed through the Xbox ' +
+        'app are shown — a local scan cannot otherwise tell a game from an ' +
+        'application.',
+      notInstalledCannotLaunch: (name) =>
+        `${name} is not installed, so there is nothing to start.`,
+      noProductId: (name) =>
+        `Arcadia does not know the Store product for ${name}, so it cannot ` +
+        `open its page. Sign in with a Microsoft account, or install it from ` +
+        `the Xbox app.`,
+      signInFailed: (reason) => `The Microsoft sign-in failed: ${reason}`,
+      signInExpired: 'The sign-in code expired before it was used. Please try again.',
+      signInDeclined: 'The sign-in was declined.',
+      signInCancelled: 'The sign-in was cancelled.',
+      xboxAuthFailed: (reason) => `Xbox Live refused the sign-in: ${reason}`,
+      noXboxProfile:
+        'This Microsoft account has no Xbox profile. Sign in once at xbox.com ' +
+        'to create one, then try again.',
+      childAccount:
+        'This account is a child account and has to be added to a family ' +
+        'before it can use Xbox Live.',
+      titleHistoryFailed: (reason) => `The Xbox title history could not be read: ${reason}`,
+      missingXuid:
+        'Xbox Live did not return a player ID for this account, so the title history ' +
+        'cannot be read.',
+      catalogFailed: (reason) => `The Microsoft Store catalogue could not be read: ${reason}`
+    },
+    other: {
+      handAdded: 'Games you add by hand. Nothing is detected automatically.',
+      noExecutable: (name) => `${name} has no program to start.`,
+      fileMissing: (path) => `The program is no longer there: ${path}`,
+      nothingToInstall: 'This game was added by hand. There is nothing to install.',
+      notLaunchable: (name) => `${name} is started directly, not through a store.`
     }
   }
 }
@@ -582,17 +827,26 @@ const de: Strings = {
   addDialog: {
     label: 'Spiel von Hand hinzufügen',
     title: 'Spiel hinzufügen',
-    hint:
-      'Für Spiele, die kein Store meldet — EA listet nur, was auf diesem ' +
-      'Rechner installiert war.',
+    hint: 'Für Spiele, die kein Store meldet, und für Programme, die zu gar keinem Store gehören.',
     nameLabel: 'Name',
     storeLabel: 'Store',
+    noStores:
+      'Es ist kein Store eingeschaltet. Schalte in der Konfiguration unter ' +
+      'Stores einen ein und füge das Spiel dann hinzu.',
     idLabel: 'Store-ID (optional)',
     idHint:
       'Leer lassen, wenn du sie nicht kennst. Der Eintrag bekommt dann Bild ' +
       'und Beschreibung, lässt sich aber nicht starten.',
     submit: 'Hinzufügen',
-    cancel: 'Abbrechen'
+    cancel: 'Abbrechen',
+    executableLabel: 'Programm',
+    executableHint:
+      'Das Programm, das das Spiel startet. Eine Verknüpfung vom Desktop geht auch — sie wird zum Programm dahinter aufgelöst.',
+    browse: 'Durchsuchen…',
+    noExecutable: 'Noch kein Programm gewählt.',
+    argumentsLabel: 'Argumente (optional)',
+    argumentsHint:
+      'Werden unverändert an das Programm übergeben. Werte mit Leerzeichen in "Anführungszeichen" setzen.'
   },
 
   setup: {
@@ -605,6 +859,30 @@ const de: Strings = {
     firstRunHint:
       'Du wirst nur einmal gefragt. Das Zahnrad in der Leiste öffnet das ' +
       'hier jederzeit wieder.',
+    storesTitle: 'Stores',
+    tabKeys: 'API-Schlüssel',
+    tabsLabel: 'Bereiche der Konfiguration',
+    storesApplyAtOnce: 'Änderungen hier wirken sofort.',
+    storesHint:
+      'Nur die angehakten Stores werden durchsucht, und nur sie erscheinen ' +
+      'im Store-Filter. Spiele eines abgeschalteten Stores werden ' +
+      'ausgeblendet, nicht gelöscht — beim Wiedereinschalten sind sie ' +
+      'sofort zurück.',
+    storeChecking: 'wird geprüft …',
+    storeDetected: 'auf diesem Rechner gefunden',
+    storeNotFound: 'auf diesem Rechner nicht gefunden',
+    storeDetails: (store) => `Details zu ${store}`,
+    microsoftSignIn: 'Microsoft-Konto verbinden',
+    microsoftSigningIn: 'Verbindung wird hergestellt…',
+    microsoftSignOut: 'Trennen',
+    microsoftSignedInAs: (gamertag) => `Angemeldet als ${gamertag}`,
+    microsoftCodeHint: (code) => `Gib den Code ${code} im Browser ein:`,
+    microsoftOpenLink: 'Anmeldeseite öffnen',
+    microsoftNoEncryption:
+      'Dieses System bietet keinen Schlüsselbund, daher wird die ' +
+      'Microsoft-Anmeldung unverschlüsselt in Arcadias Datenbank ' +
+      'gespeichert. Die Datei liegt in deinem eigenen Benutzerprofil; wer ' +
+      'sie lesen kann, kann auch das Token lesen.',
     fileHint: (path) => `Gespeichert in ${path}`,
     steamKeyLabel: 'Steam-Web-API-Schlüssel',
     steamKeyHint:
@@ -651,7 +929,8 @@ const de: Strings = {
     addFavorite: 'Als Favorit markieren',
     removeFavorite: 'Favorit entfernen',
     sharedOrFree: 'Geteilt/Gratis',
-    sharedOrFreeTitle: 'Nicht deinem Konto lizenziert'
+    sharedOrFreeTitle: 'Nicht deinem Konto lizenziert',
+    fileNotFound: 'Programm nicht gefunden'
   },
 
   storeSwitch: {
@@ -726,7 +1005,60 @@ const de: Strings = {
     installUriFailed: (uri, detail) => `Installation über ${uri} fehlgeschlagen: ${detail}`,
     launchNameFailed: (name, detail) => `Start von „${name}“ fehlgeschlagen: ${detail}`,
     installNameFailed: (name, detail) => `Installation von „${name}“ fehlgeschlagen: ${detail}`,
-    envSaveFailed: (detail) => `Die Einstellungen konnten nicht gespeichert werden: ${detail}`
+    envSaveFailed: (detail) => `Die Einstellungen konnten nicht gespeichert werden: ${detail}`,
+    databaseRecovered: (path) =>
+      'Arcadias Datenbank war beschädigt und musste neu angelegt werden, daher ' +
+      'wird die Bibliothek erneut eingelesen. Gelöscht wurde nichts — die alte ' +
+      `Datei liegt weiterhin unter ${path}.`,
+    databaseUnusable: (detail) =>
+      `Die Datenbank konnte nicht geöffnet werden (${detail}). Arcadia läuft, ` +
+      'aber nichts davon wird beim Beenden gespeichert.',
+    claimFailed: (reason) => `Das Angebot konnte nicht geöffnet werden: ${reason}`,
+    executableNotAbsolute: 'Wähle ein Programm über seinen vollständigen Pfad.',
+    executableUnsupported:
+      'Wähle ein Programm (.exe). Batch-Dateien werden nicht unterstützt, weil dafür ein Kommandozeilen-Interpreter nötig wäre.',
+    executableMissing: (path) => `Unter ${path} liegt keine Datei.`,
+    shortcutUnreadable:
+      'Diese Verknüpfung ließ sich nicht lesen. Wähle stattdessen das Programm selbst.',
+    executableRequired: 'Wähle das Programm, das dieses Spiel startet.',
+    executableNotAllowed:
+      'Nur ein Spiel ohne Store wird über ein Programm auf diesem Rechner gestartet.',
+    executablePickFailed: (detail) => `Die Programmauswahl konnte nicht geöffnet werden: ${detail}`
+  },
+
+  freebies: {
+    title: 'Gerade gratis',
+    buttonWithCount: (count: number) => `Gerade gratis · ${count}`,
+    back: '← Zurück zur Bibliothek',
+    currentHeading: 'Dauerhaft gratis',
+    upcomingHeading: 'Demnächst',
+    empty: 'In deinen Stores ist gerade nichts dauerhaft gratis.',
+    noMatches: 'Hier passt nichts zu dem, wonach du suchst.',
+    unavailable: 'Die Gratis-Listen waren nicht erreichbar.',
+    refresh: 'Aktualisieren',
+    refreshing: 'Wird aktualisiert…',
+    asOf: (when: string) => `Stand ${when}`,
+    sourceFailed: (source: string) => `Die Liste von ${source} konnte nicht geladen werden.`,
+    kind: { all: 'Alle', game: 'Spiele', dlc: 'DLC', loot: 'Extras' },
+    kindHint: {
+      all: 'Alle Arten von Angeboten anzeigen.',
+      game: 'Nur vollständige Spiele anzeigen.',
+      dlc: 'Nur DLCs und Erweiterungen anzeigen.',
+      loot: 'Nur Ingame-Extras und Boni anzeigen.'
+    },
+    endsIn: (days: number) => (days === 1 ? 'endet morgen' : `endet in ${days} Tagen`),
+    endsToday: 'endet heute',
+    startsOn: (date: string) => `ab ${date}`,
+    claim: {
+      inStore: (store: string) => `In ${store} holen`,
+      inBrowser: 'Im Browser öffnen',
+      pending: 'Erneut öffnen',
+      confirmed: '✓ In deiner Bibliothek',
+      pendingHint:
+        'Arcadia hat die Store-Seite geöffnet. Als geholt gilt das Spiel, sobald ein Scan es findet.',
+      inStoreHint: (store: string) => `Öffnet ${store}, damit du das Angebot dort holen kannst.`,
+      inBrowserHint: 'Öffnet die Seite des Angebots in deinem Browser.'
+    }
   },
 
   stores: {
@@ -797,6 +1129,47 @@ const de: Strings = {
         'Zwischenspeichern von Ubisoft Connect und entsprechen dem Stand der ' +
         'letzten Anmeldung; ein Spiel ohne Namen bleibt außen vor.',
       invalidGameId: (id) => `Unzulässige Ubisoft-Spiel-ID: ${id}`
+    },
+    microsoft: {
+      windowsOnly: 'Den Microsoft Store gibt es nur unter Windows.',
+      noPlaytime: 'Xbox meldet keine Spielzeit, nur wann zuletzt gespielt wurde.',
+      noInstallSize: 'Die Installationsgröße eines Store-Spiels wird nicht gemeldet.',
+      signedOutOnlyXboxApp:
+        'Ohne Microsoft-Konto werden nur Spiele angezeigt, die über die ' +
+        'Xbox-App installiert wurden — lokal lässt sich ein Spiel sonst ' +
+        'nicht von einer Anwendung unterscheiden.',
+      notInstalledCannotLaunch: (name) =>
+        `${name} ist nicht installiert, es gibt also nichts zu starten.`,
+      noProductId: (name) =>
+        `Arcadia kennt das Store-Produkt zu ${name} nicht und kann die Seite ` +
+        `daher nicht öffnen. Melde dich mit einem Microsoft-Konto an oder ` +
+        `installiere es über die Xbox-App.`,
+      signInFailed: (reason) => `Die Microsoft-Anmeldung ist fehlgeschlagen: ${reason}`,
+      signInExpired: 'Der Anmeldecode ist abgelaufen, bevor er benutzt wurde. Bitte erneut versuchen.',
+      signInDeclined: 'Die Anmeldung wurde abgelehnt.',
+      signInCancelled: 'Die Anmeldung wurde abgebrochen.',
+      xboxAuthFailed: (reason) => `Xbox Live hat die Anmeldung abgelehnt: ${reason}`,
+      noXboxProfile:
+        'Dieses Microsoft-Konto hat kein Xbox-Profil. Melde dich einmal auf ' +
+        'xbox.com an, um eines anzulegen, und versuche es dann erneut.',
+      childAccount:
+        'Dieses Konto ist ein Kinderkonto und muss erst einer Familie ' +
+        'hinzugefügt werden, bevor es Xbox Live nutzen kann.',
+      titleHistoryFailed: (reason) =>
+        `Der Xbox-Spielverlauf konnte nicht gelesen werden: ${reason}`,
+      missingXuid:
+        'Xbox Live hat für dieses Konto keine Spieler-ID zurückgegeben, daher kann der ' +
+        'Spielverlauf nicht gelesen werden.',
+      catalogFailed: (reason) =>
+        `Der Microsoft-Store-Katalog konnte nicht gelesen werden: ${reason}`
+    },
+    other: {
+      handAdded: 'Spiele, die du von Hand hinzufügst. Es wird nichts automatisch erkannt.',
+      noExecutable: (name) => `${name} hat kein Programm zum Starten.`,
+      fileMissing: (path) => `Das Programm ist nicht mehr da: ${path}`,
+      nothingToInstall:
+        'Dieses Spiel wurde von Hand hinzugefügt. Es gibt nichts zu installieren.',
+      notLaunchable: (name) => `${name} wird direkt gestartet, nicht über einen Store.`
     }
   }
 }

@@ -1,4 +1,12 @@
-export const STORE_IDS = ['steam', 'epic', 'ea', 'ubisoft'] as const
+/**
+ * Every store, in the order that decides which source wins.
+ *
+ * `library/merge.ts` builds its ranking from this array, so `other` is last
+ * on purpose: when a hand-made entry and a scanned game share a name, the
+ * scanned one becomes the active source. A placeholder must not displace the
+ * real thing.
+ */
+export const STORE_IDS = ['steam', 'epic', 'ea', 'ubisoft', 'microsoft', 'other'] as const
 export type StoreId = (typeof STORE_IDS)[number]
 
 /** What an adapter reads raw from a store. */
@@ -55,6 +63,24 @@ export interface RawGame {
    * entry.
    */
   manual?: boolean
+
+  /**
+   * The program a storeless game starts. Absolute path.
+   *
+   * Only the `other` store sets this. Every adapter-backed game is started
+   * through its store's URI or command instead, so a value here on any other
+   * store would be a bug — `addManualGame` rejects one.
+   */
+  launchExe?: string
+
+  /**
+   * Arguments for `launchExe`, already split.
+   *
+   * Split once when the user types them rather than re-parsed at every
+   * launch, and passed to `spawn` as an array — so an argument containing
+   * `&` is an argument, never a command.
+   */
+  launchArgs?: string[]
 }
 
 /** A game as it exists in the database and the UI. */

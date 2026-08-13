@@ -21,10 +21,24 @@ import { describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { App } from '@renderer/App'
 import { t } from '@shared/i18n'
+import type { Freebie } from '@shared/freebies'
 import { entry, game, stubArcadia } from './fixtures'
 
 const TF2 = entry('Team Fortress 2', [game('steam', '440', 'Team Fortress 2')])
 const PORTAL = entry('Portal', [game('steam', '400', 'Portal', { installed: false })])
+
+function freebie(overrides: Partial<Freebie> = {}): Freebie {
+  return {
+    id: 'epic:ghostrunner',
+    storeId: 'epic',
+    title: 'Ghostrunner',
+    kind: 'game',
+    storeGameId: 'ghostrunner',
+    source: 'epic',
+    claim: 'unclaimed',
+    ...overrides
+  }
+}
 
 describe('App', () => {
   it('renders the library it was given', async () => {
@@ -33,6 +47,34 @@ describe('App', () => {
 
     await waitFor(() => expect(screen.getByText('Team Fortress 2')).toBeDefined())
     expect(screen.getByText('Portal')).toBeDefined()
+  })
+
+  /**
+   * A damaged database is replaced rather than allowed to be fatal, which
+   * empties the library. Without this the user would be shown an empty
+   * library and told a scan found nothing — the reset that actually caused
+   * it having happened before the window existed.
+   */
+  it('shows what startup could not report at the time', async () => {
+    stubArcadia({
+      getGames: async () => [],
+      getStartupNotice: async () => 'the database was replaced'
+    })
+    render(<App />)
+
+    expect(await screen.findByText('the database was replaced')).toBeDefined()
+  })
+
+  it('lets the startup notice be dismissed', async () => {
+    // Nothing re-fetches it, so a banner that could not be closed would sit
+    // there for the life of the window.
+    stubArcadia({ getGames: async () => [], getStartupNotice: async () => 'database replaced' })
+    render(<App />)
+
+    const banner = await screen.findByText('database replaced')
+    fireEvent.click(screen.getByLabelText(t().common.dismissMessage))
+
+    await waitFor(() => expect(banner.isConnected).toBe(false))
   })
 
   /**
@@ -847,5 +889,118 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
 
     expect(screen.queryByRole('dialog', { name: 'Configure API keys' })).toBeNull()
+  })
+
+  it('lays the free games page over the library', async () => {
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: /Free now/ }))
+    expect(await screen.findByRole('heading', { name: 'Free now' })).toBeTruthy()
+  })
+
+  it('closes the free games page with the back button', async () => {
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: /Free now/ }))
+    expect(await screen.findByRole('heading', { name: 'Free now' })).toBeTruthy()
+    // Button 3 is the mouse's back thumb button, as Chromium numbers it.
+    fireEvent.mouseUp(window, { button: 3 })
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Free now' })).toBeNull())
+  })
+
+  /**
+   * The badge is meant to count unclaimed *current* offers only — a claim
+   * already in flight, or already confirmed, is not something left to grab.
+   * LibraryToolbar.test.tsx pins the button's own rendering given a count; it
+   * cannot pin whether App computed that count correctly from the real list,
+   * which is what a pending/confirmed row slipping into the total would
+   * expose and what this test guards against.
+   */
+  it('the badge counts only unclaimed current offers', async () => {
+    stubArcadia({
+      getGames: async () => [TF2],
+      getFreebies: async () => ({
+        current: [
+          freebie({ id: 'a', claim: 'unclaimed' }),
+          freebie({ id: 'b', claim: 'pending' }),
+          freebie({ id: 'c', claim: 'confirmed' })
+        ],
+        upcoming: [freebie({ id: 'd', claim: 'unclaimed' })],
+        failures: []
+      })
+    })
+    render(<App />)
+
+    expect(await screen.findByRole('button', { name: 'Free now · 1' })).toBeTruthy()
+  })
+
+  it('refreshes the badge count when freebies:changed fires', async () => {
+    let changed: (() => void) | undefined
+    let call = 0
+    stubArcadia({
+      getGames: async () => [TF2],
+      getFreebies: async () => ({
+        current: call++ === 0 ? [] : [freebie({ id: 'a', claim: 'unclaimed' })],
+        upcoming: [],
+        failures: []
+      }),
+      onFreebiesChanged: (callback) => {
+        changed = callback
+        return () => undefined
+      }
+    })
+    render(<App />)
+    expect(await screen.findByRole('button', { name: 'Free now' })).toBeTruthy()
+
+    await act(async () => {
+      changed?.()
+      await Promise.resolve()
+    })
+
+    expect(await screen.findByRole('button', { name: 'Free now · 1' })).toBeTruthy()
+  })
+
+  it('a getFreebies failure on mount is logged and leaves the button reachable at zero', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    stubArcadia({
+      getGames: async () => [TF2],
+      getFreebies: async () => {
+        throw new Error('offline')
+      }
+    })
+    render(<App />)
+
+    await waitFor(() =>
+      expect(consoleError).toHaveBeenCalledWith(
+        'The freebies could not be read:',
+        expect.any(Error)
+      )
+    )
+    expect(screen.getByRole('button', { name: 'Free now' })).toBeTruthy()
+    consoleError.mockRestore()
+  })
+
+  it('carries the library search into the free-games page', async () => {
+    // One filter, two pages. The box does not reset when the page changes,
+    // and it does not move either — both headers render the same component
+    // first.
+    stubArcadia({
+      getGames: async () => [TF2, PORTAL],
+      getFreebies: async () => ({ current: [freebie()], upcoming: [], failures: [] })
+    })
+    render(<App />)
+
+    const search = await screen.findByPlaceholderText(t().toolbar.searchPlaceholder)
+    fireEvent.change(search, { target: { value: 'ghost' } })
+
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(t().freebies.title, 'i') }))
+
+    await waitFor(() => expect(screen.getByText('Ghostrunner')).toBeDefined())
+
+    // Scoped to this page's own header: the library toolbar stays mounted
+    // behind the overlay, so a search across the whole document would find
+    // its box still holding the text and pass whether or not the value
+    // reached here.
+    const header = document.querySelector('.freebies__header')!
+    const box = header.querySelector('.toolbar__search') as HTMLInputElement
+    expect(box.value).toBe('ghost')
   })
 })

@@ -108,6 +108,18 @@ export function GameCard({
           >
             {t().card.play}
           </button>
+        ) : entry.active.storeId === 'other' ? (
+          /* Not an install button: there is no store to install from, and
+             the handler behind it throws. What the user needs is to be told
+             the program moved, and the path it used to be at. */
+          <button
+            type="button"
+            className="button"
+            disabled
+            title={entry.active.launchExe ?? ''}
+          >
+            {t().card.fileNotFound}
+          </button>
         ) : (
           <button
             type="button"

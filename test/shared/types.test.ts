@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { gameId, parseGameId } from '@shared/types'
+import { gameId, parseGameId, STORE_IDS } from '@shared/types'
 
 describe('gameId', () => {
   it('joins store and store ID into a stable ID', () => {
@@ -22,6 +22,17 @@ describe('gameId', () => {
     expect(() => parseGameId('broken')).toThrow()
   })
 
+  it('accepts microsoft as a store prefix', () => {
+    // Regression guard for Task 9: before the Microsoft adapter existed,
+    // 'microsoft' was not in STORE_IDS and this id would have been rejected
+    // as unknown.
+    const id = gameId('microsoft', 'Microsoft.Forza_8wekyb3d8bbwe')
+    expect(parseGameId(id)).toEqual({
+      storeId: 'microsoft',
+      storeGameId: 'Microsoft.Forza_8wekyb3d8bbwe'
+    })
+  })
+
   it('rejects an ID without a game identifier', () => {
     // "steam:" would otherwise pass as valid, with an empty storeGameId.
     expect(() => parseGameId('steam:')).toThrow(/steam:/)
@@ -30,5 +41,18 @@ describe('gameId', () => {
   it('rejects empty IDs and IDs without a store', () => {
     expect(() => parseGameId('')).toThrow()
     expect(() => parseGameId(':anything')).toThrow()
+  })
+
+  it('knows the storeless store, ranked after every real one', () => {
+    expect(STORE_IDS).toContain('other')
+    // Last, so a real store wins the active source when names collide.
+    expect(STORE_IDS[STORE_IDS.length - 1]).toBe('other')
+  })
+
+  it('parses a storeless game id', () => {
+    expect(parseGameId('other:manual-minecraft-launcher')).toEqual({
+      storeId: 'other',
+      storeGameId: 'manual-minecraft-launcher'
+    })
   })
 })

@@ -2,6 +2,8 @@
 
 One library for **Steam, Epic Games, EA and Ubisoft** — on Windows and Linux. Shows owned and installed games in a single grid, launches them through their own launcher, and gives every game a details page with description, screenshots and the local facts no store supplies: playtime, install size, path.
 
+It also lists what is **currently free to keep** across those stores, and takes you to the giveaway in one click. See *Known limits* for what "claim" does and does not mean.
+
 Electron + React + TypeScript. Persistence through `node:sqlite`, with no native modules — there is nothing to compile.
 
 ---
@@ -72,6 +74,36 @@ npm approve-scripts --allow-scripts-pending
 
 **Both are optional.** Without them Arcadia starts and finds whatever is discoverable locally — 105 of 263 games on the development machine. What they add and where to get them is in [`.env.example`](.env.example).
 
+### Microsoft sign-in
+
+**Nothing to set up.** Connecting a Microsoft account is a button in the
+configuration screen: Arcadia shows an eight-character code, you type it at
+[microsoft.com/link](https://www.microsoft.com/link) in your own browser, and
+that is the whole of it. No password ever passes through Arcadia, and there
+is no key to obtain.
+
+The account is optional, like the two above it. Without one Arcadia lists the
+Store games the Xbox app installed; with one it also lists games you own but
+have not installed here.
+
+<details>
+<summary>For anyone forking this</summary>
+
+`MICROSOFT_CLIENT_ID` in [`src/main/stores/microsoft/auth.ts`](src/main/stores/microsoft/auth.ts)
+is Arcadia's own registration, and it is committed on purpose: a public client
+has no secret, and the value identifies the application rather than any user.
+One registration serves everybody — users do **not** need their own.
+
+Should you want your own anyway, register a public client in the [Azure
+portal](https://portal.azure.com/) with supported account types **"Personal
+Microsoft accounts only"** (the endpoints are the `/consumers/` ones) and
+**Allow public client flows** set to **Yes** under Authentication → Advanced
+settings. That last switch is not optional: without it the device-code grant
+is refused with `AADSTS70002: the client application must be marked as
+'mobile'`. No redirect URI or platform entry is needed.
+
+</details>
+
 ---
 
 ## Usage
@@ -125,6 +157,25 @@ On Linux, Epic, EA and Ubisoft cleanly report "no native client" — the app car
 **EA's owned library is only as fresh as the EA app.** Ownership is read from EA Desktop's own encrypted store on this machine, which is written when the EA app signs in — a purchase made elsewhere appears once EA Desktop has next started. The names come from EA's catalogue service, so that part needs a connection; without one the installed games still appear. Measured on the development machine: 5 games via the registry, 22 owned.
 
 **EA cannot be installed through Arcadia.** The launcher has no deep link for it — checked in the binaries: it knows exactly `game/launch`, `library/open` and `store/open`. Arcadia therefore opens the EA library and says so. Steam, Epic and Ubisoft install for real.
+
+**Arcadia cannot claim a free game for you.** No store offers an API for
+it, and driving one with stored credentials is not something this app does —
+it would mean holding store passwords, which Arcadia never asks for. The
+*Free now* button in the toolbar lists what is currently free to keep
+permanently, and its *Claim* button opens the store's own page, in its own
+launcher where possible, with the giveaway one click away. The offer counts
+as claimed here once a later scan finds the game in your library; until
+then it reads as opened, because that is all Arcadia can honestly know.
+
+**The free-games list is only as good as its sources.** Epic and Steam are
+read from their own public endpoints; everything else — EA, Ubisoft,
+Microsoft — comes from [GamerPower](https://www.gamerpower.com), a third
+party. Those rows carry no store identifier, so they open in a browser
+rather than in a launcher, and their addresses are checked against an
+allow-list of the stores' own domains before anything is opened. If every
+source is unreachable the last known list is shown with the time it was
+fetched, and a failed refresh is retried at the next six-hourly check
+rather than immediately — *Refresh* forces one.
 
 **Some games stay without an image.** Where name matching is uncertain, *no* image is set deliberately: SteamGridDB returns "EA Sports FIFA 21" as the best hit for "EA SPORTS™ FIFA 23", and a wrong image goes unnoticed while a missing one does not. *"Wrong game matched?"* on the details page lets you fix it by hand.
 
