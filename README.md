@@ -65,7 +65,9 @@ git push origin v0.1.10
 ```
 
 GitHub Actions builds Windows (`.exe`) and Linux (`.AppImage` and `.deb`)
-packages in parallel and attaches them to the release. The tag must match the
+packages in parallel and attaches them to the release. Publishing a release
+in the GitHub UI also starts the build. To build an existing tag, use
+**Actions → Release → Run workflow** and enter its tag. The tag must match the
 version in `package.json`.
 
 ### If `npm ci` blocks the install scripts

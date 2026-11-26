@@ -4,6 +4,15 @@ on:
   push:
     tags:
       - "v*"
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to build (for example v0.1.10)
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -24,6 +33,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.event.release.tag_name || github.ref }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -32,7 +43,9 @@ jobs:
           cache: npm
 
       - name: Check tag version
-        run: node -e "const version = require('./package.json').version; if ('v' + version !== process.env.GITHUB_REF_NAME) { console.error('Tag must match package.json version: v' + version); process.exit(1); }"
+        env:
+          TAG_NAME: ${{ inputs.tag || github.event.release.tag_name || github.ref_name }}
+        run: node -e "const version = require('./package.json').version; if ('v' + version !== process.env.TAG_NAME) { console.error('Tag must match package.json version: v' + version); process.exit(1); }"
 
       - name: Install dependencies
         run: npm ci
@@ -67,7 +80,7 @@ jobs:
       - name: Create release and upload packages
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ inputs.tag || github.event.release.tag_name || github.ref_name }}
         run: |
           gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "$TAG" --generate-notes
           gh release upload "$TAG" dist/release-Windows/*.exe dist/release-Linux/*.AppImage dist/release-Linux/*.deb --clobber
