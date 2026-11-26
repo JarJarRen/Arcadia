@@ -55,6 +55,19 @@ cp .env.example .env      # Windows: copy .env.example .env
 npm run dist              # installer + portable exe in release/
 ```
 
+### Creating a GitHub release
+
+Set the version in `package.json`, then push a matching `v<version>` tag:
+
+```bash
+git tag v0.1.10
+git push origin v0.1.10
+```
+
+GitHub Actions builds Windows (`.exe`) and Linux (`.AppImage` and `.deb`)
+packages in parallel and attaches them to the release. The tag must match the
+version in `package.json`.
+
 ### If `npm ci` blocks the install scripts
 
 Newer npm versions (11 and up) no longer run `postinstall` unasked. The output then looks like this:
