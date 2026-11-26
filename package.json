@@ -1,6 +1,6 @@
 {
   "name": "Arcadia",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "One library for Steam, Epic, EA and Ubisoft games etc",
   "main": "./out/main/index.js",
   "license": "MIT",

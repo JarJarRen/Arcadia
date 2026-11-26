@@ -60,15 +60,17 @@ npm run dist              # installer + portable exe in release/
 Set the version in `package.json`, then push a matching `v<version>` tag:
 
 ```bash
-git tag v0.1.10
-git push origin v0.1.10
+git tag v0.1.11
+git push origin v0.1.11
 ```
 
 GitHub Actions builds Windows (`.exe`) and Linux (`.AppImage` and `.deb`)
 packages in parallel and attaches them to the release. Publishing a release
-in the GitHub UI also starts the build. To build an existing tag, use
-**Actions → Release → Run workflow** and enter its tag. The tag must match the
-version in `package.json`.
+in the GitHub UI also starts the build. To create a release from the selected
+branch in the Actions UI, use **Actions → Release → Run workflow** and enter
+the tag. If that tag already exists, its commit is used; otherwise the tag is
+created at the selected branch commit. The tag must match the version in
+`package.json`.
 
 ### If `npm ci` blocks the install scripts
 

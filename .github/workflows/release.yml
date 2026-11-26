@@ -34,7 +34,17 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag || github.event.release.tag_name || github.ref }}
+          ref: ${{ github.ref }}
+
+      - name: Check out release tag if it exists
+        shell: bash
+        env:
+          TAG_NAME: ${{ inputs.tag || github.event.release.tag_name || github.ref_name }}
+        run: |
+          if git ls-remote --exit-code origin "refs/tags/$TAG_NAME" >/dev/null 2>&1; then
+            git fetch --depth=1 origin "refs/tags/$TAG_NAME"
+            git checkout --detach FETCH_HEAD
+          fi
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -83,5 +93,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag || github.event.release.tag_name || github.ref_name }}
         run: |
-          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "$TAG" --generate-notes
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --generate-notes
           gh release upload "$TAG" dist/release-Windows/*.exe dist/release-Linux/*.AppImage dist/release-Linux/*.deb --clobber
